@@ -1,0 +1,478 @@
+use chrono::{DateTime, Utc};
+use serde_json::Value;
+use uuid::Uuid;
+
+use orbit_domain::{new_id, ExecutionStatus, LogLevel, RuntimeKind, TriggerSource};
+
+use crate::models::{ExecutionEventRecord, ExecutionRecord};
+use crate::{decode_cursor, page_of, Store, StoreError, StoreResult};
+
+pub struct NewExecution<'a> {
+    pub org_id: Uuid,
+    pub agent_id: Uuid,
+    pub agent_version_id: Uuid,
+    pub agent_name: &'a str,
+    pub runtime_kind: RuntimeKind,
+    pub trigger_source: TriggerSource,
+    pub trigger_id: Option<Uuid>,
+    pub input: Value,
+    pub timeout_seconds: u64,
+    pub requested_by: Option<Uuid>,
+    pub idempotency_key: Option<&'a str>,
+}
+
+impl Store {
+    /// Insert a queued execution. When `idempotency_key` is supplied, a duplicate request
+    /// returns the previously created execution instead of creating another one.
+    pub async fn create_execution(&self, new: NewExecution<'_>) -> StoreResult<ExecutionRecord> {
+        if let Some(key) = new.idempotency_key {
+            if let Some(existing) = self
+                .get_execution_by_idempotency_key(new.org_id, key)
+                .await?
+            {
+                return Ok(existing);
+            }
+        }
+
+        let id = new_id();
+        let inserted = sqlx::query_as::<_, ExecutionRecord>(
+            r#"
+            INSERT INTO executions (id, org_id, agent_id, agent_version_id, agent_name, runtime_kind,
+                                    trigger_id, trigger_source, status, input, timeout_seconds,
+                                    idempotency_key, requested_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'queued', $9, $10, $11, $12)
+            ON CONFLICT (org_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+            RETURNING *
+            "#,
+        )
+        .bind(id)
+        .bind(new.org_id)
+        .bind(new.agent_id)
+        .bind(new.agent_version_id)
+        .bind(new.agent_name)
+        .bind(new.runtime_kind.as_str())
+        .bind(new.trigger_id)
+        .bind(new.trigger_source.as_str())
+        .bind(&new.input)
+        .bind(new.timeout_seconds as i32)
+        .bind(new.idempotency_key)
+        .bind(new.requested_by)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match inserted {
+            Some(record) => Ok(record),
+            None => {
+                let key = new.idempotency_key.ok_or_else(|| {
+                    StoreError::Internal("insert conflict without idempotency key".into())
+                })?;
+                self.get_execution_by_idempotency_key(new.org_id, key)
+                    .await?
+                    .ok_or_else(|| {
+                        StoreError::Internal("idempotent execution lookup failed".into())
+                    })
+            }
+        }
+    }
+
+    pub async fn get_execution(
+        &self,
+        org_id: Uuid,
+        execution_id: Uuid,
+    ) -> StoreResult<ExecutionRecord> {
+        sqlx::query_as::<_, ExecutionRecord>(
+            "SELECT * FROM executions WHERE org_id = $1 AND id = $2",
+        )
+        .bind(org_id)
+        .bind(execution_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("execution".into()))
+    }
+
+    pub async fn get_execution_by_idempotency_key(
+        &self,
+        org_id: Uuid,
+        key: &str,
+    ) -> StoreResult<Option<ExecutionRecord>> {
+        Ok(sqlx::query_as::<_, ExecutionRecord>(
+            "SELECT * FROM executions WHERE org_id = $1 AND idempotency_key = $2",
+        )
+        .bind(org_id)
+        .bind(key)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    /// Keyset-paginated execution list with optional filters.
+    #[allow(clippy::type_complexity)]
+    pub async fn list_executions(
+        &self,
+        org_id: Uuid,
+        limit: i64,
+        cursor: Option<&str>,
+        status: Option<&str>,
+        agent_id: Option<Uuid>,
+    ) -> StoreResult<(Vec<ExecutionRecord>, Option<String>, i64)> {
+        let (cursor_ts, cursor_id) = match cursor {
+            Some(raw) => match decode_cursor(raw)? {
+                Some((ts, id)) => (Some(ts), Some(id)),
+                None => (None, None),
+            },
+            None => (None, None),
+        };
+        let rows = sqlx::query_as::<_, ExecutionRecord>(
+            r#"
+            SELECT * FROM executions
+            WHERE org_id = $1
+              AND ($2::text IS NULL OR status = $2)
+              AND ($3::uuid IS NULL OR agent_id = $3)
+              AND ($4::timestamptz IS NULL OR (created_at, id) < ($4::timestamptz, $5::uuid))
+            ORDER BY created_at DESC, id DESC
+            LIMIT $6
+            "#,
+        )
+        .bind(org_id)
+        .bind(status)
+        .bind(agent_id)
+        .bind(cursor_ts)
+        .bind(cursor_id)
+        .bind(limit + 1)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let total: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*) FROM executions
+            WHERE org_id = $1
+              AND ($2::text IS NULL OR status = $2)
+              AND ($3::uuid IS NULL OR agent_id = $3)
+            "#,
+        )
+        .bind(org_id)
+        .bind(status)
+        .bind(agent_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        let (rows, next) = page_of(rows, limit, |e| (e.created_at, e.id));
+        Ok((rows, next, total))
+    }
+
+    /// Atomically claim a queued execution. Returns `None` if another worker won.
+    pub async fn claim_execution(
+        &self,
+        execution_id: Uuid,
+        worker_id: &str,
+    ) -> StoreResult<Option<ExecutionRecord>> {
+        Ok(sqlx::query_as::<_, ExecutionRecord>(
+            r#"
+            UPDATE executions
+            SET status = 'dispatched', worker_id = $2, started_at = COALESCE(started_at, now()), updated_at = now()
+            WHERE id = $1 AND status = 'queued'
+            RETURNING *
+            "#,
+        )
+        .bind(execution_id)
+        .bind(worker_id)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn mark_execution_running(
+        &self,
+        execution_id: Uuid,
+        session_ref: Option<&str>,
+    ) -> StoreResult<Option<ExecutionRecord>> {
+        Ok(sqlx::query_as::<_, ExecutionRecord>(
+            r#"
+            UPDATE executions
+            SET status = 'running',
+                session_ref = COALESCE($2, session_ref),
+                started_at = COALESCE(started_at, now()),
+                updated_at = now()
+            WHERE id = $1 AND status IN ('dispatched', 'awaiting_approval')
+            RETURNING *
+            "#,
+        )
+        .bind(execution_id)
+        .bind(session_ref)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    /// Move an execution to a terminal state. Terminal states are never overwritten and
+    /// cancellation always wins over a late runtime result.
+    pub async fn finish_execution(
+        &self,
+        execution_id: Uuid,
+        status: ExecutionStatus,
+        output: Option<&Value>,
+        error: Option<&Value>,
+        usage: Option<&Value>,
+        session_ref: Option<&str>,
+    ) -> StoreResult<Option<ExecutionRecord>> {
+        if !status.is_terminal() {
+            return Err(StoreError::Invalid(
+                "finish_execution requires a terminal status".into(),
+            ));
+        }
+        Ok(sqlx::query_as::<_, ExecutionRecord>(
+            r#"
+            UPDATE executions
+            SET status = $2,
+                output = COALESCE($3, output),
+                error = COALESCE($4, error),
+                usage = COALESCE($5, usage),
+                session_ref = COALESCE($6, session_ref),
+                finished_at = now(),
+                updated_at = now()
+            WHERE id = $1
+              AND status NOT IN ('succeeded', 'failed', 'timed_out', 'cancelled', 'rejected')
+            RETURNING *
+            "#,
+        )
+        .bind(execution_id)
+        .bind(status.as_str())
+        .bind(output)
+        .bind(error)
+        .bind(usage)
+        .bind(session_ref)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    /// Update non-terminal progress (e.g. awaiting approval).
+    pub async fn update_execution_status(
+        &self,
+        execution_id: Uuid,
+        from: &[ExecutionStatus],
+        to: ExecutionStatus,
+    ) -> StoreResult<Option<ExecutionRecord>> {
+        let from_values: Vec<String> = from.iter().map(|s| s.as_str().to_string()).collect();
+        Ok(sqlx::query_as::<_, ExecutionRecord>(
+            r#"
+            UPDATE executions
+            SET status = $2, updated_at = now()
+            WHERE id = $1 AND status = ANY($3)
+            RETURNING *
+            "#,
+        )
+        .bind(execution_id)
+        .bind(to.as_str())
+        .bind(&from_values)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    /// Request cancellation. Queued executions are cancelled immediately; running ones
+    /// are flagged for the worker to abort the runtime.
+    pub async fn request_execution_cancel(
+        &self,
+        org_id: Uuid,
+        execution_id: Uuid,
+    ) -> StoreResult<ExecutionRecord> {
+        let cancelled = sqlx::query_as::<_, ExecutionRecord>(
+            r#"
+            UPDATE executions
+            SET status = 'cancelled', finished_at = now(), cancel_requested = true, updated_at = now()
+            WHERE org_id = $1 AND id = $2 AND status = 'queued'
+            RETURNING *
+            "#,
+        )
+        .bind(org_id)
+        .bind(execution_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(record) = cancelled {
+            return Ok(record);
+        }
+
+        let flagged = sqlx::query_as::<_, ExecutionRecord>(
+            r#"
+            UPDATE executions
+            SET cancel_requested = true, updated_at = now()
+            WHERE org_id = $1 AND id = $2
+              AND status IN ('dispatched', 'running', 'awaiting_approval')
+            RETURNING *
+            "#,
+        )
+        .bind(org_id)
+        .bind(execution_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match flagged {
+            Some(record) => Ok(record),
+            None => {
+                let existing = self.get_execution(org_id, execution_id).await?;
+                if existing.status == "cancelled" {
+                    Ok(existing)
+                } else {
+                    Err(StoreError::Invalid(format!(
+                        "execution in status '{}' cannot be cancelled",
+                        existing.status
+                    )))
+                }
+            }
+        }
+    }
+
+    pub async fn is_cancel_requested(&self, execution_id: Uuid) -> StoreResult<bool> {
+        let flag: Option<bool> =
+            sqlx::query_scalar("SELECT cancel_requested FROM executions WHERE id = $1")
+                .bind(execution_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(flag.unwrap_or(false))
+    }
+
+    pub async fn append_execution_event(
+        &self,
+        org_id: Uuid,
+        execution_id: Uuid,
+        kind: &str,
+        level: LogLevel,
+        message: &str,
+        data: &Value,
+    ) -> StoreResult<ExecutionEventRecord> {
+        sqlx::query_as::<_, ExecutionEventRecord>(
+            r#"
+            WITH next_seq AS (
+                SELECT COALESCE(MAX(seq), 0) + 1 AS seq
+                FROM execution_events
+                WHERE execution_id = $1
+            )
+            INSERT INTO execution_events (org_id, execution_id, seq, kind, level, message, data)
+            SELECT $2, $1, next_seq.seq, $3, $4, $5, $6 FROM next_seq
+            RETURNING *
+            "#,
+        )
+        .bind(execution_id)
+        .bind(org_id)
+        .bind(kind)
+        .bind(level.as_str())
+        .bind(message)
+        .bind(data)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    pub async fn list_execution_events(
+        &self,
+        org_id: Uuid,
+        execution_id: Uuid,
+        after_seq: i64,
+        limit: i64,
+    ) -> StoreResult<Vec<ExecutionEventRecord>> {
+        Ok(sqlx::query_as::<_, ExecutionEventRecord>(
+            r#"
+            SELECT * FROM execution_events
+            WHERE org_id = $1 AND execution_id = $2 AND seq > $3
+            ORDER BY seq ASC
+            LIMIT $4
+            "#,
+        )
+        .bind(org_id)
+        .bind(execution_id)
+        .bind(after_seq)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn count_active_executions_for_agent(
+        &self,
+        org_id: Uuid,
+        agent_id: Uuid,
+    ) -> StoreResult<i64> {
+        Ok(sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*) FROM executions
+            WHERE org_id = $1 AND agent_id = $2
+              AND status IN ('queued', 'dispatched', 'running', 'awaiting_approval')
+            "#,
+        )
+        .bind(org_id)
+        .bind(agent_id)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
+    pub async fn count_executions_since(
+        &self,
+        org_id: Uuid,
+        agent_id: Uuid,
+        since: DateTime<Utc>,
+    ) -> StoreResult<i64> {
+        Ok(sqlx::query_scalar(
+            "SELECT COUNT(*) FROM executions WHERE org_id = $1 AND agent_id = $2 AND created_at >= $3",
+        )
+        .bind(org_id)
+        .bind(agent_id)
+        .bind(since)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
+    /// Executions requested but not claimed within the reclaim window.
+    pub async fn list_stale_queued_executions(
+        &self,
+        older_than_seconds: i64,
+        limit: i64,
+    ) -> StoreResult<Vec<ExecutionRecord>> {
+        Ok(sqlx::query_as::<_, ExecutionRecord>(
+            r#"
+            SELECT * FROM executions
+            WHERE status = 'queued' AND created_at < now() - ($1 || ' seconds')::interval
+            ORDER BY created_at ASC
+            LIMIT $2
+            "#,
+        )
+        .bind(older_than_seconds.to_string())
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn list_agents_with_runtime(&self, org_id: Uuid) -> StoreResult<Vec<(Uuid, String)>> {
+        Ok(sqlx::query_as::<_, (Uuid, String)>(
+            r#"
+            SELECT DISTINCT a.id,
+                   COALESCE(av.spec->'runtime'->>'type', 'mock')
+            FROM agents a
+            JOIN agent_versions av ON av.agent_id = a.id AND av.version = a.current_version
+            WHERE a.org_id = $1 AND a.status = 'active'
+            "#,
+        )
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+}
+
+impl Store {
+    /// Claim the oldest queued execution atomically.
+    pub async fn claim_next_queued(&self, worker_id: &str) -> StoreResult<Option<ExecutionRecord>> {
+        Ok(sqlx::query_as::<_, ExecutionRecord>(
+            r#"
+            UPDATE executions
+            SET status = 'dispatched', worker_id = $1,
+                started_at = COALESCE(started_at, now()), updated_at = now()
+            WHERE id = (
+                SELECT id FROM executions
+                WHERE status = 'queued'
+                ORDER BY created_at ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+            )
+            RETURNING *
+            "#,
+        )
+        .bind(worker_id)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+}

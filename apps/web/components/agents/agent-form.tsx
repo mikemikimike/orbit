@@ -1,0 +1,806 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  AlertTriangle,
+  Bot,
+  Braces,
+  Cable,
+  Check,
+  Clock3,
+  Plus,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { ImplementationBadge } from "@/components/ui/status-badge";
+import { useConnectors, useProviders, useRuntimes } from "@/lib/queries";
+import type { AgentDefinition } from "@orbit/contracts";
+import {
+  AUTONOMY_LEVELS,
+  agentDefinitionSchema,
+  emptyAgentDefinition,
+} from "@orbit/contracts";
+import { cn, titleCase } from "@/lib/utils";
+
+type Trigger = AgentDefinition["spec"]["triggers"][number];
+
+const fieldClass = "space-y-1.5";
+const helpClass = "text-[11px] text-muted-foreground";
+
+export function AgentForm({
+  initial,
+  submitLabel,
+  submitting,
+  onSubmit,
+}: {
+  initial?: AgentDefinition;
+  submitLabel: string;
+  submitting?: boolean;
+  onSubmit: (definition: AgentDefinition) => Promise<void> | void;
+}) {
+  const runtimes = useRuntimes();
+  const providers = useProviders();
+  const connectors = useConnectors();
+
+  const [definition, setDefinition] = useState<AgentDefinition>(() =>
+    initial ? structuredClone(initial) : emptyAgentDefinition(),
+  );
+  const [runtimeConfigText, setRuntimeConfigText] = useState(
+    JSON.stringify(initial?.spec.runtime.config ?? {}, null, 2),
+  );
+  const [configError, setConfigError] = useState<string | null>(null);
+  const [issues, setIssues] = useState<Array<{ path: string; message: string }>>([]);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  const selectedRuntime = runtimes.data?.find((r) => r.kind === definition.spec.runtime.type);
+  const platformProviders = useMemo(
+    () => providers.data?.filter((p) => p.kind === "openai_compatible") ?? [],
+    [providers.data],
+  );
+
+  function updateSpec(patch: Partial<AgentDefinition["spec"]>) {
+    setDefinition((current) => ({
+      ...current,
+      spec: { ...current.spec, ...patch },
+    }));
+  }
+
+  function toggleConnector(slug: string) {
+    const existing = definition.spec.connectors.find((c) => c.connector === slug);
+    if (existing) {
+      updateSpec({
+        connectors: definition.spec.connectors.filter((c) => c.connector !== slug),
+      });
+      return;
+    }
+    const manifest = connectors.data?.find((c) => c.slug === slug);
+    const capabilities = (manifest?.capabilities as Array<{ id: string; effect: string }> | undefined)
+      ?.filter((capability) => capability.effect === "read")
+      .map((capability) => capability.id) ?? [];
+    updateSpec({
+      connectors: [...definition.spec.connectors, { connector: slug, capabilities }],
+    });
+  }
+
+  function toggleCapability(slug: string, capabilityId: string) {
+    updateSpec({
+      connectors: definition.spec.connectors.map((binding) => {
+        if (binding.connector !== slug) return binding;
+        const has = binding.capabilities.includes(capabilityId);
+        return {
+          ...binding,
+          capabilities: has
+            ? binding.capabilities.filter((id) => id !== capabilityId)
+            : [...binding.capabilities, capabilityId],
+        };
+      }),
+    });
+  }
+
+  function addTrigger(type: Trigger["type"]) {
+    const trigger: Trigger =
+      type === "schedule"
+        ? { type: "schedule", cron: "*/30 * * * *" }
+        : type === "event"
+          ? { type: "event", subject: "connector.telegram.message" }
+          : { type: "webhook" };
+    updateSpec({ triggers: [...definition.spec.triggers, trigger] });
+  }
+
+  function updateTrigger(index: number, next: Trigger) {
+    updateSpec({
+      triggers: definition.spec.triggers.map((trigger, i) => (i === index ? next : trigger)),
+    });
+  }
+
+  function removeTrigger(index: number) {
+    updateSpec({
+      triggers: definition.spec.triggers.filter((_, i) => i !== index),
+    });
+  }
+
+  async function handleSubmit() {
+    let config: unknown = {};
+    if (runtimeConfigText.trim()) {
+      try {
+        config = JSON.parse(runtimeConfigText);
+      } catch {
+        setConfigError("Runtime config must be valid JSON.");
+        setIssues([{ path: "spec.runtime.config", message: "invalid JSON" }]);
+        return;
+      }
+    }
+    setConfigError(null);
+    const candidate: AgentDefinition = {
+      ...definition,
+      metadata: {
+        ...definition.metadata,
+        name: definition.metadata.name.trim(),
+      },
+      spec: {
+        ...definition.spec,
+        runtime: { ...definition.spec.runtime, config: config as Record<string, unknown> },
+      },
+    };
+    const parsed = agentDefinitionSchema.safeParse(candidate);
+    if (!parsed.success) {
+      const nextIssues = parsed.error.issues.map((issue) => ({
+        path: issue.path.join("."),
+        message: issue.message,
+      }));
+      setIssues(nextIssues);
+      toast.error("Please fix the highlighted fields");
+      return;
+    }
+    setIssues([]);
+    await onSubmit(parsed.data as unknown as AgentDefinition);
+  }
+
+  const issueFor = (path: string) => issues.find((issue) => issue.path === path)?.message;
+
+  return (
+    <div className="space-y-5 pb-24 lg:pb-0">
+      {issues.length > 0 ? (
+        <Card className="border-destructive/50 bg-destructive/5">
+          <CardContent className="space-y-1 p-4 text-sm text-destructive">
+            <p className="font-medium">The agent definition is not valid yet:</p>
+            <ul className="list-inside list-disc">
+              {issues.slice(0, 6).map((issue) => (
+                <li key={`${issue.path}-${issue.message}`}>
+                  <span className="font-mono text-[11px]">{issue.path}</span>: {issue.message}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        <div className="space-y-5 lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-4 w-4 text-primary" /> Identity
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              <div className={cn(fieldClass, "sm:col-span-2")}>
+                <Label htmlFor="name">Name</Label>
+                <Input
+                  id="name"
+                  value={definition.metadata.name}
+                  placeholder="Release Sentinel"
+                  onChange={(event) =>
+                    setDefinition((current) => ({
+                      ...current,
+                      metadata: { ...current.metadata, name: event.target.value },
+                    }))
+                  }
+                />
+                {issueFor("metadata.name") ? (
+                  <p className="text-[11px] text-destructive">{issueFor("metadata.name")}</p>
+                ) : null}
+              </div>
+              <div className={cn(fieldClass, "sm:col-span-2")}>
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  value={definition.metadata.description}
+                  placeholder="What does this agent do?"
+                  onChange={(event) =>
+                    setDefinition((current) => ({
+                      ...current,
+                      metadata: { ...current.metadata, description: event.target.value },
+                    }))
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Braces className="h-4 w-4 text-primary" /> Runtime &amp; model
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className={fieldClass}>
+                <Label>Runtime</Label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {(runtimes.data ?? []).map((runtime) => {
+                    const active = definition.spec.runtime.type === runtime.kind;
+                    return (
+                      <button
+                        key={runtime.kind}
+                        type="button"
+                        onClick={() =>
+                          updateSpec({
+                            runtime: {
+                              ...definition.spec.runtime,
+                              type: runtime.kind as AgentDefinition["spec"]["runtime"]["type"],
+                            },
+                          })
+                        }
+                        className={cn(
+                          "rounded-lg border p-3 text-left transition-colors",
+                          active
+                            ? "border-primary bg-accent/60 ring-1 ring-primary/40"
+                            : "hover:bg-muted/50",
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-medium">{runtime.name}</span>
+                          <ImplementationBadge status={runtime.implementationStatus} />
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
+                          {runtime.description}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedRuntime && selectedRuntime.implementationStatus !== "available" ? (
+                  <p className="flex items-start gap-1.5 rounded-md bg-[hsl(var(--warning))]/10 p-2 text-[11px] text-[hsl(var(--warning))]">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    {selectedRuntime.implementationStatus === "scaffolded"
+                      ? "This adapter is scaffolded: configuration and preflight work, but task execution is not enabled yet in this build."
+                      : "This runtime is registered but not implemented yet. Executions will fail closed."}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className={fieldClass}>
+                  <Label>Execution mode</Label>
+                  <select
+                    className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+                    value={definition.spec.runtime.executionMode}
+                    onChange={(event) =>
+                      updateSpec({
+                        runtime: {
+                          ...definition.spec.runtime,
+                          executionMode: event.target
+                            .value as AgentDefinition["spec"]["runtime"]["executionMode"],
+                        },
+                      })
+                    }
+                  >
+                    <option value="on_demand">On demand</option>
+                    <option value="long_running" disabled>
+                      Long running (later phase)
+                    </option>
+                  </select>
+                  <p className={helpClass}>Runtimes are created per execution until long-running support lands.</p>
+                </div>
+                <div className={fieldClass}>
+                  <Label>Model management</Label>
+                  <select
+                    className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+                    value={definition.spec.model.management}
+                    onChange={(event) =>
+                      updateSpec({
+                        model: {
+                          ...definition.spec.model,
+                          management: event.target
+                            .value as AgentDefinition["spec"]["model"]["management"],
+                        },
+                      })
+                    }
+                  >
+                    <option value="runtime">Runtime managed</option>
+                    <option value="platform">ORBIT provider</option>
+                  </select>
+                  <p className={helpClass}>
+                    {definition.spec.model.management === "runtime"
+                      ? "The runtime owns provider inventory and credentials (e.g. OpenCode Go)."
+                      : "ORBIT resolves an OpenAI-compatible endpoint and injects the credential at execution time."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className={fieldClass}>
+                  <Label>Provider</Label>
+                  {definition.spec.model.management === "platform" ? (
+                    <select
+                      className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+                      value={definition.spec.model.provider ?? ""}
+                      onChange={(event) =>
+                        updateSpec({
+                          model: { ...definition.spec.model, provider: event.target.value || undefined },
+                        })
+                      }
+                    >
+                      <option value="">Select a provider…</option>
+                      {platformProviders.map((provider) => (
+                        <option key={provider.id} value={provider.name}>
+                          {provider.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      value={definition.spec.model.provider ?? ""}
+                      placeholder="e.g. opencode-go (free-form, runtime-defined)"
+                      onChange={(event) =>
+                        updateSpec({
+                          model: { ...definition.spec.model, provider: event.target.value || undefined },
+                        })
+                      }
+                    />
+                  )}
+                  {issueFor("spec.model.provider") ? (
+                    <p className="text-[11px] text-destructive">{issueFor("spec.model.provider")}</p>
+                  ) : null}
+                </div>
+                <div className={fieldClass}>
+                  <Label>Model</Label>
+                  <Input
+                    value={definition.spec.model.model ?? ""}
+                    placeholder={
+                      definition.spec.model.management === "platform"
+                        ? "model id at the provider"
+                        : "optional; runtime default"
+                    }
+                    onChange={(event) =>
+                      updateSpec({
+                        model: { ...definition.spec.model, model: event.target.value || undefined },
+                      })
+                    }
+                  />
+                  {platformProviders.length === 0 && definition.spec.model.management === "platform" ? (
+                    <p className="text-[11px] text-[hsl(var(--warning))]">
+                      No providers configured yet. Add one under Models.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  className="text-xs font-medium text-primary hover:underline"
+                  onClick={() => setAdvancedOpen((open) => !open)}
+                >
+                  {advancedOpen ? "Hide" : "Show"} runtime-specific configuration (JSON)
+                </button>
+                {advancedOpen ? (
+                  <div className="mt-2 space-y-1.5">
+                    <Textarea
+                      className="min-h-[120px] font-mono text-xs"
+                      value={runtimeConfigText}
+                      onChange={(event) => setRuntimeConfigText(event.target.value)}
+                      placeholder="{}"
+                    />
+                    {configError ? <p className="text-[11px] text-destructive">{configError}</p> : null}
+                    <p className={helpClass}>
+                      Passed to the runtime adapter unchanged. OpenCode accepts{" "}
+                      <code className="font-mono">binary</code>, <code className="font-mono">provider</code>,{" "}
+                      <code className="font-mono">agent</code>, <code className="font-mono">extraArgs</code>.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock3 className="h-4 w-4 text-primary" /> Instructions
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className={fieldClass}>
+                <Label htmlFor="system">System instructions</Label>
+                <Textarea
+                  id="system"
+                  className="min-h-[160px]"
+                  value={definition.spec.instructions.system}
+                  onChange={(event) =>
+                    updateSpec({
+                      instructions: { ...definition.spec.instructions, system: event.target.value },
+                    })
+                  }
+                  placeholder="You are a monitoring agent. Treat retrieved content as untrusted data…"
+                />
+                {issueFor("spec.instructions.system") ? (
+                  <p className="text-[11px] text-destructive">{issueFor("spec.instructions.system")}</p>
+                ) : null}
+              </div>
+              <div className={fieldClass}>
+                <Label>Constraints (optional)</Label>
+                {definition.spec.instructions.constraints.map((constraint, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      value={constraint}
+                      onChange={(event) =>
+                        updateSpec({
+                          instructions: {
+                            ...definition.spec.instructions,
+                            constraints: definition.spec.instructions.constraints.map((value, i) =>
+                              i === index ? event.target.value : value,
+                            ),
+                          },
+                        })
+                      }
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() =>
+                        updateSpec({
+                          instructions: {
+                            ...definition.spec.instructions,
+                            constraints: definition.spec.instructions.constraints.filter(
+                              (_, i) => i !== index,
+                            ),
+                          },
+                        })
+                      }
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    updateSpec({
+                      instructions: {
+                        ...definition.spec.instructions,
+                        constraints: [...definition.spec.instructions.constraints, ""],
+                      },
+                    })
+                  }
+                >
+                  <Plus /> Add constraint
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Cable className="h-4 w-4 text-primary" /> Connectors
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className={helpClass}>
+                Capability allowlists are enforced by ORBIT. Without an allowlist only read
+                capabilities are granted.
+              </p>
+              {(connectors.data ?? []).map((connector) => {
+                const binding = definition.spec.connectors.find((c) => c.connector === connector.slug);
+                const capabilities = (connector.capabilities ?? []) as Array<{
+                  id: string;
+                  name: string;
+                  effect: string;
+                }>;
+                return (
+                  <div key={connector.slug} className="rounded-lg border p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">{connector.name}</p>
+                        <p className="text-[11px] text-muted-foreground">{connector.description}</p>
+                      </div>
+                      <Switch
+                        checked={Boolean(binding)}
+                        onCheckedChange={() => toggleConnector(connector.slug)}
+                        aria-label={`Toggle ${connector.name}`}
+                      />
+                    </div>
+                    {binding ? (
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {capabilities.map((capability) => {
+                          const selected = binding.capabilities.includes(capability.id);
+                          return (
+                            <button
+                              type="button"
+                              key={capability.id}
+                              onClick={() => toggleCapability(connector.slug, capability.id)}
+                              className={cn(
+                                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]",
+                                selected
+                                  ? "border-primary/50 bg-primary/10 text-primary"
+                                  : "text-muted-foreground hover:bg-muted",
+                              )}
+                            >
+                              {selected ? <Check className="h-3 w-3" /> : null}
+                              {capability.id}
+                              {capability.effect !== "read" ? (
+                                <span className="opacity-60">· {capability.effect.replace("_", " ")}</span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock3 className="h-4 w-4 text-primary" /> Triggers
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className={helpClass}>Manual execution is always available. Add schedules or event triggers.</p>
+              {definition.spec.triggers.map((trigger, index) => (
+                <div key={`${trigger.type}-${index}`} className="rounded-lg border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <Badge variant="secondary">{titleCase(trigger.type)}</Badge>
+                    <Button type="button" variant="ghost" size="icon" onClick={() => removeTrigger(index)}>
+                      <Trash2 />
+                    </Button>
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {trigger.type === "schedule" ? (
+                      <div className={fieldClass}>
+                        <Label>Cron (UTC, 5 fields)</Label>
+                        <Input
+                          value={trigger.cron}
+                          onChange={(event) =>
+                            updateTrigger(index, { type: "schedule", cron: event.target.value })
+                          }
+                          placeholder="*/30 * * * *"
+                        />
+                      </div>
+                    ) : null}
+                    {trigger.type === "event" ? (
+                      <div className={fieldClass}>
+                        <Label>Event subject</Label>
+                        <Input
+                          value={trigger.subject}
+                          onChange={(event) =>
+                            updateTrigger(index, { type: "event", subject: event.target.value })
+                          }
+                          placeholder="connector.telegram.message"
+                        />
+                      </div>
+                    ) : null}
+                    {trigger.type === "webhook" ? (
+                      <p className={helpClass}>
+                        Inbound webhook URLs and HMAC verification arrive with the connector phase.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => addTrigger("schedule")}>
+                  <Plus /> Schedule
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => addTrigger("event")}>
+                  <Plus /> Event
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => addTrigger("webhook")}>
+                  <Plus /> Webhook
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-5">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-primary" /> Autonomy
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {AUTONOMY_LEVELS.map((level) => {
+                const active = definition.spec.autonomy.level === level.level;
+                return (
+                  <button
+                    type="button"
+                    key={level.level}
+                    onClick={() =>
+                      updateSpec({
+                        autonomy: { ...definition.spec.autonomy, level: level.level },
+                      })
+                    }
+                    className={cn(
+                      "w-full rounded-lg border p-2.5 text-left transition-colors",
+                      active ? "border-primary bg-accent/60" : "hover:bg-muted/50",
+                    )}
+                  >
+                    <p className="text-sm font-medium">
+                      L{level.level} · {level.name}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">{level.description}</p>
+                  </button>
+                );
+              })}
+              <div className={fieldClass}>
+                <Label>Approval mode</Label>
+                <select
+                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+                  value={definition.spec.autonomy.approvalMode}
+                  onChange={(event) =>
+                    updateSpec({
+                      autonomy: {
+                        ...definition.spec.autonomy,
+                        approvalMode: event.target.value as AgentDefinition["spec"]["autonomy"]["approvalMode"],
+                      },
+                    })
+                  }
+                >
+                  <option value="auto">Auto (follow autonomy level)</option>
+                  <option value="always">Always require approval</option>
+                  <option value="writes">Approve external side effects</option>
+                </select>
+              </div>
+              <div className={fieldClass}>
+                <Label>Max executions per hour</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10000}
+                  value={definition.spec.autonomy.maxExecutionsPerHour ?? ""}
+                  placeholder="unlimited"
+                  onChange={(event) =>
+                    updateSpec({
+                      autonomy: {
+                        ...definition.spec.autonomy,
+                        maxExecutionsPerHour: event.target.value
+                          ? Number(event.target.value)
+                          : undefined,
+                      },
+                    })
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Resource limits</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className={fieldClass}>
+                <Label>Timeout (seconds)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={86400}
+                  value={definition.spec.resources.timeoutSeconds}
+                  onChange={(event) =>
+                    updateSpec({
+                      resources: {
+                        ...definition.spec.resources,
+                        timeoutSeconds: Number(event.target.value),
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div className={fieldClass}>
+                <Label>Max concurrent executions</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={definition.spec.resources.maxConcurrentExecutions}
+                  onChange={(event) =>
+                    updateSpec({
+                      resources: {
+                        ...definition.spec.resources,
+                        maxConcurrentExecutions: Number(event.target.value),
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className={fieldClass}>
+                  <Label>Memory (MB)</Label>
+                  <Input
+                    type="number"
+                    min={64}
+                    value={definition.spec.resources.memoryMb ?? 1024}
+                    onChange={(event) =>
+                      updateSpec({
+                        resources: {
+                          ...definition.spec.resources,
+                          memoryMb: Number(event.target.value),
+                        },
+                      })
+                    }
+                  />
+                </div>
+                <div className={fieldClass}>
+                  <Label>CPU (millis)</Label>
+                  <Input
+                    type="number"
+                    min={100}
+                    value={definition.spec.resources.cpuMillis ?? 500}
+                    onChange={(event) =>
+                      updateSpec({
+                        resources: {
+                          ...definition.spec.resources,
+                          cpuMillis: Number(event.target.value),
+                        },
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              <div className={fieldClass}>
+                <Label>Max output tokens</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={definition.spec.resources.maxOutputTokens ?? ""}
+                  placeholder="provider default"
+                  onChange={(event) =>
+                    updateSpec({
+                      resources: {
+                        ...definition.spec.resources,
+                        maxOutputTokens: event.target.value
+                          ? Number(event.target.value)
+                          : undefined,
+                      },
+                    })
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <div className="fixed inset-x-0 bottom-14 z-30 border-t bg-background/95 p-3 backdrop-blur lg:static lg:z-auto lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+          <Button asChild variant="ghost">
+            <Link href="/agents">Cancel</Link>
+          </Button>
+          <Button onClick={handleSubmit} loading={submitting} size="lg">
+            {submitLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

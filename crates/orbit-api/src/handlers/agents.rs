@@ -1,0 +1,323 @@
+use axum::extract::{Path, Query, State};
+use axum::http::{header, StatusCode};
+use axum::response::{IntoResponse, Response};
+use axum::Extension;
+use axum::Json;
+use uuid::Uuid;
+
+use orbit_domain::{AgentDefinition, AgentSpec, AgentStatus};
+use orbit_security::{AuthContext, Permission};
+
+use crate::audit;
+use crate::dto::{
+    AgentDetail, AgentInstancePage, AgentListQuery, AgentPage, AgentSummary, AgentVersionView,
+    UpdateAgentRequest,
+};
+use crate::error::ApiError;
+use crate::handlers::{limit, load_agent_detail, parse_spec};
+use crate::state::AppState;
+
+#[utoipa::path(get, path = "/api/v1/agents", tag = "agents", params(AgentListQuery), responses((status = 200, body = AgentPage)))]
+pub async fn list_agents(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Query(query): Query<AgentListQuery>,
+) -> Result<Json<AgentPage>, ApiError> {
+    auth.require(Permission::AgentsRead)?;
+    if let Some(status) = &query.status {
+        if AgentStatus::parse(status).is_none() {
+            return Err(ApiError::bad_request(format!("unknown status '{status}'")));
+        }
+    }
+    let (rows, next_cursor, total) = state
+        .store
+        .list_agents(
+            auth.org_id,
+            limit(query.limit),
+            query.cursor.as_deref(),
+            query.status.as_deref(),
+            query.q.as_deref(),
+        )
+        .await?;
+
+    let mut items = Vec::with_capacity(rows.len());
+    for row in rows {
+        let spec = row
+            .spec
+            .as_ref()
+            .and_then(|value| serde_json::from_value::<AgentSpec>(value.clone()).ok());
+        items.push(AgentSummary::from_parts(&row.agent, spec.as_ref()));
+    }
+    Ok(Json(AgentPage {
+        items,
+        next_cursor,
+        total,
+    }))
+}
+
+#[utoipa::path(post, path = "/api/v1/agents", tag = "agents", request_body = AgentDefinition, responses((status = 201, body = AgentDetail)))]
+pub async fn create_agent(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    crate::extract::ApiJson(definition): crate::extract::ApiJson<AgentDefinition>,
+) -> Result<(StatusCode, Json<AgentDetail>), ApiError> {
+    auth.require(Permission::AgentsWrite)?;
+    let report = state
+        .store
+        .validate_agent_references(auth.org_id, &definition)
+        .await?;
+    if !report.is_valid() {
+        return Err(ApiError::validation(report.issues));
+    }
+
+    let (agent, _version) = state
+        .store
+        .create_agent(auth.org_id, Some(auth.user_id), &definition)
+        .await?;
+    state.metrics.inc_agents();
+    audit::record(
+        &state,
+        &auth,
+        "agent.created",
+        Some("agent"),
+        Some(agent.id),
+        serde_json::json!({ "name": agent.name, "runtime": definition.spec.runtime.kind.as_str() }),
+    )
+    .await;
+
+    let detail = load_agent_detail(&state, &auth, agent.id).await?;
+    Ok((StatusCode::CREATED, Json(detail)))
+}
+
+#[utoipa::path(get, path = "/api/v1/agents/{agent_id}", tag = "agents", responses((status = 200, body = AgentDetail)))]
+pub async fn get_agent(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(agent_id): Path<Uuid>,
+) -> Result<Json<AgentDetail>, ApiError> {
+    auth.require(Permission::AgentsRead)?;
+    Ok(Json(load_agent_detail(&state, &auth, agent_id).await?))
+}
+
+#[utoipa::path(patch, path = "/api/v1/agents/{agent_id}", tag = "agents", request_body = UpdateAgentRequest, responses((status = 200, body = AgentDetail)))]
+pub async fn update_agent(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(agent_id): Path<Uuid>,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<UpdateAgentRequest>,
+) -> Result<Json<AgentDetail>, ApiError> {
+    auth.require(Permission::AgentsWrite)?;
+    if let Some(definition) = &body.definition {
+        let report = state
+            .store
+            .validate_agent_references(auth.org_id, definition)
+            .await?;
+        if !report.is_valid() {
+            return Err(ApiError::validation(report.issues));
+        }
+        let (_, version) = state
+            .store
+            .add_agent_version(auth.org_id, agent_id, Some(auth.user_id), definition)
+            .await?;
+        audit::record(
+            &state,
+            &auth,
+            "agent.version_created",
+            Some("agent"),
+            Some(agent_id),
+            serde_json::json!({ "version": version.version }),
+        )
+        .await;
+    } else {
+        let name = body
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        if body.name.is_some() && name.is_none() {
+            return Err(ApiError::validation(vec![
+                orbit_domain::ValidationIssue::new("name", "name must not be empty"),
+            ]));
+        }
+        state
+            .store
+            .update_agent_metadata(
+                auth.org_id,
+                agent_id,
+                name,
+                body.description.as_deref(),
+                body.labels.as_ref(),
+            )
+            .await?;
+        audit::record(
+            &state,
+            &auth,
+            "agent.updated",
+            Some("agent"),
+            Some(agent_id),
+            serde_json::json!({ "fields": ["metadata"] }),
+        )
+        .await;
+    }
+    Ok(Json(load_agent_detail(&state, &auth, agent_id).await?))
+}
+
+#[derive(Debug, serde::Deserialize, utoipa::IntoParams)]
+pub struct DeleteAgentQuery {
+    /// Permanently delete the agent and its execution history (default: archive).
+    pub hard: Option<bool>,
+}
+
+#[utoipa::path(delete, path = "/api/v1/agents/{agent_id}", tag = "agents", params(DeleteAgentQuery), responses((status = 200, body = AgentDetail), (status = 204)))]
+pub async fn delete_agent(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(agent_id): Path<Uuid>,
+    Query(query): Query<DeleteAgentQuery>,
+) -> Result<Response, ApiError> {
+    auth.require(Permission::AgentsWrite)?;
+    if query.hard.unwrap_or(false) {
+        state.store.delete_agent(auth.org_id, agent_id).await?;
+        audit::record(
+            &state,
+            &auth,
+            "agent.deleted",
+            Some("agent"),
+            Some(agent_id),
+            serde_json::json!({ "hard": true }),
+        )
+        .await;
+        return Ok(StatusCode::NO_CONTENT.into_response());
+    }
+    let agent = state
+        .store
+        .set_agent_status(auth.org_id, agent_id, AgentStatus::Archived)
+        .await?;
+    audit::record(
+        &state,
+        &auth,
+        "agent.archived",
+        Some("agent"),
+        Some(agent_id),
+        serde_json::json!({ "name": agent.name }),
+    )
+    .await;
+    Ok(Json(load_agent_detail(&state, &auth, agent_id).await?).into_response())
+}
+
+#[utoipa::path(post, path = "/api/v1/agents/{agent_id}/activate", tag = "agents", responses((status = 200, body = AgentDetail)))]
+pub async fn activate_agent(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(agent_id): Path<Uuid>,
+) -> Result<Json<AgentDetail>, ApiError> {
+    auth.require(Permission::AgentsWrite)?;
+    state
+        .store
+        .set_agent_status(auth.org_id, agent_id, AgentStatus::Active)
+        .await?;
+    audit::record(
+        &state,
+        &auth,
+        "agent.activated",
+        Some("agent"),
+        Some(agent_id),
+        serde_json::json!({}),
+    )
+    .await;
+    Ok(Json(load_agent_detail(&state, &auth, agent_id).await?))
+}
+
+#[utoipa::path(post, path = "/api/v1/agents/{agent_id}/pause", tag = "agents", responses((status = 200, body = AgentDetail)))]
+pub async fn pause_agent(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(agent_id): Path<Uuid>,
+) -> Result<Json<AgentDetail>, ApiError> {
+    auth.require(Permission::AgentsWrite)?;
+    state
+        .store
+        .set_agent_status(auth.org_id, agent_id, AgentStatus::Paused)
+        .await?;
+    audit::record(
+        &state,
+        &auth,
+        "agent.paused",
+        Some("agent"),
+        Some(agent_id),
+        serde_json::json!({}),
+    )
+    .await;
+    Ok(Json(load_agent_detail(&state, &auth, agent_id).await?))
+}
+
+#[utoipa::path(get, path = "/api/v1/agents/{agent_id}/versions", tag = "agents", responses((status = 200, body = [AgentVersionView])))]
+pub async fn list_versions(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(agent_id): Path<Uuid>,
+) -> Result<Json<Vec<AgentVersionView>>, ApiError> {
+    auth.require(Permission::AgentsRead)?;
+    let versions = state
+        .store
+        .list_agent_versions(auth.org_id, agent_id)
+        .await?;
+    Ok(Json(versions.into_iter().map(Into::into).collect()))
+}
+
+#[utoipa::path(get, path = "/api/v1/agents/{agent_id}/export", tag = "agents", responses((status = 200, description = "Agent definition YAML")))]
+pub async fn export_agent(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(agent_id): Path<Uuid>,
+) -> Result<Response, ApiError> {
+    auth.require(Permission::AgentsRead)?;
+    let agent = state.store.get_agent(auth.org_id, agent_id).await?;
+    let version = state.store.get_current_version(auth.org_id, &agent).await?;
+    let yaml = if version.definition_yaml.trim().is_empty() {
+        let spec = parse_spec(&version)?;
+        AgentDefinition {
+            api_version: orbit_domain::AGENT_API_VERSION.to_string(),
+            kind: orbit_domain::AGENT_KIND.to_string(),
+            metadata: orbit_domain::AgentMetadata {
+                name: agent.name.clone(),
+                description: agent.description.clone(),
+                labels: Default::default(),
+            },
+            spec,
+        }
+        .to_yaml()
+        .map_err(ApiError::internal)?
+    } else {
+        version.definition_yaml
+    };
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/yaml; charset=utf-8"),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=\"agent.yaml\"",
+            ),
+        ],
+        yaml,
+    )
+        .into_response())
+}
+
+#[utoipa::path(get, path = "/api/v1/agent-instances", tag = "agents", responses((status = 200, body = AgentInstancePage)))]
+pub async fn list_agent_instances(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> Result<Json<AgentInstancePage>, ApiError> {
+    auth.require(Permission::AgentsRead)?;
+    let instances = state.store.list_agent_instances(auth.org_id).await?;
+    let total = instances.len() as i64;
+    Ok(Json(AgentInstancePage {
+        items: instances
+            .into_iter()
+            .map(|instance| crate::dto::AgentInstanceView { instance })
+            .collect(),
+        next_cursor: None,
+        total,
+    }))
+}

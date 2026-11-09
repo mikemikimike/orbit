@@ -1,0 +1,25 @@
+import type { components } from "@orbit/api-client";
+
+export type AgentSummary = components["schemas"]["AgentSummary"];
+export type AgentDetail = components["schemas"]["AgentDetail"];
+export type AgentVersionView = components["schemas"]["AgentVersionView"];
+export type ExecutionRecord = components["schemas"]["ExecutionRecord"];
+export type ExecutionEventRecord = components["schemas"]["ExecutionEventRecord"];
+export type RuntimeView = components["schemas"]["RuntimeView"];
+export type ProviderView = components["schemas"]["ProviderView"];
+export type ConnectorView = components["schemas"]["ConnectorView"];
+export type ConnectionView = components["schemas"]["ConnectionView"];
+export type TriggerRecord = components["schemas"]["Trigger"];
+export type DashboardResponse = components["schemas"]["DashboardResponse"];
+export type MeResponse = components["schemas"]["MeResponse"];
+export type MetaResponse = components["schemas"]["MetaResponse"];
+export type AgentPage = components["schemas"]["AgentPage"];
+export type ExecutionPage = components["schemas"]["ExecutionPage"];
+export type ApiTokenView = components["schemas"]["ApiTokenView"];
+export type CreatedApiToken = components["schemas"]["CreatedApiToken"];
+export type Organization = components["schemas"]["Organization"];
+export type User = components["schemas"]["User"];
+export type AgentDefinition = components["schemas"]["AgentDefinition"];
+export type AgentSpec = components["schemas"]["AgentSpec"];
+export type AgentInstanceView = components["schemas"]["AgentInstanceView"];
+export type ProviderProbeResponse = components["schemas"]["ProviderProbeResponse"];

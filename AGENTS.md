@@ -1,0 +1,142 @@
+# AGENTS.md — working in the ORBIT repository
+
+This file is the operating manual for AI coding agents and human contributors.
+
+## What ORBIT is (and is not)
+
+ORBIT is a self-hosted **control plane** for persistent AI agents. It manages agent
+definitions, runtimes, model providers, connectors, triggers, executions and policy.
+
+- ORBIT is **not** an agent framework and must not implement an agent reasoning loop.
+- Agent execution belongs to runtime adapters running in the **execution plane**
+  (`orbit-worker` and, later, isolated containers/Jobs).
+- `orbit-api` must never execute agent tasks.
+
+## Repository map
+
+```
+apps/web/              Next.js + React + Tailwind web app (App Router)
+packages/api-client/   Generated OpenAPI TypeScript client (do not hand-edit schema.d.ts)
+packages/contracts/    Zod schemas shared by web and future mobile app
+services/api/          orbit-api binary (control plane HTTP)
+services/worker/       orbit-worker binary (execution plane supervisor)
+crates/orbit-domain/   Pure domain types + validation + autonomy policy
+crates/orbit-contracts/ Runtime/provider/connector/event contracts (traits + DTOs)
+crates/orbit-store/    PostgreSQL repositories + SQL migrations
+crates/orbit-events/   Event bus (memory + NATS JetStream)
+crates/orbit-security/ Auth abstractions, permissions, secret encryption
+crates/orbit-runtime/  Runtime registry + adapters (mock implemented, opencode scaffolded)
+crates/orbit-api/      HTTP router, handlers, OpenAPI, SSE
+deploy/                Compose, Docker files, Helm chart, seed data
+docs/                  Architecture, ADRs, development and deployment docs
+```
+
+## Commands
+
+```bash
+# backend
+cargo fmt --all
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+ORBIT_TEST_DATABASE_URL=postgres://orbit:orbit@localhost:5432/orbit cargo test --workspace
+
+# database (SQLx CLI)
+export DATABASE_URL=postgres://orbit:orbit@localhost:5432/orbit
+sqlx migrate add -r <name> --source crates/orbit-store/migrations
+sqlx migrate run --source crates/orbit-store/migrations
+
+# frontend
+pnpm install
+pnpm --filter @orbit/web dev
+pnpm --filter @orbit/web typecheck
+pnpm --filter @orbit/web build
+pnpm api:generate            # requires a running API at localhost:8080
+
+# containers + Kubernetes (mkd.local conventions)
+docker compose -f deploy/compose/compose.yaml up --build
+TAG=0.1.0 ./scripts/build-images.sh
+PUSH_REGISTRY=registry.mdk.local:5000 TAG=0.1.0 ./scripts/push-images.sh
+KUBE_CONTEXT=microk8s NAMESPACE=orbit TAG=0.1.0 ./scripts/deploy.sh
+helm lint deploy/helm/orbit
+helm template orbit deploy/helm/orbit -f deploy/helm/orbit/values.yaml
+```
+
+- Registry: `192.168.1.201:5000` (reachable as `registry.mdk.local:5000` for Docker).
+  Cluster image references use the IP form; repository paths are identical.
+- Target cluster: microk8s context, ingress `orbit.mdk.local`, ingress class `nginx`,
+  namespace `orbit`. Images must be `linux/amd64`.
+- If `kubectl` reports `dial tcp 192.168.1.6:16443: connect: no route to host`, the
+  cluster is not reachable; do not improvise a different cluster. Restore VPN/LAN access
+  and rerun the deploy script.
+
+## Non-negotiable rules
+
+1. **Contracts before adapters.** Change `crates/orbit-contracts` (and its docs) before
+   changing an adapter or a handler.
+2. **No agent logic in the control plane.** The API persists intent and publishes events.
+3. **Autonomy is platform-enforced.** Never rely on prompts for permissions. Use
+   `orbit_domain::evaluate_capability` and permission checks.
+4. **Secrets are write-only.** Never return plaintext credentials from the API, log them,
+   put them in events, or commit them. `SecretLease` refuses serialization by design.
+5. **Durable state lives in PostgreSQL.** The event bus is an accelerator, not the source
+   of truth. Any bus loss must be recoverable by polling/replay.
+6. **Honesty about integrations.** An adapter is only "available" after integration tests
+   against the real runtime. `mock` is available; `opencode` is scaffolded; Claude Code,
+   Pi and generic are planned. Keep `ImplementationStatus` accurate.
+7. **Migrations are append-only.** Never edit an applied migration; add a new one.
+8. **UI must be responsive and mobile-first.** No desktop-only tables as the primary
+   mobile experience.
+9. **Errors use the envelope.** `{ "error": { code, message, details, requestId } }`.
+10. **No silent technology substitutions.** Document deviations in `docs/decisions/`.
+
+## Phase status (update this table when a phase completes)
+
+| Phase | Scope | Status |
+|---|---|---|
+| 0 | Foundation, contracts, DB, API, worker, docs, containers, Helm | Complete (validated on local Kubernetes; microk8s rollout pending network access) |
+| 1 | Agent CRUD/Studio, OpenCode adapter verified, executions | Partially: CRUD + mock execution done; OpenCode adapter scaffolded |
+| 2 | Connectors invocation, Telegram/GitLab, webhooks, approvals, Claude Code | Not started |
+| 3 | Long-running agents, Pi, memory, scheduling hardening | Not started |
+| 4 | Enterprise RBAC, shared connections, quotas, marketplace | Not started |
+
+## Adding a runtime
+
+1. Add/extend `RuntimeKind` only if a new family is required.
+2. Implement `RuntimeAdapter` in `crates/orbit-runtime/src/<name>.rs`.
+3. Add a descriptor with accurate `RuntimeCapabilities` and `ImplementationStatus`.
+4. Register it in `RuntimeRegistry::builtin()`.
+5. Pass `orbit_runtime::testing::assert_adapter_contract` in `crates/orbit-runtime/tests`.
+6. Add a compliance test against the real runtime binary/container and document the
+   tested version in `docs/architecture/runtime-contract.md`.
+7. Never hardcode provider names or model inventories.
+
+## Adding a provider kind
+
+1. Add a `ProviderKind` variant and config struct in `crates/orbit-contracts/src/provider.rs`.
+2. Implement config validation and capability flags (explicit, not assumed).
+3. Extend worker resolution (`services/worker/src/resolver.rs`).
+4. Update the Models UI and OpenAPI schemas.
+5. Add contract tests for valid/invalid configs.
+
+## Adding a connector (Phase 2+)
+
+1. Implement `Connector` (manifest + capability catalog with effects).
+2. Register it in the connector registry and seed the manifest.
+3. Store credentials only as encrypted `secret_ref` handles.
+4. Enforce capability allowlists and autonomy in the platform, not in the connector.
+5. Add mock/webhook tests; never commit real credentials.
+
+## Testing expectations for a change
+
+- Domain rule change → unit tests in `crates/orbit-domain`.
+- Store/schema change → migration + integration tests in `crates/orbit-store/tests`.
+- API change → handler tests in `crates/orbit-api/tests` + regenerated OpenAPI client.
+- Runtime change → contract tests + real-runtime integration evidence.
+- UI change → `pnpm typecheck` + `pnpm build`; keep pages usable at 360px width.
+
+## Local requirements
+
+- Rust stable (>= 1.85, pinned by `rust-toolchain.toml`)
+- Node >= 20 and pnpm 10+ (`corepack enable`)
+- Docker + Compose v2
+- Helm 3 and (for cluster validation) kubectl + kind/k3d

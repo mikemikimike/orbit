@@ -1,0 +1,32 @@
+[package]
+name = "orbit-worker"
+description = "ORBIT execution plane worker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "orbit-worker"
+path = "src/main.rs"
+
+[dependencies]
+orbit-contracts.workspace = true
+orbit-domain.workspace = true
+orbit-events.workspace = true
+orbit-runtime.workspace = true
+orbit-security.workspace = true
+orbit-store.workspace = true
+orbit-api.workspace = true
+tokio-util.workspace = true
+croner.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+sqlx.workspace = true
+dotenvy.workspace = true

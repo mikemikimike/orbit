@@ -1,0 +1,191 @@
+# ORBIT Helm values (local / test cluster).
+# Usage: helm upgrade --install orbit ./deploy/helm/orbit -n orbit --create-namespace -f values.yaml
+#
+# This file matches the private-registry workflow used for the mkd.local cluster.
+# Production: copy values-prod.example.yaml and use an external database + OIDC.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Private registry (HTTP on the LAN) used by the cluster.
+imageRegistry: 192.168.1.201:5000
+imagePullPolicy: IfNotPresent
+imagePullSecrets: []
+
+api:
+  image: orbit-api
+  tag: latest
+  replicas: 1
+  port: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      cpu: 1
+      memory: 512Mi
+
+worker:
+  image: orbit-worker
+  tag: latest
+  replicas: 1
+  concurrency: 4
+  pollIntervalMs: 500
+  schedulerEnabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  workspace:
+    sizeLimit: 1Gi
+
+web:
+  image: orbit-web
+  tag: latest
+  replicas: 1
+  port: 3000
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 384Mi
+
+# ─── Authentication ───────────────────────────────────────────
+auth:
+  # dev  = seeded local user (no IdP). Use only for local/test clusters.
+  # oidc = bearer tokens validated against your OIDC provider's JWKS.
+  mode: dev
+  dev:
+    allowAnonymous: true
+    token: orbit-dev-token
+    userEmail: dev@orbit.local
+    userName: ORBIT Developer
+    orgSlug: orbit
+    orgName: ORBIT
+  oidc:
+    issuer: ""
+    audience: ""
+    jwksUrl: ""
+    scopes: "openid profile email"
+    autoProvision: true
+    defaultRole: viewer
+
+# ─── Secrets ─────────────────────────────────────────────────
+# For production set secrets.create=false and secrets.existingSecret to a Secret you
+# manage (Vault/External Secrets/sealed-secrets). Required keys: database-url, master-key.
+secrets:
+  create: true
+  existingSecret: ""
+  # 32-byte base64 key. Generate with: openssl rand -base64 32
+  # The default is a documented DEVELOPMENT key — replace it for anything real.
+  masterKey: b3JiaXQtZGV2LW1hc3Rlci1rZXktMzItYnl0ZXMhISE=
+  # Optional: override the computed database URL entirely.
+  databaseUrl: ""
+  oidcClientSecret: ""
+
+# ─── PostgreSQL ──────────────────────────────────────────────
+# Bundled single-instance PostgreSQL for test clusters. For production use an
+# external managed database (externalDatabase.enabled=true) instead.
+postgresql:
+  enabled: true
+  image: postgres:17-alpine
+  database: orbit
+  user: orbit
+  password: orbit
+  storage: 5Gi
+  storageClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+externalDatabase:
+  enabled: false
+  # postgres://user:password@host:5432/orbit?sslmode=require
+  url: ""
+
+# ─── NATS JetStream ──────────────────────────────────────────
+nats:
+  enabled: true
+  image: nats:2.11-alpine
+  storage: 2Gi
+  storageClassName: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 192Mi
+
+externalNats:
+  enabled: false
+  url: ""
+
+# ─── Platform ────────────────────────────────────────────────
+platform:
+  environment: production
+  seedDemo: true
+  logFormat: json
+  corsOrigins: "http://orbit.mdk.local"
+  publicBaseUrl: "http://orbit.mdk.local"
+  bodyLimitBytes: "2097152"
+
+# Optional Vault wiring (secret retrieval is Phase 2; values are injected as env so
+# Vault Agent / CSI can be used without chart changes).
+vault:
+  enabled: false
+  addr: ""
+  existingSecret: ""
+
+# ─── Ingress ─────────────────────────────────────────────────
+ingress:
+  enabled: true
+  host: orbit.mdk.local
+  ingressClassName: nginx
+  tls:
+    enabled: false
+    secretName: orbit-tls
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+
+# ─── Reliability ─────────────────────────────────────────────
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+# Extra environment variables for all backend workloads (list of env objects).
+extraEnv: []
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# SSE and long-poll friendly termination.
+terminationGracePeriodSeconds: 30

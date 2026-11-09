@@ -1,0 +1,148 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  Activity,
+  Bot,
+  Boxes,
+  Cable,
+  Cpu,
+  LayoutDashboard,
+  Plus,
+  Settings,
+} from "lucide-react";
+
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
+
+const NAV = [
+  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/executions", label: "Executions", icon: Activity },
+  { href: "/connections", label: "Connections", icon: Cable },
+  { href: "/runtimes", label: "Runtimes", icon: Cpu },
+  { href: "/models", label: "Models", icon: Boxes },
+  { href: "/settings", label: "Settings", icon: Settings },
+];
+
+const MOBILE_NAV = [
+  { href: "/", label: "Home", icon: LayoutDashboard },
+  { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/executions", label: "Runs", icon: Activity },
+  { href: "/connections", label: "Connect", icon: Cable },
+  { href: "/settings", label: "Settings", icon: Settings },
+];
+
+function isActive(pathname: string, href: string) {
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function BrandMark() {
+  return (
+    <span className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+      <span className="absolute h-5 w-5 rounded-full border-2 border-primary" />
+      <span className="absolute h-1.5 w-1.5 -translate-y-2 rounded-full bg-primary" />
+    </span>
+  );
+}
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname() || "/";
+  const hideNewAgent = pathname.startsWith("/agents/new");
+  const current = NAV.filter((item) => isActive(pathname, item.href)).at(-1);
+
+  return (
+    <div className="min-h-dvh bg-background">
+      {/* Desktop sidebar */}
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r bg-card/60 backdrop-blur lg:flex">
+        <div className="flex h-16 items-center gap-2.5 border-b px-5">
+          <BrandMark />
+          <div className="leading-tight">
+            <p className="text-sm font-semibold tracking-wide">ORBIT</p>
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              Agent platform
+            </p>
+          </div>
+        </div>
+        <nav className="flex flex-1 flex-col gap-1 p-3">
+          {NAV.map((item) => {
+            const active = isActive(pathname, item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  active
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="border-t p-3">
+          <div className="rounded-lg bg-muted/60 p-3">
+            <p className="text-xs font-medium">Self-hosted</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Your agents, runtimes and credentials stay in your infrastructure.
+            </p>
+          </div>
+        </div>
+      </aside>
+
+      {/* Mobile header */}
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-background/85 px-4 backdrop-blur lg:hidden">
+        <Link href="/" className="flex items-center gap-2">
+          <BrandMark />
+          <span className="text-sm font-semibold">ORBIT</span>
+          <span className="text-xs text-muted-foreground">/ {current?.label ?? "Dashboard"}</span>
+        </Link>
+        <div className="flex items-center gap-1">
+          {!hideNewAgent ? (
+            <Button asChild size="icon" variant="default" aria-label="New agent">
+              <Link href="/agents/new">
+                <Plus />
+              </Link>
+            </Button>
+          ) : null}
+          <ThemeToggle />
+        </div>
+      </header>
+
+      <div className="lg:pl-60">
+        <div className="orbit-grid-bg min-h-dvh">
+          <main className="mx-auto w-full max-w-6xl px-4 pb-24 pt-5 sm:px-6 lg:pb-10 lg:pt-8">
+            {children}
+          </main>
+        </div>
+      </div>
+
+      {/* Mobile bottom navigation */}
+      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-background/95 backdrop-blur lg:hidden">
+        {MOBILE_NAV.map((item) => {
+          const active = isActive(pathname, item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex flex-col items-center gap-1 px-1 pt-2 text-[10px] font-medium",
+                active ? "text-primary" : "text-muted-foreground",
+              )}
+            >
+              <item.icon className={cn("h-5 w-5", active && "fill-primary/10")} />
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}

@@ -1,0 +1,64 @@
+pub mod account;
+pub mod agents;
+pub mod catalog;
+pub mod dashboard;
+pub mod executions;
+pub mod health;
+pub mod triggers;
+
+use uuid::Uuid;
+
+use orbit_domain::AgentSpec;
+use orbit_security::AuthContext;
+use orbit_store::AgentVersion;
+
+use crate::dto::AgentDetail;
+use crate::error::ApiError;
+use crate::state::AppState;
+
+pub(crate) fn parse_spec(version: &AgentVersion) -> Result<AgentSpec, ApiError> {
+    serde_json::from_value(version.spec.clone()).map_err(|err| {
+        tracing::error!(error = %err, agent_version = %version.id, "stored agent spec is invalid");
+        ApiError::internal("stored agent configuration is invalid")
+    })
+}
+
+pub(crate) fn limit(value: Option<u32>) -> i64 {
+    orbit_domain::clamp_limit(value)
+}
+
+pub(crate) async fn load_agent_detail(
+    state: &AppState,
+    auth: &AuthContext,
+    agent_id: Uuid,
+) -> Result<AgentDetail, ApiError> {
+    let agent = state.store.get_agent(auth.org_id, agent_id).await?;
+    let version = state.store.get_current_version(auth.org_id, &agent).await?;
+    let spec = parse_spec(&version)?;
+    let triggers = state
+        .store
+        .list_triggers(auth.org_id, Some(agent.id))
+        .await?;
+    let (executions, _, _) = state
+        .store
+        .list_executions(auth.org_id, 5, None, None, Some(agent.id))
+        .await?;
+
+    Ok(AgentDetail {
+        id: agent.id,
+        slug: agent.slug,
+        name: agent.name,
+        description: agent.description,
+        status: agent.status,
+        current_version: agent.current_version,
+        labels: agent.labels,
+        spec,
+        definition_yaml: version.definition_yaml,
+        version_id: version.id,
+        version_created_at: version.created_at,
+        triggers,
+        recent_executions: executions,
+        created_at: agent.created_at,
+        updated_at: agent.updated_at,
+    })
+}

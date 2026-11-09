@@ -1,0 +1,430 @@
+use serde_json::Value;
+use uuid::Uuid;
+
+use orbit_contracts::{ConnectorManifest, RuntimeDescriptor};
+use orbit_domain::new_id;
+
+use crate::models::{
+    Connection, ConnectionWithConnector, ConnectorRecord, Provider, RuntimeRecord,
+};
+use crate::{Store, StoreError, StoreResult};
+
+impl Store {
+    // -------------------------------------------------------------------- runtimes
+
+    /// Upsert the built-in runtime catalog from the adapter registry.
+    pub async fn upsert_runtime_descriptor(
+        &self,
+        descriptor: &RuntimeDescriptor,
+    ) -> StoreResult<RuntimeRecord> {
+        let capabilities = serde_json::to_value(&descriptor.capabilities)
+            .map_err(|e| StoreError::Internal(e.to_string()))?;
+        let config_schema = descriptor.config_schema.clone();
+        sqlx::query_as::<_, RuntimeRecord>(
+            r#"
+            INSERT INTO runtimes (id, org_id, kind, name, description, enabled, implementation_status, capabilities, config)
+            VALUES ($1, NULL, $2, $3, $4, true, $5, $6, $7)
+            ON CONFLICT (kind) WHERE org_id IS NULL
+            DO UPDATE SET
+                name = EXCLUDED.name,
+                description = EXCLUDED.description,
+                implementation_status = EXCLUDED.implementation_status,
+                capabilities = EXCLUDED.capabilities,
+                config = EXCLUDED.config,
+                updated_at = now()
+            RETURNING *
+            "#,
+        )
+        .bind(new_id())
+        .bind(descriptor.kind.as_str())
+        .bind(&descriptor.name)
+        .bind(&descriptor.description)
+        .bind(descriptor.implementation_status.as_str())
+        .bind(capabilities)
+        .bind(config_schema)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    pub async fn list_runtimes(&self, org_id: Uuid) -> StoreResult<Vec<RuntimeRecord>> {
+        Ok(sqlx::query_as::<_, RuntimeRecord>(
+            r#"
+            SELECT * FROM runtimes
+            WHERE org_id IS NULL OR org_id = $1
+            ORDER BY kind ASC
+            "#,
+        )
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_runtime_by_kind(
+        &self,
+        org_id: Uuid,
+        kind: &str,
+    ) -> StoreResult<Option<RuntimeRecord>> {
+        Ok(sqlx::query_as::<_, RuntimeRecord>(
+            r#"
+            SELECT * FROM runtimes
+            WHERE (org_id IS NULL OR org_id = $1) AND kind = $2
+            ORDER BY org_id NULLS LAST
+            LIMIT 1
+            "#,
+        )
+        .bind(org_id)
+        .bind(kind)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn set_runtime_enabled(
+        &self,
+        org_id: Uuid,
+        kind: &str,
+        enabled: bool,
+    ) -> StoreResult<RuntimeRecord> {
+        sqlx::query_as::<_, RuntimeRecord>(
+            r#"
+            UPDATE runtimes SET enabled = $3, updated_at = now()
+            WHERE (org_id IS NULL OR org_id = $1) AND kind = $2
+            RETURNING *
+            "#,
+        )
+        .bind(org_id)
+        .bind(kind)
+        .bind(enabled)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("runtime".into()))
+    }
+
+    // ------------------------------------------------------------------- providers
+
+    pub async fn create_provider(
+        &self,
+        org_id: Uuid,
+        name: &str,
+        kind: &str,
+        config: &Value,
+        secret_ref: Option<&str>,
+    ) -> StoreResult<Provider> {
+        sqlx::query_as::<_, Provider>(
+            r#"
+            INSERT INTO providers (id, org_id, name, kind, config, secret_ref)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING *
+            "#,
+        )
+        .bind(new_id())
+        .bind(org_id)
+        .bind(name)
+        .bind(kind)
+        .bind(config)
+        .bind(secret_ref)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| {
+            if e.as_database_error()
+                .map(|d| d.is_unique_violation())
+                .unwrap_or(false)
+            {
+                StoreError::Conflict(format!("provider '{name}' already exists"))
+            } else {
+                e.into()
+            }
+        })
+    }
+
+    pub async fn list_providers(&self, org_id: Uuid) -> StoreResult<Vec<Provider>> {
+        Ok(sqlx::query_as::<_, Provider>(
+            "SELECT * FROM providers WHERE org_id = $1 ORDER BY created_at DESC",
+        )
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_provider(&self, org_id: Uuid, provider_id: Uuid) -> StoreResult<Provider> {
+        sqlx::query_as::<_, Provider>("SELECT * FROM providers WHERE org_id = $1 AND id = $2")
+            .bind(org_id)
+            .bind(provider_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| StoreError::NotFound("provider".into()))
+    }
+
+    pub async fn get_provider_by_name(
+        &self,
+        org_id: Uuid,
+        name: &str,
+    ) -> StoreResult<Option<Provider>> {
+        Ok(
+            sqlx::query_as::<_, Provider>(
+                "SELECT * FROM providers WHERE org_id = $1 AND name = $2",
+            )
+            .bind(org_id)
+            .bind(name)
+            .fetch_optional(&self.pool)
+            .await?,
+        )
+    }
+
+    pub async fn update_provider(
+        &self,
+        org_id: Uuid,
+        provider_id: Uuid,
+        name: Option<&str>,
+        config: Option<&Value>,
+        secret_ref: Option<&str>,
+        enabled: Option<bool>,
+    ) -> StoreResult<Provider> {
+        sqlx::query_as::<_, Provider>(
+            r#"
+            UPDATE providers
+            SET name = COALESCE($3, name),
+                config = COALESCE($4, config),
+                secret_ref = COALESCE($5, secret_ref),
+                enabled = COALESCE($6, enabled),
+                updated_at = now()
+            WHERE org_id = $1 AND id = $2
+            RETURNING *
+            "#,
+        )
+        .bind(org_id)
+        .bind(provider_id)
+        .bind(name)
+        .bind(config)
+        .bind(secret_ref)
+        .bind(enabled)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("provider".into()))
+    }
+
+    pub async fn delete_provider(&self, org_id: Uuid, provider_id: Uuid) -> StoreResult<()> {
+        let result = sqlx::query("DELETE FROM providers WHERE org_id = $1 AND id = $2")
+            .bind(org_id)
+            .bind(provider_id)
+            .execute(&self.pool)
+            .await?;
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound("provider".into()));
+        }
+        Ok(())
+    }
+
+    // ------------------------------------------------------------------ connectors
+
+    pub async fn upsert_connector_manifest(
+        &self,
+        manifest: &ConnectorManifest,
+    ) -> StoreResult<ConnectorRecord> {
+        let auth = serde_json::to_value(&manifest.auth).unwrap_or_default();
+        let capabilities = serde_json::to_value(&manifest.capabilities).unwrap_or_default();
+        sqlx::query_as::<_, ConnectorRecord>(
+            r#"
+            INSERT INTO connectors (id, org_id, slug, name, version, description, auth, capabilities,
+                                    config_schema, webhooks, builtin, docs_url)
+            VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, true, $10)
+            ON CONFLICT (slug) WHERE org_id IS NULL
+            DO UPDATE SET
+                name = EXCLUDED.name,
+                version = EXCLUDED.version,
+                description = EXCLUDED.description,
+                auth = EXCLUDED.auth,
+                capabilities = EXCLUDED.capabilities,
+                config_schema = EXCLUDED.config_schema,
+                webhooks = EXCLUDED.webhooks,
+                docs_url = EXCLUDED.docs_url
+            RETURNING *
+            "#,
+        )
+        .bind(new_id())
+        .bind(&manifest.slug)
+        .bind(&manifest.name)
+        .bind(&manifest.version)
+        .bind(&manifest.description)
+        .bind(auth)
+        .bind(capabilities)
+        .bind(&manifest.config_schema)
+        .bind(manifest.webhooks)
+        .bind(&manifest.docs_url)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    pub async fn list_connectors(&self, org_id: Uuid) -> StoreResult<Vec<ConnectorRecord>> {
+        Ok(sqlx::query_as::<_, ConnectorRecord>(
+            r#"
+            SELECT * FROM connectors
+            WHERE org_id IS NULL OR org_id = $1
+            ORDER BY name ASC
+            "#,
+        )
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_connector_by_slug(
+        &self,
+        org_id: Uuid,
+        slug: &str,
+    ) -> StoreResult<Option<ConnectorRecord>> {
+        Ok(sqlx::query_as::<_, ConnectorRecord>(
+            r#"
+            SELECT * FROM connectors
+            WHERE (org_id IS NULL OR org_id = $1) AND slug = $2
+            ORDER BY org_id NULLS LAST
+            LIMIT 1
+            "#,
+        )
+        .bind(org_id)
+        .bind(slug)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_connector(
+        &self,
+        org_id: Uuid,
+        connector_id: Uuid,
+    ) -> StoreResult<ConnectorRecord> {
+        sqlx::query_as::<_, ConnectorRecord>(
+            "SELECT * FROM connectors WHERE (org_id IS NULL OR org_id = $1) AND id = $2",
+        )
+        .bind(org_id)
+        .bind(connector_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("connector".into()))
+    }
+
+    // ----------------------------------------------------------------- connections
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_connection(
+        &self,
+        org_id: Uuid,
+        connector_id: Uuid,
+        name: &str,
+        config: &Value,
+        scopes: &[String],
+        credential_ref: Option<&str>,
+        created_by: Option<Uuid>,
+    ) -> StoreResult<Connection> {
+        sqlx::query_as::<_, Connection>(
+            r#"
+            INSERT INTO connections (id, org_id, connector_id, name, config, scopes, credential_ref, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING *
+            "#,
+        )
+        .bind(new_id())
+        .bind(org_id)
+        .bind(connector_id)
+        .bind(name)
+        .bind(config)
+        .bind(scopes)
+        .bind(credential_ref)
+        .bind(created_by)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| {
+            if e.as_database_error().map(|d| d.is_unique_violation()).unwrap_or(false) {
+                StoreError::Conflict(format!("connection '{name}' already exists"))
+            } else {
+                e.into()
+            }
+        })
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub async fn list_connections(
+        &self,
+        org_id: Uuid,
+    ) -> StoreResult<Vec<ConnectionWithConnector>> {
+        Ok(sqlx::query_as::<_, ConnectionWithConnector>(
+            r#"
+            SELECT c.*, conn.slug AS connector_slug, conn.name AS connector_name
+            FROM connections c
+            JOIN connectors conn ON conn.id = c.connector_id
+            WHERE c.org_id = $1
+            ORDER BY c.created_at DESC
+            "#,
+        )
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_connection(
+        &self,
+        org_id: Uuid,
+        connection_id: Uuid,
+    ) -> StoreResult<Connection> {
+        sqlx::query_as::<_, Connection>("SELECT * FROM connections WHERE org_id = $1 AND id = $2")
+            .bind(org_id)
+            .bind(connection_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| StoreError::NotFound("connection".into()))
+    }
+
+    pub async fn get_connection_with_connector(
+        &self,
+        org_id: Uuid,
+        connection_id: Uuid,
+    ) -> StoreResult<ConnectionWithConnector> {
+        sqlx::query_as::<_, ConnectionWithConnector>(
+            r#"
+            SELECT c.*, conn.slug AS connector_slug, conn.name AS connector_name
+            FROM connections c
+            JOIN connectors conn ON conn.id = c.connector_id
+            WHERE c.org_id = $1 AND c.id = $2
+            "#,
+        )
+        .bind(org_id)
+        .bind(connection_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("connection".into()))
+    }
+
+    pub async fn set_connection_status(
+        &self,
+        org_id: Uuid,
+        connection_id: Uuid,
+        status: &str,
+    ) -> StoreResult<Connection> {
+        sqlx::query_as::<_, Connection>(
+            r#"
+            UPDATE connections
+            SET status = $3, updated_at = now(), last_checked_at = now()
+            WHERE org_id = $1 AND id = $2
+            RETURNING *
+            "#,
+        )
+        .bind(org_id)
+        .bind(connection_id)
+        .bind(status)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("connection".into()))
+    }
+
+    pub async fn delete_connection(&self, org_id: Uuid, connection_id: Uuid) -> StoreResult<()> {
+        let result = sqlx::query("DELETE FROM connections WHERE org_id = $1 AND id = $2")
+            .bind(org_id)
+            .bind(connection_id)
+            .execute(&self.pool)
+            .await?;
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound("connection".into()));
+        }
+        Ok(())
+    }
+}

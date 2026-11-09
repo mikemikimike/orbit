@@ -1,0 +1,32 @@
+# Rust
+target/
+**/*.rs.bk
+.dsqlx/
+
+# Node
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+coverage/
+
+# Env & secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+secrets/
+*.pem
+*.key
+
+# Tooling
+.DS_Store
+.idea/
+.vscode/
+tmp/
+dist/
+*.log
+
+# Helm
+deploy/helm/**/charts/*.tgz

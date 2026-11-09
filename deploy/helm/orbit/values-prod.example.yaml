@@ -1,0 +1,137 @@
+# ORBIT production-oriented values (example).
+#
+# - External PostgreSQL and NATS (no bundled stateful services)
+# - OIDC authentication with externally managed secrets
+# - Private registry, pinned image tags, multiple replicas
+# - TLS ingress at orbit.mdk.local
+#
+# Usage:
+#   helm upgrade --install orbit ./deploy/helm/orbit \
+#     --namespace orbit --create-namespace \
+#     -f deploy/helm/orbit/values-prod.example.yaml
+
+nameOverride: ""
+fullnameOverride: ""
+
+imageRegistry: 192.168.1.201:5000
+imagePullPolicy: IfNotPresent
+imagePullSecrets: []
+
+api:
+  image: orbit-api
+  tag: "0.1.0"
+  replicas: 2
+  port: 8080
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 768Mi
+
+worker:
+  image: orbit-worker
+  tag: "0.1.0"
+  replicas: 2
+  concurrency: 8
+  pollIntervalMs: 500
+  schedulerEnabled: false # enable on exactly one replica until HA scheduling lands
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+  workspace:
+    sizeLimit: 2Gi
+
+web:
+  image: orbit-web
+  tag: "0.1.0"
+  replicas: 2
+  port: 3000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+auth:
+  mode: oidc
+  oidc:
+    issuer: https://dex.example.com
+    audience: orbit
+    jwksUrl: https://dex.example.com/keys
+    scopes: "openid profile email"
+    autoProvision: true
+    defaultRole: viewer
+
+# Manage secrets externally (Vault, External Secrets, sealed-secrets, …).
+# Required keys in the Secret: database-url, master-key.
+secrets:
+  create: false
+  existingSecret: orbit-secrets
+  masterKey: ""
+  databaseUrl: ""
+
+postgresql:
+  enabled: false
+
+externalDatabase:
+  enabled: true
+  url: postgres://orbit:CHANGE_ME@postgres.example.internal:5432/orbit?sslmode=require
+
+nats:
+  enabled: false
+
+externalNats:
+  enabled: true
+  url: nats://nats.example.internal:4222
+
+platform:
+  environment: production
+  seedDemo: false
+  logFormat: json
+  corsOrigins: "https://orbit.mdk.local"
+  publicBaseUrl: "https://orbit.mdk.local"
+  bodyLimitBytes: "2097152"
+
+vault:
+  enabled: false
+  addr: ""
+  existingSecret: ""
+
+ingress:
+  enabled: true
+  host: orbit.mdk.local
+  ingressClassName: nginx
+  tls:
+    enabled: true
+    secretName: orbit-tls
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-body-size: "4m"
+
+serviceAccount:
+  create: true
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]

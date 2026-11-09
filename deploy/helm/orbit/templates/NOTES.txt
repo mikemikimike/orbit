@@ -1,0 +1,32 @@
+ORBIT is being installed.
+
+{{- if .Values.ingress.enabled }}
+Web UI:      http://{{ .Values.ingress.host }}/
+API:         http://{{ .Values.ingress.host }}/api/v1
+API docs:    http://{{ .Values.ingress.host }}/docs
+{{- else }}
+Port-forward the web UI:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "orbit.webHost" . }} 3000:80
+Port-forward the API:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "orbit.apiHost" . }} 8080:{{ .Values.api.port }}
+{{- end }}
+
+Auth mode:   {{ .Values.auth.mode }}
+Registry:    {{ .Values.imageRegistry }}
+
+Images:
+  {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.api.image "tag" .Values.api.tag) }}
+  {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.worker.image "tag" .Values.worker.tag) }}
+  {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.web.image "tag" .Values.web.tag) }}
+
+{{- if .Values.secrets.create }}
+The chart created a development Secret. Replace ORBIT_MASTER_KEY and the database URL
+for real deployments, or set secrets.create=false and secrets.existingSecret.
+{{- end }}
+
+Check readiness:
+  kubectl -n {{ .Release.Namespace }} get pods
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "orbit.apiHost" . }}
+
+Note: the OpenCode adapter is scaffolded in this release; task execution uses the mock
+runtime until Phase 1 integration tests certify a pinned OpenCode version.

@@ -1,0 +1,119 @@
+# ORBIT Architecture Overview
+
+ORBIT is a self-hosted control plane for creating, connecting, deploying and governing
+persistent AI agents. It is **not** an agent framework: agent reasoning happens in
+dedicated runtime processes (OpenCode, Claude Code, Pi, custom) behind a stable adapter
+contract.
+
+## 1. Layers
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ A. Agent Experience                                                  │
+│    Next.js web app (apps/web)  ── future Expo/React Native apps      │
+└───────────────▲──────────────────────────────────────────────────────┘
+                │ REST /api/v1 + SSE (OpenAPI contract)
+┌───────────────┴──────────────────────────────────────────────────────┐
+│ B. Control Plane                                                     │
+│    orbit-api (axum)  ── authn/z, agents, executions, policies, audit  │
+│    orbit-worker      ── event routing, runtime dispatch, tracking     │
+│    PostgreSQL        ── durable state                                 │
+│    NATS JetStream    ── durable events (dev: in-memory bus)           │
+└───────────────▲──────────────────────────────────────────────────────┘
+                │ RuntimeAdapter contract (crates/orbit-contracts)
+┌───────────────┴──────────────────────────────────────────────────────┐
+│ C. Execution Plane                                                   │
+│    Isolated runtime workers / containers / Kubernetes Jobs            │
+│    opencode · claude-code · pi · generic · mock                       │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+The control plane never embeds an agent loop. The worker owns adapter instances; in
+local development the mock runtime runs in-process in `orbit-worker`, and production
+runtimes are launched as isolated containers/Jobs (`RuntimeDispatcher`).
+
+## 2. Runtime topology (MVP)
+
+| Component | Local (Compose) | Kubernetes (Helm) |
+|---|---|---|
+| `orbit-api` | container, port 8080 | Deployment + Service + Ingress |
+| `orbit-worker` | container | Deployment (or Job-per-execution later) |
+| web | container, port 3000 | Deployment + Service + Ingress |
+| PostgreSQL | container | external or bundled (opt-in) |
+| NATS JetStream | container | external or bundled (opt-in) |
+| Runtime processes | mock in worker; OpenCode via subprocess sandbox | Jobs/Pods via dispatcher |
+
+## 3. Module boundaries (Rust workspace)
+
+| Crate | Responsibility |
+|---|---|
+| `orbit-domain` | Pure domain types, agent spec, validation, autonomy policy, state machines |
+| `orbit-contracts` | Cross-boundary contracts: runtime adapter, provider, connector, events |
+| `orbit-store` | PostgreSQL repositories, migrations, transactions |
+| `orbit-events` | `EventBus` abstraction, in-memory and NATS JetStream drivers |
+| `orbit-security` | Auth context, token hashing, OIDC validation, `SecretStore`, AES-GCM |
+| `orbit-runtime` | Runtime registry and adapters (mock implemented, opencode scaffold) |
+| `orbit-api` | HTTP router, handlers, OpenAPI document, SSE |
+| `services/api` | Control-plane binary |
+| `services/worker` | Execution-plane supervisor binary |
+
+Dependency rule: `domain` ← everything; `contracts` ← `runtime`, `api`, `worker`;
+`store` ← `api`, `worker`. Adapters never depend on `orbit-api` or `orbit-store`.
+
+## 4. Request & execution flow
+
+Manual execution:
+
+1. `POST /api/v1/agents/{id}/executions` validates agent state, autonomy and quotas.
+2. A row in `executions` is inserted with status `queued` and an idempotency key.
+3. `orbit.execution.requested` is published on the event bus.
+4. The worker claims the execution (`queued → dispatched`, compare-and-set), resolves
+   the runtime adapter, creates/resumes a session and streams events.
+5. Events are persisted in `execution_events`; execution status transitions are
+   persisted and published as `orbit.execution.updated`.
+6. The frontend stream (`GET /api/v1/executions/{id}/events/stream`) replays persisted
+   events and then tails new ones (SSE, `Last-Event-ID` supported).
+
+Event-triggered execution uses the same path: trigger → normalized event → trigger
+matcher → policy check → `executions` row → bus. Retention and deduplication live in
+PostgreSQL (`processed_events`, unique `idempotency_key`), not in memory.
+
+## 5. Isolation & security
+
+- Agent tasks are **never** executed inside `orbit-api`.
+- Adapters receive a constrained `RuntimeExecutionContext` (timeout, CPU/memory,
+  network policy, filesystem policy, injected secret handles — never raw secrets in
+  prompts or logs).
+- Autonomy is enforced by the platform before dispatch and at capability invocation
+  time: connector capabilities are checked against per-agent allowlists and autonomy
+  level; level ≤ 2 is read-only, level 3 creates approvals, level 4 executes allowed
+  capabilities.
+- All secret material is encrypted at rest (AES-256-GCM, `ORBIT_MASTER_KEY`) and is
+  never returned by the API. `SecretStore` is pluggable (Vault later).
+- External content is untrusted: runtime input is wrapped with provenance metadata and
+  trusted system instructions are transported separately.
+
+## 6. Extensibility
+
+- **New runtime** → implement `RuntimeAdapter` in `crates/orbit-runtime`, register it in
+  the registry; no domain/API changes.
+- **New provider kind** → add a `ProviderKind` variant with a config struct and
+  capability set; runtime adapters translate it to their own provider format.
+- **New connector** → implement the connector trait (Phase 2) and register capabilities;
+  API and UI read the registry.
+- **New infrastructure** → Compose and Helm consume the same env-var contract.
+
+## 7. Mobile readiness
+
+The backend is a pure HTTP/JSON + SSE API with token-based auth (bearer access token,
+refresh token, and API keys), versioned under `/api/v1`, with keyset pagination and a
+stable error envelope. No cookie-only or browser-specific behavior is required, so an
+Expo/React Native client can share `packages/api-client` and `packages/contracts`.
+
+## 8. Observability
+
+- Structured JSON logs (`tracing`) with request IDs and trace IDs.
+- `GET /healthz` (liveness) and `GET /readyz` (DB + event bus readiness).
+- `GET /metrics` Prometheus text endpoint (Phase 0: core counters; OTel export seam).
+- Execution events carry `execution_id`, `agent_id`, `runtime`, and timestamps for
+  correlation across control and execution planes.

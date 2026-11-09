@@ -1,0 +1,152 @@
+use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
+use axum::Extension;
+use axum::Json;
+use serde::Deserialize;
+use uuid::Uuid;
+
+use orbit_security::{AuthContext, Permission};
+use orbit_store::Trigger;
+
+use crate::audit;
+use crate::dto::{CreateTriggerRequest, UpdateTriggerRequest};
+use crate::error::ApiError;
+use crate::state::AppState;
+
+#[derive(Debug, Clone, Deserialize, utoipa::IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct TriggerListQuery {
+    pub agent_id: Option<Uuid>,
+}
+
+#[utoipa::path(get, path = "/api/v1/triggers", tag = "triggers", params(TriggerListQuery), responses((status = 200, body = [Trigger])))]
+pub async fn list_triggers(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Query(query): Query<TriggerListQuery>,
+) -> Result<Json<Vec<Trigger>>, ApiError> {
+    auth.require(Permission::AgentsRead)?;
+    Ok(Json(
+        state
+            .store
+            .list_triggers(auth.org_id, query.agent_id)
+            .await?,
+    ))
+}
+
+#[utoipa::path(post, path = "/api/v1/triggers", tag = "triggers", request_body = CreateTriggerRequest, responses((status = 201, body = Trigger)))]
+pub async fn create_trigger(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<CreateTriggerRequest>,
+) -> Result<(StatusCode, Json<Trigger>), ApiError> {
+    auth.require(Permission::TriggersWrite)?;
+    let mut issues = Vec::new();
+    match body.kind.as_str() {
+        "schedule" => {
+            let cron = body
+                .config
+                .get("cron")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            if cron.parse::<croner::Cron>().is_err() {
+                issues.push(orbit_domain::ValidationIssue::new(
+                    "config.cron",
+                    "invalid cron expression (5-field cron in UTC)",
+                ));
+            }
+        }
+        "event" => {
+            if body
+                .config
+                .get("subject")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .is_empty()
+            {
+                issues.push(orbit_domain::ValidationIssue::new(
+                    "config.subject",
+                    "event subject filter is required",
+                ));
+            }
+        }
+        "webhook" | "manual" => {}
+        other => issues.push(orbit_domain::ValidationIssue::new(
+            "kind",
+            format!("unknown trigger kind '{other}'"),
+        )),
+    }
+    if !issues.is_empty() {
+        return Err(ApiError::validation(issues));
+    }
+
+    let trigger = state
+        .store
+        .create_trigger(
+            auth.org_id,
+            body.agent_id,
+            &body.kind,
+            body.config,
+            body.enabled.unwrap_or(true),
+        )
+        .await?;
+    audit::record(
+        &state,
+        &auth,
+        "trigger.created",
+        Some("trigger"),
+        Some(trigger.id),
+        serde_json::json!({ "agentId": body.agent_id, "kind": trigger.kind }),
+    )
+    .await;
+    Ok((StatusCode::CREATED, Json(trigger)))
+}
+
+#[utoipa::path(patch, path = "/api/v1/triggers/{trigger_id}", tag = "triggers", request_body = UpdateTriggerRequest, responses((status = 200, body = Trigger)))]
+pub async fn update_trigger(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(trigger_id): Path<Uuid>,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<UpdateTriggerRequest>,
+) -> Result<Json<Trigger>, ApiError> {
+    auth.require(Permission::TriggersWrite)?;
+    let trigger = match body.enabled {
+        Some(enabled) => {
+            state
+                .store
+                .set_trigger_enabled(auth.org_id, trigger_id, enabled)
+                .await?
+        }
+        None => state.store.get_trigger(auth.org_id, trigger_id).await?,
+    };
+    audit::record(
+        &state,
+        &auth,
+        "trigger.updated",
+        Some("trigger"),
+        Some(trigger.id),
+        serde_json::json!({ "enabled": trigger.enabled }),
+    )
+    .await;
+    Ok(Json(trigger))
+}
+
+#[utoipa::path(delete, path = "/api/v1/triggers/{trigger_id}", tag = "triggers", responses((status = 204)))]
+pub async fn delete_trigger(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(trigger_id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    auth.require(Permission::TriggersWrite)?;
+    state.store.delete_trigger(auth.org_id, trigger_id).await?;
+    audit::record(
+        &state,
+        &auth,
+        "trigger.deleted",
+        Some("trigger"),
+        Some(trigger_id),
+        serde_json::json!({}),
+    )
+    .await;
+    Ok(StatusCode::NO_CONTENT)
+}

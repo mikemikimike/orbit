@@ -1,0 +1,206 @@
+use chrono::Utc;
+use serde_json::json;
+use sqlx::{Postgres, Transaction};
+use uuid::Uuid;
+
+use orbit_domain::{new_id, TriggerSpec};
+
+use crate::models::Trigger;
+use crate::{Store, StoreError, StoreResult};
+
+/// Replace the managed triggers for an agent with the ones declared in its spec.
+///
+/// Called inside the agent creation/version transaction. Manual executions are not
+/// triggers; other kinds are fully derived from the spec. Trigger firing history
+/// (`last_fired_at`) resets when a configuration version changes (documented).
+pub(crate) async fn sync_agent_triggers(
+    tx: &mut Transaction<'_, Postgres>,
+    org_id: Uuid,
+    agent_id: Uuid,
+    triggers: &[TriggerSpec],
+) -> StoreResult<()> {
+    sqlx::query("DELETE FROM triggers WHERE org_id = $1 AND agent_id = $2 AND kind <> 'manual'")
+        .bind(org_id)
+        .bind(agent_id)
+        .execute(&mut **tx)
+        .await?;
+
+    for spec in triggers {
+        let (kind, config, next_run_at) = match spec {
+            TriggerSpec::Schedule { cron, timezone } => {
+                let next = cron
+                    .parse::<croner::Cron>()
+                    .ok()
+                    .and_then(|parsed| parsed.find_next_occurrence(&Utc::now(), false).ok());
+                (
+                    "schedule",
+                    json!({ "cron": cron, "timezone": timezone }),
+                    next,
+                )
+            }
+            TriggerSpec::Webhook { secret_ref } => {
+                ("webhook", json!({ "secretRef": secret_ref }), None)
+            }
+            TriggerSpec::Event { subject } => ("event", json!({ "subject": subject }), None),
+            TriggerSpec::Manual => continue,
+        };
+
+        sqlx::query(
+            r#"
+            INSERT INTO triggers (id, org_id, agent_id, kind, enabled, config, next_run_at)
+            VALUES ($1, $2, $3, $4, true, $5, $6)
+            "#,
+        )
+        .bind(new_id())
+        .bind(org_id)
+        .bind(agent_id)
+        .bind(kind)
+        .bind(config)
+        .bind(next_run_at)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+impl Store {
+    pub async fn list_triggers(
+        &self,
+        org_id: Uuid,
+        agent_id: Option<Uuid>,
+    ) -> StoreResult<Vec<Trigger>> {
+        Ok(sqlx::query_as::<_, Trigger>(
+            r#"
+            SELECT * FROM triggers
+            WHERE org_id = $1 AND ($2::uuid IS NULL OR agent_id = $2)
+            ORDER BY created_at DESC
+            "#,
+        )
+        .bind(org_id)
+        .bind(agent_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_trigger(&self, org_id: Uuid, trigger_id: Uuid) -> StoreResult<Trigger> {
+        sqlx::query_as::<_, Trigger>("SELECT * FROM triggers WHERE org_id = $1 AND id = $2")
+            .bind(org_id)
+            .bind(trigger_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| StoreError::NotFound("trigger".into()))
+    }
+
+    /// Add a trigger outside of an agent version (e.g. an operator-managed webhook).
+    pub async fn create_trigger(
+        &self,
+        org_id: Uuid,
+        agent_id: Uuid,
+        kind: &str,
+        config: serde_json::Value,
+        enabled: bool,
+    ) -> StoreResult<Trigger> {
+        // Ensure the agent belongs to the org before creating the trigger.
+        self.get_agent(org_id, agent_id).await?;
+        if !matches!(kind, "schedule" | "webhook" | "event" | "manual") {
+            return Err(StoreError::Invalid(format!("unknown trigger kind: {kind}")));
+        }
+        let next_run_at = if kind == "schedule" {
+            config
+                .get("cron")
+                .and_then(|c| c.as_str())
+                .and_then(|c| c.parse::<croner::Cron>().ok())
+                .and_then(|parsed| parsed.find_next_occurrence(&Utc::now(), false).ok())
+        } else {
+            None
+        };
+        Ok(sqlx::query_as::<_, Trigger>(
+            r#"
+            INSERT INTO triggers (id, org_id, agent_id, kind, enabled, config, next_run_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING *
+            "#,
+        )
+        .bind(new_id())
+        .bind(org_id)
+        .bind(agent_id)
+        .bind(kind)
+        .bind(enabled)
+        .bind(config)
+        .bind(next_run_at)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
+    pub async fn set_trigger_enabled(
+        &self,
+        org_id: Uuid,
+        trigger_id: Uuid,
+        enabled: bool,
+    ) -> StoreResult<Trigger> {
+        sqlx::query_as::<_, Trigger>(
+            "UPDATE triggers SET enabled = $3, updated_at = now() WHERE org_id = $1 AND id = $2 RETURNING *",
+        )
+        .bind(org_id)
+        .bind(trigger_id)
+        .bind(enabled)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("trigger".into()))
+    }
+
+    pub async fn delete_trigger(&self, org_id: Uuid, trigger_id: Uuid) -> StoreResult<()> {
+        let result = sqlx::query("DELETE FROM triggers WHERE org_id = $1 AND id = $2")
+            .bind(org_id)
+            .bind(trigger_id)
+            .execute(&self.pool)
+            .await?;
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound("trigger".into()));
+        }
+        Ok(())
+    }
+
+    /// Safer alternative to deleting: disable without losing history.
+    pub async fn disable_trigger(&self, org_id: Uuid, trigger_id: Uuid) -> StoreResult<Trigger> {
+        self.set_trigger_enabled(org_id, trigger_id, false).await
+    }
+
+    /// Due schedule triggers, claimed by updating `next_run_at`.
+    pub async fn claim_due_triggers(&self, limit: i64) -> StoreResult<Vec<Trigger>> {
+        let rows = sqlx::query_as::<_, Trigger>(
+            r#"
+            WITH due AS (
+                SELECT id FROM triggers
+                WHERE enabled AND kind = 'schedule' AND next_run_at IS NOT NULL AND next_run_at <= now()
+                ORDER BY next_run_at ASC
+                LIMIT $1
+                FOR UPDATE SKIP LOCKED
+            )
+            UPDATE triggers t
+            SET next_run_at = NULL, last_fired_at = now(), updated_at = now()
+            FROM due
+            WHERE t.id = due.id
+            RETURNING t.*
+            "#,
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Recompute the next occurrence for a schedule trigger after firing.
+    pub async fn reschedule_trigger(
+        &self,
+        trigger_id: Uuid,
+        next_run_at: Option<chrono::DateTime<Utc>>,
+    ) -> StoreResult<()> {
+        sqlx::query("UPDATE triggers SET next_run_at = $2, updated_at = now() WHERE id = $1")
+            .bind(trigger_id)
+            .bind(next_run_at)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+}

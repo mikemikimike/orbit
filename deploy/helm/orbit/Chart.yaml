@@ -1,0 +1,19 @@
+apiVersion: v2
+name: orbit
+description: ORBIT — self-hosted control plane for persistent AI agents (API, worker, web).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - agents
+  - ai
+  - control-plane
+  - self-hosted
+home: https://github.com/mkluiver/orbit
+sources:
+  - https://github.com/mkluiver/orbit
+maintainers:
+  - name: mkluiver
+    url: https://github.com/mkluiver
+annotations:
+  category: AI

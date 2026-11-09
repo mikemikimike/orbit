@@ -1,0 +1,370 @@
+use std::convert::Infallible;
+use std::time::Duration;
+
+use axum::extract::{Path, Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::sse::{Event, KeepAlive, Sse};
+use axum::response::IntoResponse;
+use axum::Extension;
+use axum::Json;
+use futures::Stream;
+use uuid::Uuid;
+
+use orbit_contracts::{subjects, OrbitEvent};
+use orbit_domain::{ExecutionStatus, TriggerSource};
+use orbit_security::{AuthContext, Permission};
+use orbit_store::ExecutionRecord;
+
+use crate::audit;
+use crate::dto::{
+    CreateExecutionRequest, EventListQuery, ExecutionEventPage, ExecutionListQuery, ExecutionPage,
+};
+use crate::error::ApiError;
+use crate::handlers::{limit, parse_spec};
+use crate::state::AppState;
+
+#[utoipa::path(get, path = "/api/v1/executions", tag = "executions", params(ExecutionListQuery), responses((status = 200, body = ExecutionPage)))]
+pub async fn list_executions(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Query(query): Query<ExecutionListQuery>,
+) -> Result<Json<ExecutionPage>, ApiError> {
+    auth.require(Permission::ExecutionsRead)?;
+    if let Some(status) = &query.status {
+        if ExecutionStatus::parse(status).is_none() {
+            return Err(ApiError::bad_request(format!("unknown status '{status}'")));
+        }
+    }
+    let (items, next_cursor, total) = state
+        .store
+        .list_executions(
+            auth.org_id,
+            limit(query.limit),
+            query.cursor.as_deref(),
+            query.status.as_deref(),
+            query.agent_id,
+        )
+        .await?;
+    Ok(Json(ExecutionPage {
+        items,
+        next_cursor,
+        total,
+    }))
+}
+
+#[utoipa::path(get, path = "/api/v1/executions/{execution_id}", tag = "executions", responses((status = 200, body = ExecutionRecord)))]
+pub async fn get_execution(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(execution_id): Path<Uuid>,
+) -> Result<Json<ExecutionRecord>, ApiError> {
+    auth.require(Permission::ExecutionsRead)?;
+    Ok(Json(
+        state.store.get_execution(auth.org_id, execution_id).await?,
+    ))
+}
+
+#[utoipa::path(get, path = "/api/v1/executions/{execution_id}/events", tag = "executions", params(EventListQuery), responses((status = 200, body = ExecutionEventPage)))]
+pub async fn list_execution_events(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(execution_id): Path<Uuid>,
+    Query(query): Query<EventListQuery>,
+) -> Result<Json<ExecutionEventPage>, ApiError> {
+    auth.require(Permission::ExecutionsRead)?;
+    // Ensure the execution exists in this org before exposing events.
+    state.store.get_execution(auth.org_id, execution_id).await?;
+    let items = state
+        .store
+        .list_execution_events(
+            auth.org_id,
+            execution_id,
+            query.after_seq.unwrap_or(0),
+            query.limit.unwrap_or(200).clamp(1, 1000) as i64,
+        )
+        .await?;
+    Ok(Json(ExecutionEventPage { items }))
+}
+
+#[utoipa::path(get, path = "/api/v1/agents/{agent_id}/executions", tag = "executions", params(ExecutionListQuery), responses((status = 200, body = ExecutionPage)))]
+pub async fn list_agent_executions(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(agent_id): Path<Uuid>,
+    Query(query): Query<ExecutionListQuery>,
+) -> Result<Json<ExecutionPage>, ApiError> {
+    auth.require(Permission::ExecutionsRead)?;
+    state.store.get_agent(auth.org_id, agent_id).await?;
+    let (items, next_cursor, total) = state
+        .store
+        .list_executions(
+            auth.org_id,
+            limit(query.limit),
+            query.cursor.as_deref(),
+            query.status.as_deref(),
+            Some(agent_id),
+        )
+        .await?;
+    Ok(Json(ExecutionPage {
+        items,
+        next_cursor,
+        total,
+    }))
+}
+
+/// Manually start an execution. Returns 202 with the queued execution.
+#[utoipa::path(post, path = "/api/v1/agents/{agent_id}/executions", tag = "executions", request_body = CreateExecutionRequest, responses((status = 202, body = ExecutionRecord), (status = 429, description = "Concurrency or rate limit reached")))]
+pub async fn execute_agent(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(agent_id): Path<Uuid>,
+    headers: HeaderMap,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<CreateExecutionRequest>,
+) -> Result<(StatusCode, Json<ExecutionRecord>), ApiError> {
+    auth.require(Permission::ExecutionsCreate)?;
+
+    let agent = state.store.get_agent(auth.org_id, agent_id).await?;
+    if agent.status == "archived" {
+        return Err(ApiError::bad_request("archived agents cannot be executed"));
+    }
+    if body.task.trim().is_empty() {
+        return Err(ApiError::validation(vec![
+            orbit_domain::ValidationIssue::new("task", "task must not be empty"),
+        ]));
+    }
+    if body.task.chars().count() > 200_000 {
+        return Err(ApiError::validation(vec![
+            orbit_domain::ValidationIssue::new("task", "task must be <= 200000 characters"),
+        ]));
+    }
+
+    let version = state.store.get_current_version(auth.org_id, &agent).await?;
+    let spec = parse_spec(&version)?;
+
+    let idempotency_key = headers
+        .get("idempotency-key")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string)
+        .or(body.idempotency_key.clone())
+        .filter(|key| !key.trim().is_empty() && key.len() <= 200);
+
+    // Idempotent replay returns the existing execution before any quota/concurrency
+    // checks so retried client requests never observe a spurious 429.
+    if let Some(key) = &idempotency_key {
+        if let Some(existing) = state
+            .store
+            .get_execution_by_idempotency_key(auth.org_id, key)
+            .await?
+        {
+            return Ok((StatusCode::ACCEPTED, Json(existing)));
+        }
+    }
+
+    let active = state
+        .store
+        .count_active_executions_for_agent(auth.org_id, agent_id)
+        .await?;
+    if active >= spec.resources.max_concurrent_executions as i64 {
+        return Err(ApiError::rate_limited(format!(
+            "agent already has {active} active execution(s); maxConcurrentExecutions is {}",
+            spec.resources.max_concurrent_executions
+        )));
+    }
+    if let Some(max_per_hour) = spec.autonomy.max_executions_per_hour {
+        let since = chrono::Utc::now() - chrono::Duration::hours(1);
+        let count = state
+            .store
+            .count_executions_since(auth.org_id, agent_id, since)
+            .await?;
+        if count >= max_per_hour as i64 {
+            return Err(ApiError::rate_limited(format!(
+                "agent execution quota reached ({max_per_hour}/hour)"
+            )));
+        }
+    }
+
+    let input = serde_json::json!({
+        "task": body.task,
+        "payload": body.payload,
+        "provenance": {
+            "source": format!("user:{}", auth.email),
+            "trusted": true,
+            "subject": null,
+            "receivedAt": chrono::Utc::now(),
+        },
+        "agentVersion": version.version,
+    });
+
+    let execution = state
+        .store
+        .create_execution(orbit_store::executions::NewExecution {
+            org_id: auth.org_id,
+            agent_id: agent.id,
+            agent_version_id: version.id,
+            agent_name: &agent.name,
+            runtime_kind: spec.runtime.kind,
+            trigger_source: TriggerSource::Manual,
+            trigger_id: None,
+            input,
+            timeout_seconds: spec.resources.timeout_seconds,
+            requested_by: Some(auth.user_id),
+            idempotency_key: idempotency_key.as_deref(),
+        })
+        .await?;
+
+    // Publish only for newly created executions; a replayed idempotent request returns
+    // the existing row and must not enqueue a second run.
+    if execution.status == "queued" {
+        let event = OrbitEvent::new(
+            subjects::EXECUTION_REQUESTED,
+            "orbit-api",
+            serde_json::json!({
+                "executionId": execution.id,
+                "agentId": agent.id,
+                "runtime": spec.runtime.kind.as_str(),
+            }),
+        )
+        .with_org(auth.org_id)
+        .with_idempotency(format!("exec:{}", execution.id));
+        if let Err(err) = state.bus.publish(event).await {
+            tracing::warn!(error = %err, execution_id = %execution.id, "event publish failed; worker polling will pick up the execution");
+        }
+    }
+
+    state.metrics.inc_executions();
+    audit::record(
+        &state,
+        &auth,
+        "execution.requested",
+        Some("execution"),
+        Some(execution.id),
+        serde_json::json!({
+            "agentId": agent.id,
+            "agentVersion": version.version,
+            "idempotencyKey": idempotency_key,
+        }),
+    )
+    .await;
+
+    Ok((StatusCode::ACCEPTED, Json(execution)))
+}
+
+#[utoipa::path(post, path = "/api/v1/executions/{execution_id}/cancel", tag = "executions", responses((status = 200, body = ExecutionRecord)))]
+pub async fn cancel_execution(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(execution_id): Path<Uuid>,
+) -> Result<Json<ExecutionRecord>, ApiError> {
+    auth.require(Permission::ExecutionsCancel)?;
+    let execution = state
+        .store
+        .request_execution_cancel(auth.org_id, execution_id)
+        .await?;
+
+    let event = OrbitEvent::new(
+        subjects::EXECUTION_CANCEL,
+        "orbit-api",
+        serde_json::json!({ "executionId": execution.id }),
+    )
+    .with_org(auth.org_id);
+    if let Err(err) = state.bus.publish(event).await {
+        tracing::warn!(error = %err, "cancel event publish failed; worker polls the cancel flag");
+    }
+    audit::record(
+        &state,
+        &auth,
+        "execution.cancel_requested",
+        Some("execution"),
+        Some(execution.id),
+        serde_json::json!({}),
+    )
+    .await;
+    Ok(Json(execution))
+}
+
+/// Server-Sent Events stream: snapshot, replay of persisted events, then tail.
+#[utoipa::path(get, path = "/api/v1/executions/{execution_id}/events/stream", tag = "executions", responses((status = 200, description = "SSE stream of execution events")))]
+pub async fn stream_execution_events(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(execution_id): Path<Uuid>,
+    headers: HeaderMap,
+    Query(query): Query<EventListQuery>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    auth.require(Permission::ExecutionsRead)?;
+    state.store.get_execution(auth.org_id, execution_id).await?;
+
+    let last_event_id = headers
+        .get("last-event-id")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<i64>().ok());
+    let after_seq = query.after_seq.or(last_event_id).unwrap_or(0);
+
+    let org_id = auth.org_id;
+    let store = state.store.clone();
+    let stream = async_stream::stream! {
+        let mut last = after_seq;
+        let mut snapshot_sent = false;
+        loop {
+            let execution = match store.get_execution(org_id, execution_id).await {
+                Ok(execution) => execution,
+                Err(err) => {
+                    yield Ok(Event::default().event("error").data(
+                        serde_json::json!({ "message": err.to_string() }).to_string(),
+                    ));
+                    break;
+                }
+            };
+            if !snapshot_sent {
+                yield Ok(Event::default()
+                    .event("snapshot")
+                    .data(serde_json::to_string(&execution).unwrap_or_default()));
+                snapshot_sent = true;
+            }
+
+            match store
+                .list_execution_events(org_id, execution_id, last, 100)
+                .await
+            {
+                Ok(events) if !events.is_empty() => {
+                    for event in events {
+                        last = event.seq;
+                        yield Ok(Event::default()
+                            .event("execution.event")
+                            .id(event.seq.to_string())
+                            .data(serde_json::to_string(&event).unwrap_or_default()));
+                    }
+                    continue;
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    yield Ok(Event::default().event("error").data(
+                        serde_json::json!({ "message": err.to_string() }).to_string(),
+                    ));
+                    break;
+                }
+            }
+
+            let terminal = ExecutionStatus::parse(&execution.status)
+                .map(|status| status.is_terminal())
+                .unwrap_or(false);
+            if terminal {
+                yield Ok(Event::default()
+                    .event("done")
+                    .data(serde_json::to_string(&execution).unwrap_or_default()));
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(700)).await;
+        }
+    };
+
+    Ok(Sse::new(stream).keep_alive(
+        KeepAlive::new()
+            .interval(Duration::from_secs(15))
+            .text("keep-alive"),
+    ))
+}
+
+/// Unused import guard: ensures IntoResponse stays referenced for future handlers.
+#[allow(dead_code)]
+fn _assert_response<T: IntoResponse>(_value: T) {}

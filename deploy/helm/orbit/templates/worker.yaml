@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "orbit.fullname" . }}-worker
+  labels:
+    {{- include "orbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "orbit.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "orbit.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "orbit.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: worker
+          image: {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.worker.image "tag" .Values.worker.tag) | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          env:
+            - name: ORBIT_ENV
+              value: {{ .Values.platform.environment | quote }}
+            - name: ORBIT_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orbit.secretName" . }}
+                  key: database-url
+            - name: ORBIT_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orbit.secretName" . }}
+                  key: master-key
+            - name: ORBIT_EVENTS_DRIVER
+              value: "nats"
+            - name: ORBIT_NATS_URL
+              value: {{ include "orbit.natsUrl" . | quote }}
+            - name: ORBIT_WORKER_CONCURRENCY
+              value: {{ .Values.worker.concurrency | quote }}
+            - name: ORBIT_WORKER_POLL_MS
+              value: {{ .Values.worker.pollIntervalMs | quote }}
+            - name: ORBIT_SCHEDULER_ENABLED
+              value: {{ .Values.worker.schedulerEnabled | quote }}
+            - name: ORBIT_WORKSPACE_ROOT
+              value: "/tmp/orbit-workspaces"
+            - name: ORBIT_LOG_FORMAT
+              value: {{ .Values.platform.logFormat | quote }}
+            {{- if eq .Values.auth.mode "oidc" }}
+            - name: ORBIT_OIDC_ISSUER
+              value: {{ .Values.auth.oidc.issuer | quote }}
+            - name: ORBIT_OIDC_AUDIENCE
+              value: {{ .Values.auth.oidc.audience | quote }}
+            {{- end }}
+            {{- if .Values.extraEnv }}
+            {{- toYaml .Values.extraEnv | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: {{ .Values.worker.workspace.sizeLimit }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

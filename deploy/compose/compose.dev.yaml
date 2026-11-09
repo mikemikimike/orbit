@@ -1,0 +1,34 @@
+name: orbit-dev
+
+# Infrastructure only, for running the API/worker/web with `cargo run` / `pnpm dev`.
+#   docker compose -f deploy/compose/compose.dev.yaml up -d
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: orbit
+      POSTGRES_PASSWORD: orbit
+      POSTGRES_DB: orbit
+    ports:
+      - "5432:5432"
+    volumes:
+      - orbit-dev-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orbit -d orbit"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  nats:
+    image: nats:2.11-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - orbit-dev-nats:/data
+
+volumes:
+  orbit-dev-db:
+  orbit-dev-nats:

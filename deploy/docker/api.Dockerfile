@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1.7
+# ORBIT control plane (orbit-api). Multi-stage, non-root, reproducible with --locked.
+FROM rust:1-bookworm AS builder
+WORKDIR /app
+
+# Dependency layer: manifests first for better build caching.
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY crates/orbit-domain/Cargo.toml crates/orbit-domain/Cargo.toml
+COPY crates/orbit-contracts/Cargo.toml crates/orbit-contracts/Cargo.toml
+COPY crates/orbit-store/Cargo.toml crates/orbit-store/Cargo.toml
+COPY crates/orbit-events/Cargo.toml crates/orbit-events/Cargo.toml
+COPY crates/orbit-security/Cargo.toml crates/orbit-security/Cargo.toml
+COPY crates/orbit-runtime/Cargo.toml crates/orbit-runtime/Cargo.toml
+COPY crates/orbit-api/Cargo.toml crates/orbit-api/Cargo.toml
+COPY services/api/Cargo.toml services/api/Cargo.toml
+COPY services/worker/Cargo.toml services/worker/Cargo.toml
+RUN mkdir -p crates/orbit-domain/src crates/orbit-contracts/src crates/orbit-store/src \
+      crates/orbit-events/src crates/orbit-security/src crates/orbit-runtime/src \
+      crates/orbit-api/src services/api/src services/worker/src \
+    && for d in crates/orbit-domain crates/orbit-contracts crates/orbit-store crates/orbit-events \
+              crates/orbit-security crates/orbit-runtime crates/orbit-api; do echo "" > "$d/src/lib.rs"; done \
+    && echo "fn main() {}" > services/api/src/main.rs \
+    && echo "fn main() {}" > services/worker/src/main.rs \
+    && cargo fetch --locked
+
+COPY crates ./crates
+COPY services ./services
+RUN cargo build --release --locked -p orbit-api-server --bin orbit-api
+
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 orbit \
+    && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin orbit
+
+COPY --from=builder /app/target/release/orbit-api /usr/local/bin/orbit-api
+USER 10001:10001
+EXPOSE 8080
+ENV ORBIT_HTTP_ADDR=0.0.0.0:8080
+HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:8080/healthz || exit 1
+ENTRYPOINT ["/usr/local/bin/orbit-api"]

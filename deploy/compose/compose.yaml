@@ -1,0 +1,101 @@
+name: orbit
+
+# Local development stack. Production/Kubernetes uses the Helm chart, not this file.
+#   docker compose -f deploy/compose/compose.yaml up --build
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: orbit
+      POSTGRES_PASSWORD: orbit
+      POSTGRES_DB: orbit
+    ports:
+      - "5432:5432"
+    volumes:
+      - orbit-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orbit -d orbit"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  nats:
+    image: nats:2.11-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - orbit-nats:/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/api.Dockerfile
+    image: orbit-api:dev
+    environment:
+      ORBIT_ENV: ${ORBIT_ENV:-development}
+      ORBIT_AUTH_MODE: ${ORBIT_AUTH_MODE:-dev}
+      ORBIT_DEV_AUTH_ALLOW_ANONYMOUS: ${ORBIT_DEV_AUTH_ALLOW_ANONYMOUS:-true}
+      ORBIT_DEV_TOKEN: ${ORBIT_DEV_TOKEN:-orbit-dev-token}
+      ORBIT_SEED_DEMO: ${ORBIT_SEED_DEMO:-true}
+      ORBIT_DATABASE_URL: postgres://orbit:orbit@db:5432/orbit
+      ORBIT_MASTER_KEY: ${ORBIT_MASTER_KEY:-b3JiaXQtZGV2LW1hc3Rlci1rZXktMzItYnl0ZXMhISE=}
+      ORBIT_EVENTS_DRIVER: ${ORBIT_EVENTS_DRIVER:-nats}
+      ORBIT_NATS_URL: nats://nats:4222
+      ORBIT_CORS_ORIGINS: ${ORBIT_CORS_ORIGINS:-http://localhost:3000}
+      ORBIT_PUBLIC_BASE_URL: ${ORBIT_PUBLIC_BASE_URL:-http://localhost:8080}
+      ORBIT_LOG_FORMAT: ${ORBIT_LOG_FORMAT:-text}
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/worker.Dockerfile
+    image: orbit-worker:dev
+    environment:
+      ORBIT_ENV: ${ORBIT_ENV:-development}
+      ORBIT_DATABASE_URL: postgres://orbit:orbit@db:5432/orbit
+      ORBIT_MASTER_KEY: ${ORBIT_MASTER_KEY:-b3JiaXQtZGV2LW1hc3Rlci1rZXktMzItYnl0ZXMhISE=}
+      ORBIT_EVENTS_DRIVER: ${ORBIT_EVENTS_DRIVER:-nats}
+      ORBIT_NATS_URL: nats://nats:4222
+      ORBIT_WORKER_POLL_MS: ${ORBIT_WORKER_POLL_MS:-500}
+      ORBIT_WORKER_CONCURRENCY: ${ORBIT_WORKER_CONCURRENCY:-4}
+      ORBIT_SCHEDULER_ENABLED: ${ORBIT_SCHEDULER_ENABLED:-true}
+      ORBIT_WORKSPACE_ROOT: /tmp/orbit-workspaces
+      ORBIT_LOG_FORMAT: ${ORBIT_LOG_FORMAT:-text}
+    depends_on:
+      api:
+        condition: service_started
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/web.Dockerfile
+    image: orbit-web:dev
+    environment:
+      ORBIT_API_INTERNAL_URL: http://api:8080
+      ORBIT_WEB_DEV_TOKEN: ${ORBIT_DEV_TOKEN:-orbit-dev-token}
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  orbit-db:
+  orbit-nats:
