@@ -22,12 +22,20 @@ project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 - Idempotency keys for executions are scoped per organization (migration `0002`).
 - Ingress host corrected to `orbit.mdk.local`.
+- `/api` is routed through the web container's API proxy so dev auth tokens are injected
+  server-side and OIDC/API bearer headers pass through transparently. `/readyz` is
+  routed to the API alongside `/healthz`.
+- Worker waits up to 90s for the API to bootstrap/migrate on fresh installs instead of
+  crash-looping (Helm install ordering).
 
 ### Verified
 - Helm lint/template for default and production values.
 - Kubernetes deployment on a local cluster: all pods ready; web proxy → API → Postgres →
   worker → mock runtime → SSE smoke test passed.
 - Private registry push of amd64 images to `192.168.1.201:5000`.
+- Live microk8s deployment at `http://orbit.mdk.local` (ingress address
+  `192.168.1.200`): ingress → web proxy → API → PostgreSQL → worker → mock runtime,
+  smoke test passed, SSE verified through the ingress.
 
 ## [0.1.0] — Phase 0 foundation
 

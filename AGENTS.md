@@ -65,9 +65,11 @@ helm template orbit deploy/helm/orbit -f deploy/helm/orbit/values.yaml
   Cluster image references use the IP form; repository paths are identical.
 - Target cluster: microk8s context, ingress `orbit.mdk.local`, ingress class `nginx`,
   namespace `orbit`. Images must be `linux/amd64`.
-- If `kubectl` reports `dial tcp 192.168.1.6:16443: connect: no route to host`, the
-  cluster is not reachable; do not improvise a different cluster. Restore VPN/LAN access
-  and rerun the deploy script.
+- If `kubectl` reports `dial tcp 192.168.1.6:16443: connect: no route to host` while
+  `curl https://192.168.1.6:16443/version` works, macOS Local Network privacy is blocking
+  the kubectl binary. Enable it in System Settings → Privacy & Security → Local Network
+  (or deploy from an allowed terminal). See `docs/development/deployment.md` for a
+  loopback-relay workaround. Do not improvise a different cluster.
 
 ## Non-negotiable rules
 
@@ -93,7 +95,7 @@ helm template orbit deploy/helm/orbit -f deploy/helm/orbit/values.yaml
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Foundation, contracts, DB, API, worker, docs, containers, Helm | Complete (validated on local Kubernetes; microk8s rollout pending network access) |
+| 0 | Foundation, contracts, DB, API, worker, docs, containers, Helm | Complete (deployed and smoke-tested on microk8s at http://orbit.mdk.local) |
 | 1 | Agent CRUD/Studio, OpenCode adapter verified, executions | Partially: CRUD + mock execution done; OpenCode adapter scaffolded |
 | 2 | Connectors invocation, Telegram/GitLab, webhooks, approvals, Claude Code | Not started |
 | 3 | Long-running agents, Pi, memory, scheduling hardening | Not started |

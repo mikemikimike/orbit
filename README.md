@@ -85,8 +85,13 @@ helm upgrade --install orbit deploy/helm/orbit \
 production, start from `deploy/helm/orbit/values-prod.example.yaml` (external DB/NATS,
 OIDC, TLS, externally managed secrets, pinned tags).
 
-Ingress routes: `/api`, `/docs`, `/healthz` → API; everything else → web. SSE-friendly
-annotations are included (`proxy-buffering: off`, long read/send timeouts).
+Ingress routes: `/docs`, `/healthz`, `/readyz` → API; `/api` → web (same-origin proxy
+that injects the dev token server-side or forwards OIDC/API bearer headers); `/` → web.
+SSE-friendly annotations are included (`proxy-buffering: off`, long read/send timeouts).
+
+A live deployment is available at **http://orbit.mdk.local** (microk8s, namespace
+`orbit`). Dev auth is enabled for this test deployment: the web proxy injects the token,
+so do not expose it beyond your LAN until OIDC is configured.
 
 ## Native development
 

@@ -101,8 +101,28 @@ async fn main() -> anyhow::Result<()> {
         .context("could not connect to the event bus")?;
     let registry = Arc::new(RuntimeRegistry::builtin());
 
-    if store.first_organization().await?.is_none() {
-        anyhow::bail!("no organization exists; start orbit-api once to bootstrap the database");
+    // On a fresh Helm install the worker may start before the API has migrated and
+    // seeded the default organization. Wait instead of crash-looping; the container then
+    // becomes ready as soon as bootstrap finishes.
+    let mut organization_found = false;
+    for attempt in 1..=45 {
+        match store.first_organization().await {
+            Ok(Some(_)) => {
+                organization_found = true;
+                break;
+            }
+            Ok(None) => {}
+            Err(err) => {
+                tracing::warn!(error = %err, attempt, "database not ready while waiting for bootstrap");
+            }
+        }
+        tracing::info!(attempt, "waiting for orbit-api to bootstrap the database");
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+    if !organization_found {
+        anyhow::bail!(
+            "no organization exists after waiting 90s; check that orbit-api started and migrated the database"
+        );
     }
 
     let state = runner::WorkerState {

@@ -44,16 +44,29 @@ helm --kube-context microk8s upgrade --install orbit deploy/helm/orbit \
   --set api.tag=0.1.0 --set worker.tag=0.1.0 --set web.tag=0.1.0
 ```
 
-Ingress routes: `/api`, `/docs`, `/healthz` → `orbit-api`; `/` → `orbit-web`.
+Ingress routes: `/docs`, `/healthz`, `/readyz` → `orbit-api`; `/api` → `orbit-web`
+(the web container proxies `/api/*` to the API at runtime, injecting the dev token
+server-side when dev auth is enabled and forwarding OIDC/API bearer headers otherwise);
+`/` → `orbit-web`.
 The chart sets SSE-friendly nginx annotations (`proxy-buffering: off`, long
 read/send timeouts). Point `orbit.mdk.local` at the ingress address (or add an
 `/etc/hosts`/split-DNS entry).
 
-Validation status: the chart was rendered with `helm lint`/`helm template`, applied to a
-local Kubernetes cluster, and smoke-tested end-to-end (web proxy → API → Postgres →
-worker → mock runtime → SSE) with all pods ready. The mkd.local microk8s API
-(`192.168.1.6:16443`) was unreachable from the development machine at build time, so the
-final production rollout must be run once VPN/LAN access is available.
+Validation status: the chart has been deployed to the microk8s cluster
+(`http://orbit.mdk.local`, ingress address `192.168.1.200`) and smoke-tested end-to-end
+(ingress → web proxy → API → Postgres → worker → mock runtime → SSE). It was also
+deployed to a local test cluster.
+
+### macOS "no route to host" while the cluster is up
+
+If `curl https://192.168.1.6:16443/version` works but `kubectl` fails with
+`dial tcp 192.168.1.6:16443: connect: no route to host`, macOS Local Network privacy is
+likely blocking the `kubectl` binary (unsigned/third-party binaries can be denied even
+when the terminal app is allowed). Fix it in **System Settings → Privacy & Security →
+Local Network** by enabling your terminal and `kubectl`, or run the deployment from an
+allowed terminal. As a temporary workaround, forward the API through a loopback relay
+started by an allowed interpreter (`127.0.0.1:16444` → `192.168.1.6:16443`) and use a
+kubeconfig whose server is `https://127.0.0.1:16444`; kubectl then only needs loopback.
 
 Key values:
 - `externalDatabase.enabled` / `postgresql.enabled` (bundled Bitnami dependency is

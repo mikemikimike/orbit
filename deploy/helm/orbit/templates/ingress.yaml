@@ -23,13 +23,17 @@ spec:
     - host: {{ .Values.ingress.host | quote }}
       http:
         paths:
+          # Route API traffic through the web proxy. In dev auth mode the proxy injects
+          # the bearer token server-side (never exposing it to the browser) and it
+          # transparently forwards client Authorization headers for OIDC/API tokens.
+          # This keeps browser requests same-origin without CORS or embedded secrets.
           - path: /api
             pathType: Prefix
             backend:
               service:
-                name: {{ include "orbit.apiHost" . }}
+                name: {{ include "orbit.webHost" . }}
                 port:
-                  number: {{ .Values.api.port }}
+                  number: 80
           - path: /docs
             pathType: Prefix
             backend:
@@ -38,6 +42,13 @@ spec:
                 port:
                   number: {{ .Values.api.port }}
           - path: /healthz
+            pathType: Exact
+            backend:
+              service:
+                name: {{ include "orbit.apiHost" . }}
+                port:
+                  number: {{ .Values.api.port }}
+          - path: /readyz
             pathType: Exact
             backend:
               service:
