@@ -121,8 +121,12 @@ fn tool_specs(
             let description = match capability.as_str() {
                 "issues.list" => "List open issues in a GitHub repository (read-only).",
                 "issues.get" => "Read one GitHub issue (read-only).",
-                "issues.comment" => "Post a comment on a GitHub issue. Write action, may require human approval.",
-                "issues.create" => "Create a GitHub issue. Write action, may require human approval.",
+                "issues.comment" => {
+                    "Post a comment on a GitHub issue. Write action, may require human approval."
+                }
+                "issues.create" => {
+                    "Create a GitHub issue. Write action, may require human approval."
+                }
                 _ => "GitHub capability.",
             };
             ToolSpec {
@@ -207,11 +211,7 @@ pub async fn start(
         connection,
         github,
         tools,
-        token: format!(
-            "{}{}",
-            Uuid::now_v7().simple(),
-            Uuid::now_v7().simple()
-        ),
+        token: format!("{}{}", Uuid::now_v7().simple(), Uuid::now_v7().simple()),
         http: reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()?,
@@ -241,9 +241,16 @@ pub async fn start(
     }))
 }
 
-async fn list_tools(State(state): State<Arc<BrokerState>>, headers: HeaderMap) -> impl IntoResponse {
+async fn list_tools(
+    State(state): State<Arc<BrokerState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
     if !authorized(&headers, &state.token) {
-        return (StatusCode::UNAUTHORIZED, Json(json!({ "error": "unauthorized" }))).into_response();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "unauthorized" })),
+        )
+            .into_response();
     }
     let tools: Vec<Value> = state
         .tools
@@ -307,7 +314,12 @@ async fn call_tool(
 
     let mut approval_id: Option<Uuid> = None;
     if decision == PolicyDecision::Deny {
-        record_denied(&state, &tool.capability, "denied by autonomy/capability policy").await;
+        record_denied(
+            &state,
+            &tool.capability,
+            "denied by autonomy/capability policy",
+        )
+        .await;
         return (
             StatusCode::FORBIDDEN,
             Json(json!({ "error": format!("capability '{}' is not allowed by policy", tool.capability) })),
@@ -323,7 +335,14 @@ async fn call_tool(
         }
     }
 
-    match github::invoke(&state.http, &state.github, &tool.capability, &call.arguments).await {
+    match github::invoke(
+        &state.http,
+        &state.github,
+        &tool.capability,
+        &call.arguments,
+    )
+    .await
+    {
         Ok(result) => {
             record_event(
                 &state,
@@ -455,10 +474,7 @@ async fn request_approval(
         } else {
             LogLevel::Warn
         },
-        &format!(
-            "approval {} for {}",
-            decided.status, tool.capability
-        ),
+        &format!("approval {} for {}", decided.status, tool.capability),
         json!({ "approvalId": decided.id, "status": decided.status }),
     )
     .await;

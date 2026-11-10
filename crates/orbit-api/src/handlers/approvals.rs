@@ -41,7 +41,11 @@ pub async fn list_approvals(
     }
     let approvals = state
         .store
-        .list_approvals(auth.org_id, status, query.limit.unwrap_or(50).clamp(1, 200) as i64)
+        .list_approvals(
+            auth.org_id,
+            status,
+            query.limit.unwrap_or(50).clamp(1, 200) as i64,
+        )
         .await?;
     Ok(Json(approvals))
 }

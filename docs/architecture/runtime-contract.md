@@ -107,6 +107,10 @@ files, and forced teardown on timeout/cancel.
   - session IDs captured; `--session` used for resume; cancellation kills the process group
   - credentials are runtime-managed via `opencode auth export` imported by an init
     container; ORBIT never passes raw provider keys in CLI arguments
+  - `PWD` and the process working directory are pinned to the per-execution workspace
+    (prevents inheriting the worker's repository directory)
+  - GitHub read (`issues.list`) verified through the MCP tool broker against a public
+    repository; write actions are approval-gated and pending the approvals UI
   - contract + real-runtime test: `crates/orbit-runtime/tests/opencode_e2e.rs`
     (`ORBIT_OPENCODE_E2E=1`, ignored by default to avoid model spend)
   - limitation: ORBIT platform providers are not yet mapped into OpenCode's provider

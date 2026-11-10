@@ -14,10 +14,7 @@ pub struct GitHubClientConfig {
 }
 
 impl GitHubClientConfig {
-    pub fn from_connection(
-        config: &Value,
-        token: Option<String>,
-    ) -> Self {
+    pub fn from_connection(config: &Value, token: Option<String>) -> Self {
         let allowed_repositories = config
             .get("allowedRepositories")
             .and_then(Value::as_array)
@@ -52,10 +49,9 @@ impl GitHubClientConfig {
             args.get("repo").and_then(Value::as_str),
         ) {
             (Some(owner), Some(repo)) => format!("{owner}/{repo}"),
-            _ => self
-                .default_repository
-                .clone()
-                .ok_or_else(|| "owner and repo are required (or set config.defaultRepository)".to_string())?,
+            _ => self.default_repository.clone().ok_or_else(|| {
+                "owner and repo are required (or set config.defaultRepository)".to_string()
+            })?,
         };
         let (owner, repo) = combined
             .split_once('/')
@@ -258,7 +254,9 @@ mod tests {
             default_repository: None,
         };
         assert!(config.repo(&json!({"owner":"acme","repo":"orbit"})).is_ok());
-        assert!(config.repo(&json!({"owner":"acme","repo":"other"})).is_err());
+        assert!(config
+            .repo(&json!({"owner":"acme","repo":"other"}))
+            .is_err());
         assert!(config.repo(&json!({"owner":"../","repo":"orbit"})).is_err());
         assert!(config.repo(&json!({})).is_err());
     }
@@ -285,7 +283,14 @@ mod tests {
             default_repository: Some("acme/orbit".into()),
         };
         assert_eq!(
-            request_url(&config, "issues.get", "acme", "orbit", &json!({"number": 42})).unwrap(),
+            request_url(
+                &config,
+                "issues.get",
+                "acme",
+                "orbit",
+                &json!({"number": 42})
+            )
+            .unwrap(),
             "https://api.github.com/repos/acme/orbit/issues/42"
         );
         assert_eq!(

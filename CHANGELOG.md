@@ -56,6 +56,25 @@ project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Real GitHub read flow verified end-to-end locally: OpenCode → MCP bridge → tool broker
+  → GitHub REST (`issues.list` on a public repo) → summarized output, no mock runtime.
+- Execution timeline noise reduction: reasoning/step/usage events are not shown by
+  default; generic internal tool calls are debug-only; GitHub/approval/error tool calls
+  stay visible; “show verbose” reveals the raw stream.
+- `debugLogs` runtime setting for OpenCode stderr diagnostics (off by default).
+
+### Fixed
+- OpenCode ran in the worker's working directory instead of the per-execution workspace
+  on some hosts (inherited `PWD`). The adapter now sets `PWD` to the workspace; verified
+  with `pwd` and process cwd inspection.
+- `step_start`/usage events no longer spam execution timelines (usage is aggregated).
+
+### Known limitation
+- Executions still run inside a long-lived worker container/host process, not a fresh
+  container per execution. Stale `running` rows after a worker crash need a lease/reaper
+  (next reliability milestone).
+
+### Added
 - Documented and verified full local Docker Compose stack (db, NATS, API, mock worker,
   web) with health checks, same-origin API proxy, demo seeding and fast restart workflow.
 - `make compose-logs`, `make compose-reset`, `make worker-opencode` and

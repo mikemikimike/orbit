@@ -111,7 +111,23 @@ worker with imported auth.
 
 ---
 
-## Flow 7 — Connector read path (X) (3 min)
+## Flow 7 — GitHub read via the tool broker (3 min, working locally)
+
+Prerequisite: a host OpenCode worker (`make worker-opencode`) or the Kubernetes OpenCode
+worker, plus a GitHub connection for a public repo (no credential needed for reads).
+
+1. Create a GitHub connection with `{"allowedRepositories":["cli/cli"],"defaultRepository":"cli/cli"}`.
+2. Create an agent: runtime OpenCode, GitHub connector, capability `issues.list`,
+   autonomy L1.
+3. Run: “Use tools.orbit.github_issues_list({owner:'cli',repo:'cli',state:'open'})
+   and return 3 titles.”
+4. Expected: `succeeded`; timeline shows the broker ready, the `issues.list` tool call,
+   and completion. Reasoning/step/usage noise is hidden by default; click
+   “show verbose” to reveal it.
+5. `pwd` in a runtime shell must print `/tmp/orbit-workspaces/<execution-id>`, never the
+   ORBIT repository directory.
+
+## Flow 8 — Connector read path (X) (3 min)
 
 1. Create an X connection with a **real** bearer token (or keep the invalid one for a
    negative test) and config `{"query":"#orbit"}`.
@@ -125,7 +141,7 @@ worker with imported auth.
 
 ---
 
-## Flow 8 — Approvals / GitHub writes (when approvals UI is available)
+## Flow 9 — Approvals / GitHub writes (when approvals UI is available)
 
 These are the acceptance steps for the broker milestone; the backend/API exists, the
 approvals UI is still being finished.

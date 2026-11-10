@@ -31,14 +31,12 @@ impl Store {
     }
 
     pub async fn get_approval(&self, org_id: Uuid, approval_id: Uuid) -> StoreResult<Approval> {
-        sqlx::query_as::<_, Approval>(
-            "SELECT * FROM approvals WHERE org_id = $1 AND id = $2",
-        )
-        .bind(org_id)
-        .bind(approval_id)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(|| StoreError::NotFound("approval".into()))
+        sqlx::query_as::<_, Approval>("SELECT * FROM approvals WHERE org_id = $1 AND id = $2")
+            .bind(org_id)
+            .bind(approval_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| StoreError::NotFound("approval".into()))
     }
 
     /// Pending approvals for the current org, newest first.
@@ -96,9 +94,7 @@ impl Store {
         .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| {
-            StoreError::Conflict(
-                "approval is not pending (already decided or expired)".into(),
-            )
+            StoreError::Conflict("approval is not pending (already decided or expired)".into())
         })
     }
 

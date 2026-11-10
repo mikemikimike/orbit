@@ -51,6 +51,7 @@ export default function ExecutionDetailPage() {
   const eventsQuery = useExecutionEvents(executionId);
   const live = useExecutionStream(executionId);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [showVerbose, setShowVerbose] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
 
   const execution = live.execution ?? executionQuery.data;
@@ -60,6 +61,12 @@ export default function ExecutionDetailPage() {
     for (const event of live.events) merged.set(event.seq, event);
     return [...merged.values()].sort((a, b) => a.seq - b.seq);
   }, [eventsQuery.data, live.events]);
+
+  const visibleEvents = useMemo(
+    () => (showVerbose ? events : events.filter(isImportantEvent)),
+    [events, showVerbose],
+  );
+  const hiddenCount = events.length - visibleEvents.length;
 
   const cancel = useMutation({
     mutationFn: async () =>
@@ -194,8 +201,17 @@ export default function ExecutionDetailPage() {
             <CardTitle className="flex items-center gap-2">
               <Terminal className="h-4 w-4 text-primary" /> Runtime timeline
             </CardTitle>
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-              <span>{events.length} events</span>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+              <span>{visibleEvents.length} events</span>
+              {hiddenCount > 0 ? (
+                <button
+                  type="button"
+                  className="rounded border px-1.5 py-0.5 text-[10px] font-medium hover:bg-muted"
+                  onClick={() => setShowVerbose((value) => !value)}
+                >
+                  {showVerbose ? "Hide verbose" : `${hiddenCount} hidden · show verbose`}
+                </button>
+              ) : null}
               <label className="inline-flex cursor-pointer items-center gap-1">
                 <input
                   type="checkbox"
@@ -212,17 +228,27 @@ export default function ExecutionDetailPage() {
               ref={logRef}
               className="max-h-[480px] min-h-[220px] overflow-y-auto px-4 pb-4"
             >
-              {events.length === 0 ? (
+              {visibleEvents.length === 0 ? (
                 <p className="py-10 text-center text-sm text-muted-foreground">
-                  {active ? "Waiting for runtime events…" : "No events were recorded."}
+                  {events.length > 0
+                    ? `${events.length} verbose event(s) hidden.`
+                    : active
+                      ? "Waiting for runtime events…"
+                      : "No events were recorded."}
                 </p>
               ) : (
-                events.map((event) => <EventLine key={event.seq} event={event} />)
+                visibleEvents.map((event) => <EventLine key={event.seq} event={event} />)
               )}
               {active ? (
                 <p className="pt-2 text-[11px] text-muted-foreground">
                   <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse-soft rounded-full bg-primary align-middle" />
                   streaming if worker is running
+                </p>
+              ) : null}
+              {hiddenCount > 0 ? (
+                <p className="pt-2 text-[11px] text-muted-foreground">
+                  Reasoning, internal steps, usage metrics and generic tool calls are hidden
+                  by default. Use “show verbose” for the raw runtime stream.
                 </p>
               ) : null}
             </div>
@@ -344,6 +370,25 @@ function MetaRow({ label, value }: { label: string; value: string }) {
       <span className="max-w-[65%] break-all text-right font-mono text-[10px]">{value}</span>
     </div>
   );
+}
+
+function isImportantEvent(event: ExecutionEventRecord): boolean {
+  if (event.kind === "error" || event.kind === "status") return true;
+  if (event.kind === "log") return event.level === "warn" || event.level === "error";
+  if (event.kind === "tool_call") {
+    const capability =
+      event.data && typeof event.data === "object"
+        ? (event.data as { capability?: string }).capability
+        : undefined;
+    return (
+      event.level === "error" ||
+      event.level === "warn" ||
+      Boolean(capability) ||
+      /approval/i.test(event.message)
+    );
+  }
+  // output deltas, metrics and debug logs are verbose-only
+  return false;
 }
 
 function EventLine({ event }: { event: ExecutionEventRecord }) {

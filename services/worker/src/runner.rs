@@ -7,8 +7,8 @@ use orbit_contracts::{
     RuntimeErrorKind, RuntimeEvent, RuntimeEventKind, SessionRequest,
 };
 use orbit_domain::{
-    AutonomyLevel, ExecutionEventKind, ExecutionStatus, GrantedCapability, LogLevel, ResourceLimits,
-    RuntimeKind,
+    AutonomyLevel, ExecutionEventKind, ExecutionStatus, GrantedCapability, LogLevel,
+    ResourceLimits, RuntimeKind,
 };
 use orbit_store::{ExecutionRecord, Store};
 use tokio::sync::{mpsc, Semaphore};

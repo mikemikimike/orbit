@@ -1,6 +1,6 @@
 pub mod account;
-pub mod approvals;
 pub mod agents;
+pub mod approvals;
 pub mod catalog;
 pub mod dashboard;
 pub mod executions;

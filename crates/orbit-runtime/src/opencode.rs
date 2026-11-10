@@ -54,6 +54,8 @@ pub struct OpenCodeSettings {
     pub server_url: Option<String>,
     /// Execution-scoped MCP bridge injected by the worker's tool broker.
     pub orbit_mcp: Option<OrbitMcpBridge>,
+    /// Stream OpenCode stderr diagnostics into execution events (default false).
+    pub debug_logs: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -327,11 +329,10 @@ fn map_open_code_event(
     let kind = value.get("type")?.as_str()?;
     let part = value.get("part").cloned().unwrap_or(Value::Null);
     match kind {
-        "step_start" => Some(RuntimeEvent::new(
-            RuntimeEventKind::Status,
-            LogLevel::Info,
-            "opencode step started",
-        )),
+        // Per-step lifecycle and usage are aggregated into the execution result. Do not
+        // create timeline noise for them.
+        "step_start" => None,
+        "reasoning" | "thinking" => None,
         "text" => {
             let body = part
                 .get("text")
@@ -345,9 +346,11 @@ fn map_open_code_event(
                 text.push_str(&body);
                 text.push('\n');
             }
+            // Intermediate assistant text is verbose by default; the final output is
+            // shown in the Output panel and persisted in the result.
             Some(RuntimeEvent::new(
                 RuntimeEventKind::OutputDelta,
-                LogLevel::Info,
+                LogLevel::Debug,
                 truncate(&body, 8_000),
             ))
         }
@@ -359,15 +362,22 @@ fn map_open_code_event(
                 .and_then(Value::as_str)
                 .unwrap_or("unknown");
             let title = state.get("title").and_then(Value::as_str).unwrap_or("");
+            let interesting = status == "error"
+                || tool.contains("github")
+                || tool.contains("orbit")
+                || title.to_ascii_lowercase().contains("github");
             let mut event = RuntimeEvent::new(
                 RuntimeEventKind::ToolCall,
                 if status == "error" {
                     LogLevel::Error
-                } else {
+                } else if interesting {
                     LogLevel::Info
+                } else {
+                    LogLevel::Debug
                 },
                 format!(
-                    "tool {tool} ({status}){}",
+                    "{} ({status}){}",
+                    tool,
                     if title.is_empty() {
                         String::new()
                     } else {
@@ -385,19 +395,13 @@ fn map_open_code_event(
         }
         "step_finish" => {
             let tokens = part.get("tokens").cloned().unwrap_or(Value::Null);
-            let input = tokens.get("input").and_then(Value::as_i64);
-            let output = tokens.get("output").and_then(Value::as_i64);
-            if let Some(input) = input {
+            if let Some(input) = tokens.get("input").and_then(Value::as_i64) {
                 usage.input_tokens = Some(usage.input_tokens.unwrap_or(0) + input);
             }
-            if let Some(output) = output {
+            if let Some(output) = tokens.get("output").and_then(Value::as_i64) {
                 usage.output_tokens = Some(usage.output_tokens.unwrap_or(0) + output);
             }
-            let cost = part.get("cost").cloned().unwrap_or(Value::Null);
-            Some(
-                RuntimeEvent::new(RuntimeEventKind::Usage, LogLevel::Info, "opencode usage")
-                    .with_data(json!({ "tokens": tokens, "cost": cost })),
-            )
+            None
         }
         "error" => {
             let message = value
@@ -411,11 +415,7 @@ fn map_open_code_event(
                 message,
             ))
         }
-        _ => Some(RuntimeEvent::new(
-            RuntimeEventKind::Log,
-            LogLevel::Debug,
-            format!("opencode event: {kind}"),
-        )),
+        _ => None,
     }
 }
 
@@ -487,6 +487,10 @@ impl OpenCodeRuntimeAdapter {
         let mut command = Command::new(settings.binary());
         command.args(&args);
         command.current_dir(&workspace);
+        // OpenCode resolves its project/workspace from PWD in some code paths; the
+        // worker's PWD points at the ORBIT repository, so explicitly set it to the
+        // per-execution workspace. This also keeps shell tools inside the sandbox.
+        command.env("PWD", &workspace);
         command.stdin(Stdio::null());
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
@@ -513,16 +517,31 @@ impl OpenCodeRuntimeAdapter {
             RuntimeError::new(RuntimeErrorKind::Internal, "opencode stderr unavailable")
         })?;
 
+        let debug_logs = settings.debug_logs.unwrap_or(false);
         let stderr_buffer = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        let stderr_events = request.events.clone();
         let stderr_task = {
             let buffer = stderr_buffer.clone();
             tokio::spawn(async move {
                 let mut lines = BufReader::new(stderr).lines();
                 while let Ok(Some(line)) = lines.next_line().await {
-                    let mut buffer = buffer.lock().expect("stderr lock");
-                    if buffer.len() < 16_000 {
-                        buffer.push_str(&line);
-                        buffer.push('\n');
+                    {
+                        let mut buffer = buffer.lock().expect("stderr lock");
+                        if buffer.len() < 16_000 {
+                            buffer.push_str(&line);
+                            buffer.push('\n');
+                        }
+                    }
+                    let lower = line.to_ascii_lowercase();
+                    if debug_logs && (lower.contains("mcp") || lower.contains("error")) {
+                        if let Some(sender) = &stderr_events {
+                            let _ = sender
+                                .send(RuntimeEvent::log(
+                                    LogLevel::Warn,
+                                    format!("opencode: {}", truncate(&line, 1500)),
+                                ))
+                                .await;
+                        }
                     }
                 }
             })
@@ -842,7 +861,7 @@ mod tests {
             r#"{"type":"step_finish","part":{"tokens":{"input":10,"output":4},"cost":0.01}}"#,
         )
         .unwrap();
-        map_open_code_event(&usage_event, &mut usage, &mut text).unwrap();
+        assert!(map_open_code_event(&usage_event, &mut usage, &mut text).is_none());
         assert_eq!(usage.input_tokens, Some(10));
         assert_eq!(usage.output_tokens, Some(4));
     }

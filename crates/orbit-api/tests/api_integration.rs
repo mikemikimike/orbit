@@ -346,7 +346,9 @@ async fn execution_creation_is_idempotent_and_streams_events() {
 
 #[tokio::test]
 async fn approvals_can_be_listed_and_decided() {
-    let Some(app) = test_app(true).await else { return };
+    let Some(app) = test_app(true).await else {
+        return;
+    };
     let (status, execution) = send(
         &app.router,
         post(
@@ -370,7 +372,11 @@ async fn approvals_can_be_listed_and_decided() {
 
     let (status, body) = send(&app.router, get("/api/v1/approvals?status=pending")).await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.as_array().unwrap().iter().any(|a| a["id"] == approval.id.to_string()));
+    assert!(body
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|a| a["id"] == approval.id.to_string()));
 
     let (status, body) = send(
         &app.router,
