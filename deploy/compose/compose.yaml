@@ -65,6 +65,7 @@ services:
     image: orbit-worker:dev
     environment:
       ORBIT_ENV: ${ORBIT_ENV:-development}
+      ORBIT_WORKER_RUNTIMES: mock
       ORBIT_DATABASE_URL: postgres://orbit:orbit@db:5432/orbit
       ORBIT_MASTER_KEY: ${ORBIT_MASTER_KEY:-b3JiaXQtZGV2LW1hc3Rlci1rZXktMzItYnl0ZXMhISE=}
       ORBIT_EVENTS_DRIVER: ${ORBIT_EVENTS_DRIVER:-nats}

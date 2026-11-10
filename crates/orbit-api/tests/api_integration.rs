@@ -345,6 +345,59 @@ async fn execution_creation_is_idempotent_and_streams_events() {
 }
 
 #[tokio::test]
+async fn approvals_can_be_listed_and_decided() {
+    let Some(app) = test_app(true).await else { return };
+    let (status, execution) = send(
+        &app.router,
+        post(
+            &format!("/api/v1/agents/{}/executions", app.agent_id),
+            json!({ "task": "approval test" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{execution}");
+    let execution_id = Uuid::parse_str(execution["id"].as_str().unwrap()).unwrap();
+    let approval = app
+        .store
+        .create_approval(
+            app.org_id,
+            execution_id,
+            json!({ "capability": "issues.comment", "effect": "write" }),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let (status, body) = send(&app.router, get("/api/v1/approvals?status=pending")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.as_array().unwrap().iter().any(|a| a["id"] == approval.id.to_string()));
+
+    let (status, body) = send(
+        &app.router,
+        post(
+            &format!("/api/v1/approvals/{}/approve", approval.id),
+            json!({ "comment": "looks good" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["status"], "approved");
+    assert_eq!(body["comment"], "looks good");
+
+    // Deciding twice is a conflict, not a silent overwrite.
+    let (status, body) = send(
+        &app.router,
+        post(
+            &format!("/api/v1/approvals/{}/approve", approval.id),
+            json!({}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "conflict");
+}
+
+#[tokio::test]
 async fn provider_credentials_are_write_only() {
     let Some(app) = test_app(true).await else {
         return;

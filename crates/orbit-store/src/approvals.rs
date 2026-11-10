@@ -1,0 +1,137 @@
+use uuid::Uuid;
+
+use orbit_domain::new_id;
+
+use crate::models::{Approval, ApprovalWithExecution};
+use crate::{Store, StoreError, StoreResult};
+
+impl Store {
+    pub async fn create_approval(
+        &self,
+        org_id: Uuid,
+        execution_id: Uuid,
+        requested_action: serde_json::Value,
+        expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> StoreResult<Approval> {
+        sqlx::query_as::<_, Approval>(
+            r#"
+            INSERT INTO approvals (id, org_id, execution_id, status, requested_action, expires_at)
+            VALUES ($1, $2, $3, 'pending', $4, $5)
+            RETURNING *
+            "#,
+        )
+        .bind(new_id())
+        .bind(org_id)
+        .bind(execution_id)
+        .bind(requested_action)
+        .bind(expires_at)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    pub async fn get_approval(&self, org_id: Uuid, approval_id: Uuid) -> StoreResult<Approval> {
+        sqlx::query_as::<_, Approval>(
+            "SELECT * FROM approvals WHERE org_id = $1 AND id = $2",
+        )
+        .bind(org_id)
+        .bind(approval_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("approval".into()))
+    }
+
+    /// Pending approvals for the current org, newest first.
+    pub async fn list_approvals(
+        &self,
+        org_id: Uuid,
+        status: Option<&str>,
+        limit: i64,
+    ) -> StoreResult<Vec<ApprovalWithExecution>> {
+        Ok(sqlx::query_as::<_, ApprovalWithExecution>(
+            r#"
+            SELECT ap.*, e.agent_name, e.status AS execution_status, e.agent_id
+            FROM approvals ap
+            JOIN executions e ON e.id = ap.execution_id
+            WHERE ap.org_id = $1
+              AND ($2::text IS NULL OR ap.status = $2)
+            ORDER BY ap.created_at DESC
+            LIMIT $3
+            "#,
+        )
+        .bind(org_id)
+        .bind(status)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    /// Decide a pending approval. Only `approved`/`rejected` are accepted.
+    pub async fn decide_approval(
+        &self,
+        org_id: Uuid,
+        approval_id: Uuid,
+        decision: &str,
+        decided_by: Uuid,
+        comment: Option<&str>,
+    ) -> StoreResult<Approval> {
+        if !matches!(decision, "approved" | "rejected") {
+            return Err(StoreError::Invalid(
+                "decision must be approved or rejected".into(),
+            ));
+        }
+        sqlx::query_as::<_, Approval>(
+            r#"
+            UPDATE approvals
+            SET status = $3, decided_by = $4, decided_at = now(), comment = $5
+            WHERE org_id = $1 AND id = $2 AND status = 'pending'
+            RETURNING *
+            "#,
+        )
+        .bind(org_id)
+        .bind(approval_id)
+        .bind(decision)
+        .bind(decided_by)
+        .bind(comment)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| {
+            StoreError::Conflict(
+                "approval is not pending (already decided or expired)".into(),
+            )
+        })
+    }
+
+    /// Broker helper: wait until an approval is decided or the deadline passes.
+    pub async fn await_approval(
+        &self,
+        org_id: Uuid,
+        approval_id: Uuid,
+        timeout: std::time::Duration,
+    ) -> StoreResult<Approval> {
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            let approval = self.get_approval(org_id, approval_id).await?;
+            if approval.status != "pending" {
+                return Ok(approval);
+            }
+            if tokio::time::Instant::now() >= deadline {
+                // Expire it so the UI does not show a dead request forever.
+                let expired = sqlx::query_as::<_, Approval>(
+                    r#"
+                    UPDATE approvals
+                    SET status = 'expired', decided_at = now()
+                    WHERE org_id = $1 AND id = $2 AND status = 'pending'
+                    RETURNING *
+                    "#,
+                )
+                .bind(org_id)
+                .bind(approval_id)
+                .fetch_optional(&self.pool)
+                .await?;
+                return Ok(expired.unwrap_or(approval));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(750)).await;
+        }
+    }
+}

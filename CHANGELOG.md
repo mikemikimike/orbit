@@ -56,6 +56,15 @@ project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Documented and verified full local Docker Compose stack (db, NATS, API, mock worker,
+  web) with health checks, same-origin API proxy, demo seeding and fast restart workflow.
+- `make compose-logs`, `make compose-reset`, `make worker-opencode` and
+  `scripts/dev-worker-opencode.sh` for running a host OpenCode worker against Compose.
+- Execution-scoped tool broker foundation: policy/autonomy checks, approvals store + API,
+  GitHub connector (read + approval-gated writes), MCP stdio bridge and worker wiring
+  (approvals UI and deployment verification still pending).
+
+### Added
 - Responsive web experience: dashboard, agents list, Agent Studio, agent detail,
   executions list, live execution timeline (SSE via fetch + auth header), runtimes,
   models/providers, connections and settings.

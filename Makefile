@@ -13,6 +13,9 @@ help:
 	@echo "ORBIT targets"
 	@echo "  dev-infra      Start Postgres + NATS only (native development)"
 	@echo "  compose-up     Full local stack via Docker Compose"
+	@echo "  compose-logs   Follow api/worker/web logs"
+	@echo "  compose-reset  Remove containers AND data volumes"
+	@echo "  worker-opencode Run host OpenCode worker against the compose stack"
 	@echo "  api/worker     Run Rust services against the dev stack"
 	@echo "  web            Run Next.js (API proxy to localhost:8080)"
 	@echo "  test           Rust tests (DB tests skip without ORBIT_TEST_DATABASE_URL)"
@@ -33,6 +36,15 @@ compose-up:
 
 compose-down:
 	docker compose -f deploy/compose/compose.yaml down
+
+compose-logs:
+	docker compose -f deploy/compose/compose.yaml logs -f --tail=100 api worker web
+
+compose-reset:
+	docker compose -f deploy/compose/compose.yaml down -v
+
+worker-opencode:
+	./scripts/dev-worker-opencode.sh
 
 api:
 	cargo run -p orbit-api-server

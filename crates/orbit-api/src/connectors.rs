@@ -79,6 +79,34 @@ pub fn builtin_manifests() -> Vec<ConnectorManifest> {
             builtin: true,
         },
         ConnectorManifest {
+            slug: "github".into(),
+            name: "GitHub".into(),
+            version: "0.1.0".into(),
+            description: "GitHub issues and repository actions, executed through ORBIT's policy-enforcing tool broker.".into(),
+            auth: vec![AuthMethod::ApiToken],
+            webhooks: false,
+            capabilities: vec![
+                capability("issues.list", "List issues", "Lists issues in a repository.", CapabilityEffect::Read),
+                capability("issues.get", "Get issue", "Retrieves one issue with comments metadata.", CapabilityEffect::Read),
+                capability("issues.comment", "Comment on issue", "Posts a comment to an issue.", CapabilityEffect::Write),
+                capability("issues.create", "Create issue", "Creates a new issue.", CapabilityEffect::Write),
+            ],
+            config_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "baseUrl": { "type": "string", "default": "https://api.github.com" },
+                    "allowedRepositories": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Optional owner/repo allowlist. Empty means any repository the token can access."
+                    },
+                    "defaultRepository": { "type": "string", "description": "owner/repo used when tool args omit it" }
+                }
+            }),
+            docs_url: Some("https://docs.github.com/en/rest".into()),
+            builtin: true,
+        },
+        ConnectorManifest {
             slug: "gitlab".into(),
             name: "GitLab".into(),
             version: "0.1.0".into(),

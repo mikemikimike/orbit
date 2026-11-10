@@ -307,6 +307,18 @@ pub struct Approval {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ApprovalWithExecution {
+    #[sqlx(flatten)]
+    #[serde(flatten)]
+    #[schema(inline)]
+    pub approval: Approval,
+    pub agent_name: String,
+    pub agent_id: Uuid,
+    pub execution_status: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DashboardSummary {

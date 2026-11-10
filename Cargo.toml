@@ -10,6 +10,7 @@ members = [
   "crates/orbit-api",
   "services/api",
   "services/worker",
+  "services/mcp-broker",
 ]
 
 [workspace.package]

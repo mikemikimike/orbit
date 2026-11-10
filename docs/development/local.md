@@ -5,22 +5,72 @@
 - Rust stable (>= 1.85; pinned via `rust-toolchain.toml`)
 - Node.js >= 20 and pnpm 10+ (`corepack enable && corepack prepare pnpm@latest --activate`)
 
-## Fast path (containers)
+## Fast path (everything in containers)
 
 ```bash
 cp .env.example .env
-docker compose -f deploy/compose/compose.yaml up --build
+docker compose -f deploy/compose/compose.yaml up --build -d
+docker compose -f deploy/compose/compose.yaml ps
+docker compose -f deploy/compose/compose.yaml logs -f --tail=100 api worker web
 ```
 
-- Web UI: http://localhost:3000
-- API: http://localhost:8080/api/v1 (docs at http://localhost:8080/docs)
-- The web app calls `/api/v1` on its own origin; Next.js proxies to
-  `ORBIT_API_INTERNAL_URL` at runtime (default `http://localhost:8080`).
-- Postgres: `localhost:5432` (`orbit`/`orbit`, db `orbit`)
-- NATS: `localhost:4222`, monitoring `http://localhost:8222`
+| Service | URL / port | Notes |
+|---|---|---|
+| Web | http://localhost:3000 | Next.js + PWA; API proxied same-origin |
+| API | http://localhost:8080/api/v1 · /docs · /readyz | OpenAPI + Swagger UI |
+| PostgreSQL | `localhost:5432` | `orbit`/`orbit`, database `orbit` |
+| NATS | `localhost:4222`, monitoring `:8222` | JetStream enabled |
+| worker | — | `ORBIT_WORKER_RUNTIMES=mock` (scheduler + mock) |
 
-The API and worker run migrations on startup and seed demo data when
-`ORBIT_SEED_DEMO=true`.
+The first `--build` takes a few minutes (Rust release build); later restarts are seconds.
+Migrations and demo seeding are automatic. `localhost` is a secure context, so the web
+UI (Web Crypto, clipboard, service worker) works over HTTP. Use TLS for a LAN hostname.
+
+Common commands:
+
+```bash
+docker compose -f deploy/compose/compose.yaml restart api worker
+docker compose -f deploy/compose/compose.yaml down        # keep data
+docker compose -f deploy/compose/compose.yaml down -v     # reset DB/NATS volumes
+docker compose -f deploy/compose/compose.yaml build api worker web
+```
+
+## Fast iteration without rebuilding Rust images
+
+Stop the full stack first (the dev infrastructure file uses the same ports), then use
+Compose for infrastructure and run the API/worker/web natively:
+
+```bash
+docker compose -f deploy/compose/compose.yaml down
+docker compose -f deploy/compose/compose.dev.yaml up -d
+cp .env.example .env
+# .env uses db:5432 / nats:4222 for containers; for native set:
+export ORBIT_DATABASE_URL=postgres://orbit:orbit@localhost:5432/orbit
+export ORBIT_NATS_URL=nats://localhost:4222
+export ORBIT_HTTP_ADDR=127.0.0.1:8080
+
+cargo run -p orbit-api-server      # terminal 1
+cargo run -p orbit-worker          # terminal 2
+pnpm --filter @orbit/web dev       # terminal 3 (http://localhost:3000)
+```
+
+The Next.js dev server proxies `/api/*` to `ORBIT_API_INTERNAL_URL` (default
+`http://localhost:8080`).
+
+## OpenCode + GitHub locally
+
+Keep the compose stack running (PostgreSQL, NATS, API, web, mock worker), then start a
+host-side OpenCode worker. It uses the OpenCode CLI/auth installed on your machine and the
+MCP bridge binary built from this repo:
+
+```bash
+./scripts/dev-worker-opencode.sh
+# or: make worker-opencode
+```
+
+Then create a GitHub connection (PAT or public read-only) and an agent with runtime
+**OpenCode** and the GitHub connector. The mock worker stays responsible for mock agents;
+the host worker claims only `opencode` executions.
 
 ## Native dev loop (recommended for coding)
 

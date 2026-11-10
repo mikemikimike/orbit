@@ -8,6 +8,7 @@ use orbit_contracts::{
 };
 use orbit_domain::{
     AutonomyLevel, ExecutionEventKind, ExecutionStatus, GrantedCapability, LogLevel, ResourceLimits,
+    RuntimeKind,
 };
 use orbit_store::{ExecutionRecord, Store};
 use tokio::sync::{mpsc, Semaphore};
@@ -157,6 +158,41 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
 
     let grants = resolve_grants(&state.store, org_id, &spec).await;
     let workspace = state.workspace_root.join(execution_id.to_string());
+
+    // Policy-enforcing tool broker: only for runtimes that can consume MCP today
+    // (OpenCode). It is execution-scoped and dropped at the end of this function.
+    let broker = if runtime_kind == RuntimeKind::OpenCode {
+        match crate::broker::start(state.store.clone(), &spec, &execution).await {
+            Ok(broker) => broker,
+            Err(error) => {
+                return fail_execution(
+                    &state,
+                    &execution,
+                    RuntimeError::new(
+                        RuntimeErrorKind::InvalidConfig,
+                        format!("tool broker could not start: {error}"),
+                    ),
+                )
+                .await
+            }
+        }
+    } else {
+        None
+    };
+    if let Some(handle) = &broker {
+        append_event(
+            &state,
+            &execution,
+            ExecutionEventKind::Status,
+            LogLevel::Info,
+            &format!(
+                "policy-enforcing tool broker ready ({} GitHub tools)",
+                handle.tool_count
+            ),
+            serde_json::json!({ "broker": "github", "tools": handle.tool_count }),
+        )
+        .await;
+    }
     if let Err(err) = tokio::fs::create_dir_all(&workspace).await {
         tracing::warn!(error = %err, workspace = %workspace.display(), "could not create workspace");
     }
@@ -213,6 +249,22 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
         }
     });
 
+    // Add the MCP bridge details to the runtime config. This stays in memory only; the
+    // execution-scoped token is invalid as soon as the broker is dropped.
+    let mut runtime_config = spec.runtime.config.clone();
+    if let (Some(handle), RuntimeKind::OpenCode) = (&broker, runtime_kind) {
+        if !runtime_config.is_object() {
+            runtime_config = serde_json::json!({});
+        }
+        runtime_config["orbitMcp"] = serde_json::json!({
+            "command": handle.mcp_command(),
+            "environment": {
+                "ORBIT_BROKER_URL": handle.url,
+                "ORBIT_BROKER_TOKEN": handle.token,
+            }
+        });
+    }
+
     let autonomy = AutonomyLevel::from_level(spec.autonomy.level).unwrap_or(AutonomyLevel::OBSERVE);
     let request = ExecutionRequest {
         execution_id,
@@ -231,7 +283,7 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
             timeout_seconds: execution.timeout_seconds.max(1) as u64,
             ..spec.resources.clone()
         },
-        runtime_config: spec.runtime.config.clone(),
+        runtime_config,
         session: SessionRequest {
             session_ref: execution.session_ref.clone(),
             mode: spec.runtime.execution_mode,

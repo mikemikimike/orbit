@@ -1,4 +1,6 @@
+mod broker;
 mod connectors;
+mod github;
 mod resolver;
 mod runner;
 mod scheduler;

@@ -127,6 +127,18 @@ pub fn build_router(state: AppState) -> Router {
             patch(handlers::triggers::update_trigger).delete(handlers::triggers::delete_trigger),
         )
         .route(
+            "/api/v1/approvals",
+            get(handlers::approvals::list_approvals),
+        )
+        .route(
+            "/api/v1/approvals/{approval_id}/approve",
+            post(handlers::approvals::approve),
+        )
+        .route(
+            "/api/v1/approvals/{approval_id}/reject",
+            post(handlers::approvals::reject),
+        )
+        .route(
             "/api/v1/dashboard/summary",
             get(handlers::dashboard::dashboard_summary),
         )
