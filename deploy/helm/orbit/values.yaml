@@ -211,7 +211,7 @@ podSecurityContext:
   runAsGroup: 10001
   fsGroup: 10001
   seccompProfile:
-    type: HarnessDefault
+    type: RuntimeDefault
 
 containerSecurityContext:
   allowPrivilegeEscalation: false

@@ -44,7 +44,7 @@ spec:
       securityContext:
         fsGroup: 999
         seccompProfile:
-          type: HarnessDefault
+          type: RuntimeDefault
       containers:
         - name: postgresql
           image: {{ .Values.postgresql.image | quote }}
