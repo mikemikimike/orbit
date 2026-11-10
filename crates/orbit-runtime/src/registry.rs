@@ -18,7 +18,7 @@ impl RuntimeRegistry {
             Arc::new(MockRuntimeAdapter::default()),
             Arc::new(OpenCodeRuntimeAdapter),
             Arc::new(crate::planned::claude_code()),
-            Arc::new(crate::planned::pi()),
+            Arc::new(crate::PiRuntimeAdapter),
             Arc::new(crate::planned::generic()),
         ];
         Self {

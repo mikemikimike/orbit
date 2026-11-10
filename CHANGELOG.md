@@ -108,6 +108,15 @@ project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Pi runtime adapter** (tested against Pi 1.5.0): headless JSON mode, session capture,
+  cancellation/timeout, trusted system append, `.pi/mcp.json` broker bridge generation,
+  and a platform-enforced read-only tool allowlist at autonomy L1/L2.
+- `make worker-pi` / `scripts/dev-worker-pi.sh` for local host execution.
+- Pi config accepts `skills` paths and passes them via `--skill`.
+- Note: Pi worker container image/Helm deployment and full MCP tool parity are not yet
+  verified; the UI skill/agent registry remains pending.
+
+### Added
 - Real GitHub read flow verified end-to-end locally: OpenCode → MCP bridge → tool broker
   → GitHub REST (`issues.list` on a public repo) → summarized output, no mock runtime.
 - Execution timeline noise reduction: reasoning/step/usage events are not shown by

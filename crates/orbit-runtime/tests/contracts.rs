@@ -14,11 +14,7 @@ async fn mock_adapter_satisfies_contract() {
 #[tokio::test]
 async fn unimplemented_adapters_fail_closed() {
     let registry = RuntimeRegistry::builtin();
-    for kind in [
-        RuntimeKind::ClaudeCode,
-        RuntimeKind::Pi,
-        RuntimeKind::Generic,
-    ] {
+    for kind in [RuntimeKind::ClaudeCode, RuntimeKind::Generic] {
         let adapter = registry.require(kind).unwrap();
         assert_fails_closed(adapter).await;
     }

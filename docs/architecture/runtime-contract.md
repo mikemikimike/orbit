@@ -130,4 +130,11 @@ files, and forced teardown on timeout/cancel.
     (`ORBIT_OPENCODE_E2E=1`, ignored by default to avoid model spend)
   - limitation: ORBIT platform providers are not yet mapped into OpenCode's provider
     config (`supports_platform_providers=false`); use OpenCode-managed auth for now.
-- `claude_code`, `pi` — registered as capability descriptors only (Phase 2/3).
+- `pi` — **available** for host/local workers and the Docker dispatcher (tested against
+  Pi **1.5.0**): `pi --print --mode json`, session capture/resume, JSON event mapping,
+  cancellation/timeout, trusted `--append-system-prompt`, and a platform-enforced
+  read-only tool allowlist (`read,grep,find,ls`) at autonomy L1/L2. The adapter accepts
+  `skills` paths and writes the execution-scoped `.pi/mcp.json` broker bridge; MCP tool
+  parity with OpenCode and the Pi worker container/Helm deployment are still being
+  verified. `make worker-pi` runs it on the host.
+- `claude_code` — registered as a capability descriptor only (Phase 2).

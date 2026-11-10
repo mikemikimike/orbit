@@ -189,7 +189,7 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
 
     // Policy-enforcing tool broker: only for runtimes that can consume MCP today
     // (OpenCode). It is execution-scoped and dropped at the end of this function.
-    let broker = if runtime_kind == RuntimeKind::OpenCode {
+    let broker = if matches!(runtime_kind, RuntimeKind::OpenCode | RuntimeKind::Pi) {
         match crate::broker::start(state.store.clone(), &spec, &execution).await {
             Ok(broker) => broker,
             Err(error) => {
@@ -280,7 +280,7 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
     // Add the MCP bridge details to the runtime config. This stays in memory only; the
     // execution-scoped token is invalid as soon as the broker is dropped.
     let mut runtime_config = spec.runtime.config.clone();
-    if let (Some(handle), RuntimeKind::OpenCode) = (&broker, runtime_kind) {
+    if let (Some(handle), RuntimeKind::OpenCode | RuntimeKind::Pi) = (&broker, runtime_kind) {
         if !runtime_config.is_object() {
             runtime_config = serde_json::json!({});
         }

@@ -17,6 +17,7 @@ help:
 	@echo "  compose-reset  Remove containers AND data volumes"
 	@echo "  worker-opencode Run host OpenCode worker against the compose stack"
 	@echo "  worker-docker  Spawn a Docker container per OpenCode execution (host dispatcher)"
+	@echo "  worker-pi      Run a host Pi worker (Pi CLI + auth)"
 	@echo "  compose-build-opencode Build the local OpenCode worker image"
 	@echo "  api/worker     Run Rust services against the dev stack"
 	@echo "  web            Run Next.js (API proxy to localhost:8080)"
@@ -50,6 +51,9 @@ worker-opencode:
 
 worker-docker:
 	./scripts/dev-worker-docker.sh
+
+worker-pi:
+	./scripts/dev-worker-pi.sh
 
 compose-build-opencode:
 	docker build -f deploy/docker/worker.Dockerfile -t orbit-worker:dev .

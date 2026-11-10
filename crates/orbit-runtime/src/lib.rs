@@ -6,12 +6,14 @@
 
 pub mod mock;
 pub mod opencode;
+pub mod pi;
 pub mod planned;
 pub mod registry;
 pub mod testing;
 
 pub use mock::MockRuntimeAdapter;
 pub use opencode::OpenCodeRuntimeAdapter;
+pub use pi::PiRuntimeAdapter;
 pub use planned::DescriptorOnlyAdapter;
 pub use registry::RuntimeRegistry;
 
