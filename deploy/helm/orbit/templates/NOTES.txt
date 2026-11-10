@@ -29,7 +29,7 @@ Check readiness:
   kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "orbit.apiHost" . }}
 
 Runtimes:
-  base worker     -> mock runtime (ORBIT_WORKER_RUNTIMES=mock)
+  base worker     -> mock harness (ORBIT_WORKER_HARNESSES=mock)
   opencode worker -> OpenCode CLI, tested with v2.2.5 (enabled when auth is configured)
 
 OpenCode credentials are imported from an `opencode auth export` Secret by an init

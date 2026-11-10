@@ -81,7 +81,7 @@
   <text x="682" y="248" class="box-title">orbit-worker</text>
   <text x="682" y="265" class="box-line">mock harness · scheduler</text>
   <text x="682" y="281" class="box-line">durable queue polling</text>
-  <text x="682" y="297" class="box-muted">claims only ORBIT_WORKER_RUNTIMES</text>
+  <text x="682" y="297" class="box-muted">claims only ORBIT_WORKER_HARNESSES</text>
 
   <rect x="910" y="228" width="226" height="86" rx="10" class="card-teal"/>
   <text x="928" y="248" class="box-title">orbit-worker-opencode</text>
