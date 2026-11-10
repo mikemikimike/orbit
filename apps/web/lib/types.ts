@@ -25,3 +25,6 @@ export type AgentInstanceView = components["schemas"]["AgentInstanceView"];
 export type ProviderProbeResponse = components["schemas"]["ProviderProbeResponse"];
 export type ApprovalWithExecution = components["schemas"]["ApprovalWithExecution"];
 export type WorkerView = components["schemas"]["WorkerView"];
+export type Skill = components["schemas"]["Skill"];
+export type WorkerProfile = components["schemas"]["WorkerProfile"];
+export type WorkerBootstrap = components["schemas"]["WorkerBootstrap"];

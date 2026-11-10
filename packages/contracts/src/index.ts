@@ -82,6 +82,7 @@ export const agentSpecSchema = z.object({
     constraints: z.array(z.string()).default([]),
   }),
   connectors: z.array(connectorBindingSchema).default([]),
+  skills: z.array(z.string()).default([]),
   triggers: z.array(triggerSchema).default([]),
   autonomy: autonomySchema.default({ level: 2, approvalMode: "auto" }),
   resources: resourceLimitsSchema.default({
@@ -166,6 +167,7 @@ export function emptyAgentDefinition(): AgentDefinition {
       model: { management: "runtime", params: {} },
       instructions: { system: "", constraints: [] },
       connectors: [],
+      skills: [],
       triggers: [],
       autonomy: { level: 2, approvalMode: "auto" },
       resources: { timeoutSeconds: 300, maxConcurrentExecutions: 1 },

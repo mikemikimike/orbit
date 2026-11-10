@@ -343,3 +343,41 @@ pub struct ExecutionWithAgent {
     pub execution: ExecutionRecord,
     pub agent_slug: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Skill {
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub slug: String,
+    pub name: String,
+    pub description: String,
+    pub content: String,
+    pub files: serde_json::Value,
+    pub version: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkerProfile {
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub name: String,
+    pub runtime_kind: String,
+    pub target: String,
+    pub execution_driver: String,
+    pub image: String,
+    pub image_tag: String,
+    pub agent_ids: Vec<Uuid>,
+    pub skill_slugs: Vec<String>,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub auth_secret_name: Option<String>,
+    pub env: serde_json::Value,
+    pub resources: serde_json::Value,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}

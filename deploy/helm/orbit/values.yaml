@@ -27,7 +27,7 @@ api:
 
 worker:
   image: orbit-worker
-  tag: 0.2.1
+  tag: 0.3.0
   replicas: 1
   concurrency: 4
   pollIntervalMs: 500
@@ -49,7 +49,7 @@ worker:
 opencodeWorker:
   enabled: false
   image: orbit-worker-opencode
-  tag: 0.2.1
+  tag: 0.3.0
   replicas: 1
   concurrency: 2
   runtimes: opencode
@@ -76,7 +76,7 @@ opencodeWorker:
 
 web:
   image: orbit-web
-  tag: 0.2.1
+  tag: 0.3.0
   replicas: 1
   port: 3000
   resources:

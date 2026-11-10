@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  BookOpen,
   Boxes,
   Cable,
   Copy,
@@ -10,6 +11,7 @@ import {
   KeyRound,
   LogOut,
   Plus,
+  Server,
   ShieldCheck,
   Trash2,
 } from "lucide-react";
@@ -175,7 +177,7 @@ export default function SettingsPage() {
         </Card>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <ShortcutCard
           href="/agents"
           title="Agents"
@@ -199,6 +201,18 @@ export default function SettingsPage() {
           title="Connections"
           description="External service accounts"
           icon={<Cable className="h-4 w-4" />}
+        />
+        <ShortcutCard
+          href="/skills"
+          title="Skills"
+          description="Reusable SKILL.md packages"
+          icon={<BookOpen className="h-4 w-4" />}
+        />
+        <ShortcutCard
+          href="/workers"
+          title="Workers"
+          description="Bootstrap profiles and targets"
+          icon={<Server className="h-4 w-4" />}
         />
       </div>
 

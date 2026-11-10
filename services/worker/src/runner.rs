@@ -28,6 +28,11 @@ pub struct WorkerState {
     pub execution_driver: String,
     /// Worker target class (`local`, `docker`, `kubernetes`).
     pub target: String,
+    pub profile_org_id: Uuid,
+    /// Agents this worker is scoped to (empty = all).
+    pub profile_agent_ids: Vec<Uuid>,
+    /// Skills materialized for every execution handled by this worker.
+    pub profile_skill_slugs: Vec<String>,
     pub active: Arc<
         tokio::sync::Mutex<std::collections::BTreeMap<Uuid, tokio_util::sync::CancellationToken>>,
     >,
@@ -47,7 +52,12 @@ pub async fn claim_and_dispatch(
         };
         let claimed = match state
             .store
-            .claim_next_queued(&state.worker_id, &state.runtimes, &state.target)
+            .claim_next_queued(
+                &state.worker_id,
+                &state.runtimes,
+                &state.target,
+                &state.profile_agent_ids,
+            )
             .await
         {
             Ok(Some(execution)) => execution,
@@ -223,6 +233,18 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
     }
     if let Err(err) = tokio::fs::create_dir_all(&workspace).await {
         tracing::warn!(error = %err, workspace = %workspace.display(), "could not create workspace");
+    }
+    let materialized_skills = crate::skills::materialize(&state, &spec, &workspace).await;
+    if !materialized_skills.is_empty() {
+        append_event(
+            &state,
+            &execution,
+            ExecutionEventKind::Status,
+            LogLevel::Info,
+            &format!("materialized {} skill(s)", materialized_skills.len()),
+            serde_json::json!({ "skills": materialized_skills }),
+        )
+        .await;
     }
 
     let (event_tx, mut event_rx) = mpsc::channel::<RuntimeEvent>(256);

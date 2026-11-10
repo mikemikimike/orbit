@@ -229,6 +229,7 @@ export default function AgentDetailPage() {
                     label="Model management"
                     value={titleCase(spec.model.management)}
                   />
+                  <Row label="Skills" value={spec.skills.length ? spec.skills.join(", ") : "none"} />
                   <Row label="Provider" value={spec.model.provider ?? "runtime default"} />
                   <Row label="Model" value={spec.model.model ?? "runtime default"} />
                 </CardContent>

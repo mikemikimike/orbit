@@ -462,6 +462,7 @@ impl Store {
         worker_id: &str,
         runtimes: &[String],
         worker_target: &str,
+        agent_ids: &[Uuid],
     ) -> StoreResult<Option<ExecutionRecord>> {
         Ok(sqlx::query_as::<_, ExecutionRecord>(
             r#"
@@ -473,6 +474,7 @@ impl Store {
                 WHERE status = 'queued'
                   AND runtime_kind = ANY($2)
                   AND (placement = 'auto' OR placement = $3)
+                  AND (cardinality($4::uuid[]) = 0 OR agent_id = ANY($4))
                 ORDER BY created_at ASC
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED
@@ -483,6 +485,7 @@ impl Store {
         .bind(worker_id)
         .bind(runtimes)
         .bind(worker_target)
+        .bind(agent_ids)
         .fetch_optional(&self.pool)
         .await?)
     }

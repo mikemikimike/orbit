@@ -57,6 +57,7 @@ fn definition(name: &str) -> AgentDefinition {
                 constraints: vec![],
             },
             connectors: vec![],
+            skills: vec![],
             triggers: vec![TriggerSpec::Schedule {
                 cron: "*/15 * * * *".into(),
                 timezone: None,
@@ -548,4 +549,121 @@ async fn single_execution_mode_can_take_a_dispatched_execution() {
         .unwrap()
         .expect("dispatched execution must be takeable");
     assert_eq!(taken.worker_id.as_deref(), Some("container-worker"));
+}
+
+#[tokio::test]
+async fn skills_profiles_and_agent_scoped_claims() {
+    let Some(store) = test_store().await else {
+        return;
+    };
+    let (org, user) = seed_org(&store).await;
+
+    let skill = store
+        .create_skill(
+            org,
+            "issue-triage",
+            "Issue triage",
+            "Use when triaging issues",
+            "---\nname: issue-triage\ndescription: triage\n---\n# Triage",
+            &serde_json::json!({ "references/guide.md": "guide" }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(skill.version, 1);
+    let updated = store
+        .update_skill(org, skill.id, Some("Triage v2"), None, None, None)
+        .await
+        .unwrap();
+    assert_eq!(updated.version, 2);
+    assert_eq!(
+        store
+            .skills_by_slugs(org, &["issue-triage".into()])
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+
+    let (agent_a, version_a) = store
+        .create_agent(org, Some(user), &definition("Scoped Agent A"))
+        .await
+        .unwrap();
+    let (agent_b, version_b) = store
+        .create_agent(org, Some(user), &definition("Scoped Agent B"))
+        .await
+        .unwrap();
+
+    let input = serde_json::json!({
+        "task": "x", "payload": {},
+        "provenance": { "source": "test", "trusted": true, "receivedAt": chrono::Utc::now() }
+    });
+    let exec_a = store
+        .create_execution(NewExecution {
+            org_id: org,
+            agent_id: agent_a.id,
+            agent_version_id: version_a.id,
+            agent_name: &agent_a.name,
+            runtime_kind: RuntimeKind::Mock,
+            trigger_source: TriggerSource::Manual,
+            placement: "auto",
+            trigger_id: None,
+            input: input.clone(),
+            timeout_seconds: 30,
+            requested_by: Some(user),
+            idempotency_key: Some("scoped-a"),
+        })
+        .await
+        .unwrap();
+    let _exec_b = store
+        .create_execution(NewExecution {
+            org_id: org,
+            agent_id: agent_b.id,
+            agent_version_id: version_b.id,
+            agent_name: &agent_b.name,
+            runtime_kind: RuntimeKind::Mock,
+            trigger_source: TriggerSource::Manual,
+            placement: "auto",
+            trigger_id: None,
+            input,
+            timeout_seconds: 30,
+            requested_by: Some(user),
+            idempotency_key: Some("scoped-b"),
+        })
+        .await
+        .unwrap();
+
+    let claimed = store
+        .claim_next_queued("scoped-worker", &["mock".into()], "local", &[agent_a.id])
+        .await
+        .unwrap()
+        .expect("agent A execution should be claimable");
+    assert_eq!(claimed.id, exec_a.id);
+
+    let profile = store
+        .create_worker_profile(
+            org,
+            "Scoped Pi",
+            "pi",
+            "docker",
+            "process",
+            "orbit-worker-pi",
+            "0.3.0",
+            &[agent_a.id],
+            &["issue-triage".into()],
+            Some("opencode-go"),
+            Some("deepseek-v4-pro"),
+            Some("orbit-pi-auth"),
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(profile.agent_ids, vec![agent_a.id]);
+    assert_eq!(profile.skill_slugs, vec!["issue-triage"]);
+    assert!(!store
+        .set_worker_profile_enabled(org, profile.id, false)
+        .await
+        .unwrap()
+        .enabled);
+    store.delete_worker_profile(org, profile.id).await.unwrap();
 }

@@ -268,6 +268,7 @@ fn demo_definition(
                 ],
             },
             connectors,
+            skills: vec![],
             triggers,
             autonomy: AutonomySpec {
                 level: autonomy_level,

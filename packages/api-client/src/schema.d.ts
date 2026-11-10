@@ -487,6 +487,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_skills"];
+        put?: never;
+        post: operations["create_skill"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/skills/{skill_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_skill"];
+        put?: never;
+        post?: never;
+        delete: operations["delete_skill"];
+        options?: never;
+        head?: never;
+        patch: operations["update_skill"];
+        trace?: never;
+    };
     "/api/v1/triggers": {
         parameters: {
             query?: never;
@@ -549,6 +581,86 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["update_user_role"];
+        trace?: never;
+    };
+    "/api/v1/worker-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_profiles"];
+        put?: never;
+        post: operations["create_profile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/worker-profiles/{profile_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_profile"];
+        put?: never;
+        post?: never;
+        delete: operations["delete_profile"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/worker-profiles/{profile_id}/bootstrap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["bootstrap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/worker-profiles/{profile_id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["disable_profile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/worker-profiles/{profile_id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["enable_profile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/workers": {
@@ -727,6 +839,8 @@ export interface components {
             model?: components["schemas"]["ModelSpec"];
             resources?: components["schemas"]["ResourceLimits"];
             runtime: components["schemas"]["RuntimeSpec"];
+            /** @description Slugs from the organization's skill library to materialize in the workspace. */
+            skills?: string[];
             triggers?: components["schemas"]["TriggerSpec"][];
         };
         /**
@@ -963,12 +1077,34 @@ export interface components {
             kind: string;
             name: string;
         };
+        CreateSkillRequest: {
+            content: string;
+            description?: string;
+            files?: unknown;
+            name: string;
+            slug: string;
+        };
         CreateTriggerRequest: {
             /** Format: uuid */
             agentId: string;
             config?: unknown;
             enabled?: boolean | null;
             kind: string;
+        };
+        CreateWorkerProfileRequest: {
+            agentIds?: string[];
+            authSecretName?: string | null;
+            env?: unknown;
+            executionDriver?: string;
+            image?: string;
+            imageTag?: string;
+            model?: string | null;
+            name: string;
+            provider?: string | null;
+            resources?: unknown;
+            runtimeKind: string;
+            skillSlugs?: string[];
+            target?: string;
         };
         CreatedApiToken: {
             /** Format: date-time */
@@ -1298,6 +1434,23 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        Skill: {
+            content: string;
+            /** Format: date-time */
+            createdAt: string;
+            description: string;
+            files: unknown;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: uuid */
+            orgId: string;
+            slug: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: int32 */
+            version: number;
+        };
         Trigger: {
             /** Format: uuid */
             agentId: string;
@@ -1349,6 +1502,12 @@ export interface components {
             enabled?: boolean | null;
             name?: string | null;
         };
+        UpdateSkillRequest: {
+            content?: string | null;
+            description?: string | null;
+            files?: unknown;
+            name?: string | null;
+        };
         UpdateTriggerRequest: {
             enabled?: boolean | null;
         };
@@ -1374,6 +1533,36 @@ export interface components {
         ValidationIssue: {
             message: string;
             path: string;
+        };
+        WorkerBootstrap: {
+            compose: string;
+            docker: string;
+            kubernetes: string;
+            notes: string[];
+        };
+        WorkerProfile: {
+            agentIds: string[];
+            authSecretName?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            enabled: boolean;
+            env: unknown;
+            executionDriver: string;
+            /** Format: uuid */
+            id: string;
+            image: string;
+            imageTag: string;
+            model?: string | null;
+            name: string;
+            /** Format: uuid */
+            orgId: string;
+            provider?: string | null;
+            resources: unknown;
+            runtimeKind: string;
+            skillSlugs: string[];
+            target: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
         WorkerView: {
             hostname?: string | null;
@@ -2226,6 +2415,113 @@ export interface operations {
             };
         };
     };
+    list_skills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Skill"][];
+                };
+            };
+        };
+    };
+    create_skill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSkillRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Skill"];
+                };
+            };
+        };
+    };
+    get_skill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Skill"];
+                };
+            };
+        };
+    };
+    delete_skill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_skill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSkillRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Skill"];
+                };
+            };
+        };
+    };
     list_triggers: {
         parameters: {
             query?: {
@@ -2354,6 +2650,151 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["User"];
+                };
+            };
+        };
+    };
+    list_profiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerProfile"][];
+                };
+            };
+        };
+    };
+    create_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWorkerProfileRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerProfile"];
+                };
+            };
+        };
+    };
+    get_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerProfile"];
+                };
+            };
+        };
+    };
+    delete_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    bootstrap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerBootstrap"];
+                };
+            };
+        };
+    };
+    disable_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerProfile"];
+                };
+            };
+        };
+    };
+    enable_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerProfile"];
                 };
             };
         };

@@ -1,0 +1,119 @@
+use uuid::Uuid;
+
+use crate::models::WorkerProfile;
+use crate::{Store, StoreError, StoreResult};
+
+impl Store {
+    pub async fn list_worker_profiles(&self, org_id: Uuid) -> StoreResult<Vec<WorkerProfile>> {
+        Ok(sqlx::query_as::<_, WorkerProfile>(
+            "SELECT * FROM worker_profiles WHERE org_id = $1 ORDER BY name ASC",
+        )
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_worker_profile(
+        &self,
+        org_id: Uuid,
+        profile_id: Uuid,
+    ) -> StoreResult<WorkerProfile> {
+        sqlx::query_as::<_, WorkerProfile>(
+            "SELECT * FROM worker_profiles WHERE org_id = $1 AND id = $2",
+        )
+        .bind(org_id)
+        .bind(profile_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("worker profile".into()))
+    }
+
+    pub async fn get_worker_profile_by_id(&self, profile_id: Uuid) -> StoreResult<WorkerProfile> {
+        sqlx::query_as::<_, WorkerProfile>("SELECT * FROM worker_profiles WHERE id = $1")
+            .bind(profile_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| StoreError::NotFound("worker profile".into()))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_worker_profile(
+        &self,
+        org_id: Uuid,
+        name: &str,
+        runtime_kind: &str,
+        target: &str,
+        execution_driver: &str,
+        image: &str,
+        image_tag: &str,
+        agent_ids: &[Uuid],
+        skill_slugs: &[String],
+        provider: Option<&str>,
+        model: Option<&str>,
+        auth_secret_name: Option<&str>,
+        env: &serde_json::Value,
+        resources: &serde_json::Value,
+    ) -> StoreResult<WorkerProfile> {
+        sqlx::query_as::<_, WorkerProfile>(
+            r#"
+            INSERT INTO worker_profiles (id, org_id, name, runtime_kind, target, execution_driver,
+                image, image_tag, agent_ids, skill_slugs, provider, model, auth_secret_name, env, resources)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            RETURNING *
+            "#,
+        )
+        .bind(Uuid::now_v7())
+        .bind(org_id)
+        .bind(name)
+        .bind(runtime_kind)
+        .bind(target)
+        .bind(execution_driver)
+        .bind(image)
+        .bind(image_tag)
+        .bind(agent_ids)
+        .bind(skill_slugs)
+        .bind(provider)
+        .bind(model)
+        .bind(auth_secret_name)
+        .bind(env)
+        .bind(resources)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| {
+            if e.as_database_error().map(|d| d.is_unique_violation()).unwrap_or(false) {
+                StoreError::Conflict(format!("worker profile '{name}' already exists"))
+            } else {
+                e.into()
+            }
+        })
+    }
+
+    pub async fn set_worker_profile_enabled(
+        &self,
+        org_id: Uuid,
+        profile_id: Uuid,
+        enabled: bool,
+    ) -> StoreResult<WorkerProfile> {
+        sqlx::query_as::<_, WorkerProfile>(
+            "UPDATE worker_profiles SET enabled = $3, updated_at = now() WHERE org_id = $1 AND id = $2 RETURNING *",
+        )
+        .bind(org_id)
+        .bind(profile_id)
+        .bind(enabled)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("worker profile".into()))
+    }
+
+    pub async fn delete_worker_profile(&self, org_id: Uuid, profile_id: Uuid) -> StoreResult<()> {
+        let result = sqlx::query("DELETE FROM worker_profiles WHERE org_id = $1 AND id = $2")
+            .bind(org_id)
+            .bind(profile_id)
+            .execute(&self.pool)
+            .await?;
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound("worker profile".into()));
+        }
+        Ok(())
+    }
+}

@@ -5,11 +5,13 @@ import { usePathname } from "next/navigation";
 import {
   Activity,
   Bot,
+  BookOpen,
   Boxes,
   Cable,
   Cpu,
   LayoutDashboard,
   Plus,
+  Server,
   Settings,
   ShieldCheck,
 } from "lucide-react";
@@ -27,6 +29,8 @@ const NAV = [
   { href: "/connections", label: "Connections", icon: Cable },
   { href: "/runtimes", label: "Runtimes", icon: Cpu },
   { href: "/models", label: "Models", icon: Boxes },
+  { href: "/skills", label: "Skills", icon: BookOpen },
+  { href: "/workers", label: "Workers", icon: Server },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

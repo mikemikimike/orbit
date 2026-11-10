@@ -21,6 +21,8 @@ import type {
   AgentInstanceView,
   ApprovalWithExecution,
   WorkerView,
+  Skill,
+  WorkerProfile,
 } from "./types";
 
 export function unwrap<T>(result: {
@@ -54,6 +56,8 @@ export const queryKeys = {
   instances: ["agent-instances"] as const,
   approvals: (status?: string) => ["approvals", status ?? "all"] as const,
   workers: ["workers"] as const,
+  skills: ["skills"] as const,
+  workerProfiles: ["worker-profiles"] as const,
 };
 
 export function useMeta() {
@@ -232,6 +236,20 @@ export function useWorkers() {
     queryKey: queryKeys.workers,
     queryFn: async () => unwrap(await api.GET("/api/v1/workers")),
     refetchInterval: 10_000,
+  });
+}
+
+export function useSkills() {
+  return useQuery<Skill[]>({
+    queryKey: queryKeys.skills,
+    queryFn: async () => unwrap(await api.GET("/api/v1/skills")),
+  });
+}
+
+export function useWorkerProfiles() {
+  return useQuery<WorkerProfile[]>({
+    queryKey: queryKeys.workerProfiles,
+    queryFn: async () => unwrap(await api.GET("/api/v1/worker-profiles")),
   });
 }
 

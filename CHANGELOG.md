@@ -53,6 +53,36 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - X connector call returns a clear 401 with an invalid token (real API request path).
 - Existing mock-runtime smoke test and SSE through ingress continue to pass.
 
+## [0.3.0] — skills, worker profiles and Pi runtime
+
+### Added
+- **Skills library**: org-scoped `SKILL.md` packages with supporting files, versioning,
+  CRUD API/UI and audit. Attach skills to agents in Agent Studio.
+- Worker materializes attached + profile-level skills into `.pi/skills/<slug>` and
+  `.opencode/skills/<slug>` before execution.
+- **Worker profiles**: pin runtime, image/tag, target, execution driver, one or more
+  agents, shared skills, provider/model metadata and an external auth secret reference.
+  Workers load `ORBIT_WORKER_PROFILE_ID`, claim only their agent allowlist and materialize
+  profile skills.
+- Bootstrap generator in the UI/API (`/worker-profiles/{id}/bootstrap`) for Docker,
+  Compose and Kubernetes output, including runtime auth mount guidance.
+- **Pi runtime adapter** tested against Pi 1.5.0: headless JSON, sessions, read-only tools
+  at L1/L2, cancellation/timeout and `.pi/mcp.json` broker bridge generation.
+- Pi worker image (`worker-pi.Dockerfile`, Node 22 + Pi 1.5.0) and `make worker-pi` host
+  runner.
+- `GET /api/v1/workers` and Active workers UI; queued-execution diagnostics.
+
+### Changed
+- Version 0.3.0.
+- Skills are validated (slug, required SKILL.md, safe relative files) before persistence.
+
+### Known limitations
+- Pi worker Helm Deployment and Pi ↔ broker MCP parity are not yet verified end-to-end.
+- Worker profile output is a starting manifest; it does not yet launch containers from
+  the control plane.
+- OpenCode skill discovery depends on its project skill directory; verify per runtime
+  version. Agent presets/runtime-native subagents remain runtime-config JSON.
+
 ## [0.2.1] — explicit placement and queued-execution diagnostics
 
 ### Added

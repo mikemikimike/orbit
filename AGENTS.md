@@ -98,7 +98,7 @@ helm template orbit deploy/helm/orbit -f deploy/helm/orbit/values.yaml
 | 0 | Foundation, contracts, DB, API, worker, docs, containers, Helm | Complete (deployed and smoke-tested on microk8s at http://orbit.mdk.local) |
 | 1 | Agent CRUD/Studio, OpenCode adapter verified, executions | OpenCode execution verified against v2.2.5; platform-provider mapping still open |
 | 2 | Connectors invocation, Telegram/GitLab, webhooks, approvals, Claude Code | GitHub read + approvals + broker done; writes need live E2E; other connectors pending |
-| 3 | Long-running agents, Pi, memory, scheduling hardening | Reaper/heartbeats and Docker per-execution done; K8s Jobs/service mode pending |
+| 3 | Long-running agents, Pi, memory, scheduling hardening | Pi + skills + worker profiles done; K8s Jobs/service mode pending |
 | 4 | Enterprise RBAC, shared connections, quotas, marketplace | Not started |
 
 ## Adding a runtime

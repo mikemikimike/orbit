@@ -395,6 +395,14 @@ impl Store {
                 }
             }
         }
+        for (idx, skill_slug) in definition.spec.skills.iter().enumerate() {
+            if self.get_skill_by_slug(org_id, skill_slug).await?.is_none() {
+                report.push(
+                    format!("spec.skills[{idx}]"),
+                    format!("unknown skill '{skill_slug}'"),
+                );
+            }
+        }
         if definition.spec.model.management == orbit_domain::ModelManagement::Platform {
             if let Some(provider_name) = &definition.spec.model.provider {
                 if self

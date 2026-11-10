@@ -5,7 +5,9 @@ pub mod catalog;
 pub mod dashboard;
 pub mod executions;
 pub mod health;
+pub mod skills;
 pub mod triggers;
+pub mod worker_profiles;
 
 use uuid::Uuid;
 

@@ -96,6 +96,38 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/runtimes", get(handlers::catalog::list_runtimes))
         .route("/api/v1/workers", get(handlers::catalog::list_workers))
         .route(
+            "/api/v1/skills",
+            get(handlers::skills::list_skills).post(handlers::skills::create_skill),
+        )
+        .route(
+            "/api/v1/skills/{skill_id}",
+            get(handlers::skills::get_skill)
+                .patch(handlers::skills::update_skill)
+                .delete(handlers::skills::delete_skill),
+        )
+        .route(
+            "/api/v1/worker-profiles",
+            get(handlers::worker_profiles::list_profiles)
+                .post(handlers::worker_profiles::create_profile),
+        )
+        .route(
+            "/api/v1/worker-profiles/{profile_id}",
+            get(handlers::worker_profiles::get_profile)
+                .delete(handlers::worker_profiles::delete_profile),
+        )
+        .route(
+            "/api/v1/worker-profiles/{profile_id}/enable",
+            post(handlers::worker_profiles::enable_profile),
+        )
+        .route(
+            "/api/v1/worker-profiles/{profile_id}/disable",
+            post(handlers::worker_profiles::disable_profile),
+        )
+        .route(
+            "/api/v1/worker-profiles/{profile_id}/bootstrap",
+            get(handlers::worker_profiles::bootstrap),
+        )
+        .route(
             "/api/v1/providers",
             get(handlers::catalog::list_providers).post(handlers::catalog::create_provider),
         )

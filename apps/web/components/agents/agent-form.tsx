@@ -23,7 +23,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ImplementationBadge } from "@/components/ui/status-badge";
-import { useConnections, useConnectors, useProviders, useRuntimes } from "@/lib/queries";
+import { useConnections, useConnectors, useProviders, useRuntimes, useSkills } from "@/lib/queries";
 import type { AgentDefinition } from "@orbit/contracts";
 import {
   AUTONOMY_LEVELS,
@@ -52,6 +52,7 @@ export function AgentForm({
   const providers = useProviders();
   const connectors = useConnectors();
   const connections = useConnections();
+  const skills = useSkills();
 
   const [definition, setDefinition] = useState<AgentDefinition>(() =>
     initial ? structuredClone(initial) : emptyAgentDefinition(),
@@ -618,6 +619,52 @@ export function AgentForm({
                   </div>
                 );
               })}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-4 w-4 text-primary" /> Skills
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className={helpClass}>
+                Skills are materialized into the workspace before execution
+                (<code className="font-mono">.pi/skills</code> /{" "}
+                <code className="font-mono">.opencode/skills</code>).
+              </p>
+              {(skills.data ?? []).length === 0 ? (
+                <p className="text-[11px] text-muted-foreground">
+                  No skills yet. Create them under Skills.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {(skills.data ?? []).map((skill) => (
+                    <label
+                      key={skill.id}
+                      className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-xs"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{skill.name}</span>
+                        <span className="block truncate text-[10px] text-muted-foreground">
+                          {skill.description || skill.slug}
+                        </span>
+                      </span>
+                      <Switch
+                        checked={definition.spec.skills.includes(skill.slug)}
+                        onCheckedChange={(checked) =>
+                          updateSpec({
+                            skills: checked
+                              ? [...definition.spec.skills, skill.slug]
+                              : definition.spec.skills.filter((slug) => slug !== skill.slug),
+                          })
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 

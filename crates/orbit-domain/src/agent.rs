@@ -42,6 +42,9 @@ pub struct AgentSpec {
     pub instructions: Instructions,
     #[serde(default)]
     pub connectors: Vec<ConnectorBinding>,
+    /// Slugs from the organization's skill library to materialize in the workspace.
+    #[serde(default)]
+    pub skills: Vec<String>,
     #[serde(default)]
     pub triggers: Vec<TriggerSpec>,
     #[serde(default)]
@@ -419,6 +422,20 @@ impl AgentSpec {
             }
         }
 
+        // Skills
+        let mut seen_skills = std::collections::BTreeSet::new();
+        if self.skills.len() > 30 {
+            report.push("spec.skills", "at most 30 skills per agent");
+        }
+        for (idx, skill) in self.skills.iter().enumerate() {
+            if !is_valid_slug(skill) {
+                report.push(format!("spec.skills[{idx}]"), "invalid skill slug");
+            }
+            if !seen_skills.insert(skill.clone()) {
+                report.push(format!("spec.skills[{idx}]"), "duplicate skill");
+            }
+        }
+
         // Connectors
         let mut seen = std::collections::BTreeSet::new();
         for (idx, binding) in self.connectors.iter().enumerate() {
@@ -541,6 +558,7 @@ mod tests {
                 constraints: vec![],
             },
             connectors: vec![],
+            skills: vec![],
             triggers: vec![],
             autonomy: AutonomySpec::default(),
             resources: ResourceLimits::default(),

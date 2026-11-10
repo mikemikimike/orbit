@@ -6,6 +6,7 @@ mod liveness;
 mod resolver;
 mod runner;
 mod scheduler;
+mod skills;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -32,6 +33,7 @@ pub struct WorkerConfig {
     pub stale_after: Duration,
     pub execution_driver: String,
     pub target: String,
+    pub profile_id: Option<uuid::Uuid>,
 }
 
 impl WorkerConfig {
@@ -87,6 +89,9 @@ impl WorkerConfig {
             execution_driver: std::env::var("ORBIT_EXECUTION_DRIVER")
                 .unwrap_or_else(|_| "process".into()),
             target: std::env::var("ORBIT_WORKER_TARGET").unwrap_or_else(|_| "local".into()),
+            profile_id: std::env::var("ORBIT_WORKER_PROFILE_ID")
+                .ok()
+                .and_then(|value| uuid::Uuid::parse_str(&value).ok()),
         })
     }
 }
@@ -159,15 +164,51 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
+    let default_org = store
+        .first_organization()
+        .await?
+        .map(|org| org.id)
+        .context("organization disappeared during startup")?;
+
+    let mut runtimes = config.runtimes.clone();
+    let mut target = config.target.clone();
+    let mut execution_driver = config.execution_driver.clone();
+    let mut profile_agent_ids = Vec::new();
+    let mut profile_skill_slugs = Vec::new();
+    let mut profile_org_id = default_org;
+    if let Some(profile_id) = config.profile_id {
+        let profile = store.get_worker_profile_by_id(profile_id).await?;
+        if !profile.enabled {
+            anyhow::bail!("worker profile '{}' is disabled", profile.name);
+        }
+        runtimes = vec![profile.runtime_kind.clone()];
+        target = profile.target.clone();
+        execution_driver = profile.execution_driver.clone();
+        profile_agent_ids = profile.agent_ids.clone();
+        profile_skill_slugs = profile.skill_slugs.clone();
+        profile_org_id = profile.org_id;
+        tracing::info!(
+            profile = %profile.name,
+            runtime = %profile.runtime_kind,
+            target = %profile.target,
+            agents = profile.agent_ids.len(),
+            skills = profile.skill_slugs.len(),
+            "worker profile loaded"
+        );
+    }
+
     let state = runner::WorkerState {
         worker_id: config.worker_id.clone(),
         store: store.clone(),
         bus: bus.clone(),
         registry: registry.clone(),
         workspace_root: std::path::PathBuf::from(&config.workspace_root),
-        runtimes: config.runtimes.clone(),
-        execution_driver: config.execution_driver.clone(),
-        target: config.target.clone(),
+        runtimes,
+        execution_driver,
+        target,
+        profile_org_id,
+        profile_agent_ids,
+        profile_skill_slugs,
         active: Arc::new(tokio::sync::Mutex::new(std::collections::BTreeMap::new())),
     };
 
@@ -175,7 +216,7 @@ async fn main() -> anyhow::Result<()> {
         worker_id = %config.worker_id,
         concurrency = config.concurrency,
         scheduler = config.scheduler_enabled,
-        runtimes = ?config.runtimes,
+        runtimes = ?state.runtimes,
         events_driver = %bus_config.driver,
         "ORBIT worker started"
     );
