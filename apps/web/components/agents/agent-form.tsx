@@ -233,12 +233,12 @@ export function AgentForm({
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Braces className="h-4 w-4 text-primary" /> Runtime &amp; model
+                <Braces className="h-4 w-4 text-primary" /> Harness &amp; model
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className={fieldClass}>
-                <Label>Runtime</Label>
+                <Label>Harness</Label>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {(runtimes.data ?? []).map((runtime) => {
                     const active = definition.spec.runtime.type === runtime.kind;
@@ -327,7 +327,7 @@ export function AgentForm({
                       Long running (later phase)
                     </option>
                   </select>
-                  <p className={helpClass}>Runtimes are created per execution until long-running support lands.</p>
+                  <p className={helpClass}>Harnesses are created per execution until long-running support lands.</p>
                 </div>
                 <div className={fieldClass}>
                   <Label>Model management</Label>

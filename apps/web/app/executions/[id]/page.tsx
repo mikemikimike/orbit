@@ -211,7 +211,7 @@ export default function ExecutionDetailPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <InfoTile label="Trigger" value={titleCase(execution.triggerSource)} icon={<Cpu className="h-3.5 w-3.5" />} />
-        <InfoTile label="Runtime" value={titleCase(execution.runtimeKind)} icon={<Terminal className="h-3.5 w-3.5" />} />
+        <InfoTile label="Harness" value={titleCase(execution.runtimeKind)} icon={<Terminal className="h-3.5 w-3.5" />} />
         <InfoTile
           label="Duration"
           value={formatDuration(execution.startedAt, execution.finishedAt)}

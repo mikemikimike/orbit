@@ -199,7 +199,7 @@ export default function ModelsPage() {
     <div className="space-y-5 animate-fade-in">
       <PageHeader
         eyebrow="Model layer"
-        title="Models &amp; providers"
+        title="Providers &amp; models"
         description="Configure OpenAI-compatible endpoints or runtime-managed providers. Credentials are encrypted at rest and never returned by the API."
         actions={
           <Button onClick={openCreate}>
@@ -334,7 +334,7 @@ export default function ModelsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Kind</Label>
+                <Label>Provider type</Label>
                 <select
                   className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm disabled:opacity-60"
                   value={form.kind}
@@ -364,7 +364,7 @@ export default function ModelsPage() {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5 sm:col-span-1">
-                    <Label>Model ID</Label>
+                    <Label>Default model</Label>
                     <Input
                       value={form.model}
                       placeholder="qwen3-coder"

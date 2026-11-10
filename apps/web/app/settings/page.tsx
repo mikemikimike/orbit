@@ -186,8 +186,8 @@ export default function SettingsPage() {
         />
         <ShortcutCard
           href="/runtimes"
-          title="Runtimes"
-          description="Capabilities and adapter status"
+          title="Harnesses"
+          description="Capabilities and harness status"
           icon={<Cpu className="h-4 w-4" />}
         />
         <ShortcutCard

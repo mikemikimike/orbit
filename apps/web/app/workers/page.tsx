@@ -223,7 +223,7 @@ export default function WorkersPage() {
               <Input value={name} onChange={(event) => setName(event.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label>Runtime</Label>
+              <Label>Harness</Label>
               <select
                 className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
                 value={runtime}

@@ -219,10 +219,10 @@ export default function AgentDetailPage() {
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Runtime</CardTitle>
+                  <CardTitle>Harness</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  <Row label="Type" value={titleCase(spec.runtime.type)} />
+                  <Row label="Harness" value={titleCase(spec.runtime.type)} />
                   <Row label="Mode" value={titleCase(spec.runtime.executionMode)} />
                   <Row label="Placement" value={titleCase(spec.runtime.placement)} />
                   <Row

@@ -660,10 +660,12 @@ async fn skills_profiles_and_agent_scoped_claims() {
         .unwrap();
     assert_eq!(profile.agent_ids, vec![agent_a.id]);
     assert_eq!(profile.skill_slugs, vec!["issue-triage"]);
-    assert!(!store
-        .set_worker_profile_enabled(org, profile.id, false)
-        .await
-        .unwrap()
-        .enabled);
+    assert!(
+        !store
+            .set_worker_profile_enabled(org, profile.id, false)
+            .await
+            .unwrap()
+            .enabled
+    );
     store.delete_worker_profile(org, profile.id).await.unwrap();
 }

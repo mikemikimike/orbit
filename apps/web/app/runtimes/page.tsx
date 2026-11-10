@@ -21,8 +21,8 @@ export default function RuntimesPage() {
     <div className="space-y-5 animate-fade-in">
       <PageHeader
         eyebrow="Execution plane"
-        title="Runtimes"
-        description="Runtime adapters available to the worker. Capabilities are advertised by the adapter, not assumed by the UI."
+        title="Harnesses"
+        description="Harness adapters available to the worker. Capabilities are advertised by the adapter, not assumed by the UI."
       />
 
       <Card className="border-primary/20 bg-primary/5">
@@ -49,7 +49,7 @@ export default function RuntimesPage() {
       ) : runtimes.isError ? (
         <p className="text-sm text-destructive">{errorMessage(runtimes.error)}</p>
       ) : !runtimes.data?.length ? (
-        <EmptyState icon={<Cpu className="h-6 w-6" />} title="No runtimes registered" />
+        <EmptyState icon={<Cpu className="h-6 w-6" />} title="No harnesses registered" />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {runtimes.data.map((runtime) => {
