@@ -22,8 +22,8 @@ AGENT_JSON=$(cat <<'JSON'
   "kind": "Agent",
   "metadata": { "name": "Smoke Test Agent", "description": "created by scripts/smoke-k8s.sh" },
   "spec": {
-    "runtime": { "type": "mock", "executionMode": "on_demand", "config": {} },
-    "model": { "management": "runtime" },
+    "harness": { "type": "mock", "executionMode": "on_demand", "config": {} },
+    "model": { "management": "harness" },
     "instructions": { "system": "You are a smoke test agent. Summarize the input." },
     "connectors": [],
     "triggers": [],

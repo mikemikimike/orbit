@@ -53,6 +53,30 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - X connector call returns a clear 401 with an invalid token (real API request path).
 - Existing mock-runtime smoke test and SSE through ingress continue to pass.
 
+## [0.4.0] — Harness rename
+
+### Changed (breaking)
+- Renamed the agent-framework concept from **runtime** to **harness** across domain,
+  database, API, worker, profiles, UI and docs.
+- DB: `runtimes` → `harnesses`, `runtime_kind` → `harness_kind`, `runtime_id` →
+  `harness_id`, `worker_heartbeats.runtimes` → `harnesses`; agent specs
+  `spec.runtime` → `spec.harness`; provider kind `runtime_managed` →
+  `harness_managed`.
+- API: `/api/v1/harnesses` (was `/runtimes`); `runtime`/`runtimeKind` →
+  `harness`/`harnessKind`; permission `harnesses:read`; regenerated TypeScript client.
+- Env: `ORBIT_WORKER_HARNESSES`, `ORBIT_EXECUTION_IMAGE_<HARNESS>`; worker profile field
+  `harnessKind`.
+- UI: Harnesses and Providers navigation; Agent Studio "Harness & model".
+
+### Added
+- ADR-0008 defining harness/worker/sandbox/provider/model terminology and the
+  worker-token + launcher design.
+
+### Known limitations
+- Worker token/API mode and the UI launcher are the next milestone; workers still use
+  the database in 0.4.0.
+- Worker bootstrap output still uses DB/NATS/master key until that API exists.
+
 ## [0.3.0] — skills, worker profiles and Pi runtime
 
 ### Added

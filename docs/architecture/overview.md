@@ -2,7 +2,7 @@
 
 ORBIT is a self-hosted control plane for creating, connecting, deploying and governing
 persistent AI agents. It is **not** an agent framework: agent reasoning happens in
-dedicated runtime processes (OpenCode, Claude Code, Pi, custom) behind a stable adapter
+dedicated harness processes (OpenCode, Claude Code, Pi, custom) behind a stable adapter
 contract.
 
 ## 1. Layers
@@ -16,23 +16,23 @@ contract.
 ┌───────────────┴──────────────────────────────────────────────────────┐
 │ B. Control Plane                                                     │
 │    orbit-api (axum)  ── authn/z, agents, executions, policies, audit  │
-│    orbit-worker      ── event routing, runtime dispatch, tracking     │
+│    orbit-worker      ── event routing, harness dispatch, tracking     │
 │    PostgreSQL        ── durable state                                 │
 │    NATS JetStream    ── durable events (dev: in-memory bus)           │
 └───────────────▲──────────────────────────────────────────────────────┘
-                │ RuntimeAdapter contract (crates/orbit-contracts)
+                │ HarnessAdapter contract (crates/orbit-contracts)
 ┌───────────────┴──────────────────────────────────────────────────────┐
 │ C. Execution Plane                                                   │
-│    Isolated runtime workers / containers / Kubernetes Jobs            │
+│    Isolated harness workers / containers / Kubernetes Jobs            │
 │    opencode · claude-code · pi · generic · mock                       │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
 The control plane never embeds an agent loop. The worker owns adapter instances; in
-local development the mock runtime runs in-process in `orbit-worker`, and production
-runtimes are launched as isolated containers/Jobs (`RuntimeDispatcher`).
+local development the mock harness runs in-process in `orbit-worker`, and production
+harnesses are launched as isolated containers/Jobs (`HarnessDispatcher`).
 
-## 2. Runtime topology (MVP)
+## 2. Harness topology (MVP)
 
 | Component | Local (Compose) | Kubernetes (Helm) |
 |---|---|---|
@@ -41,23 +41,23 @@ runtimes are launched as isolated containers/Jobs (`RuntimeDispatcher`).
 | web | container, port 3000 | Deployment + Service + Ingress |
 | PostgreSQL | container | external or bundled (opt-in) |
 | NATS JetStream | container | external or bundled (opt-in) |
-| Runtime processes | mock in worker; OpenCode via subprocess sandbox | Jobs/Pods via dispatcher |
+| Harness processes | mock in worker; OpenCode via subprocess sandbox | Jobs/Pods via dispatcher |
 
 ## 3. Module boundaries (Rust workspace)
 
 | Crate | Responsibility |
 |---|---|
 | `orbit-domain` | Pure domain types, agent spec, validation, autonomy policy, state machines |
-| `orbit-contracts` | Cross-boundary contracts: runtime adapter, provider, connector, events |
+| `orbit-contracts` | Cross-boundary contracts: harness adapter, provider, connector, events |
 | `orbit-store` | PostgreSQL repositories, migrations, transactions |
 | `orbit-events` | `EventBus` abstraction, in-memory and NATS JetStream drivers |
 | `orbit-security` | Auth context, token hashing, OIDC validation, `SecretStore`, AES-GCM |
-| `orbit-runtime` | Runtime registry and adapters (mock implemented, opencode scaffold) |
+| `orbit-harness` | Harness registry and adapters (mock implemented, opencode scaffold) |
 | `orbit-api` | HTTP router, handlers, OpenAPI document, SSE |
 | `services/api` | Control-plane binary |
 | `services/worker` | Execution-plane supervisor binary |
 
-Dependency rule: `domain` ← everything; `contracts` ← `runtime`, `api`, `worker`;
+Dependency rule: `domain` ← everything; `contracts` ← `harness`, `api`, `worker`;
 `store` ← `api`, `worker`. Adapters never depend on `orbit-api` or `orbit-store`.
 
 ## 4. Request & execution flow
@@ -68,7 +68,7 @@ Manual execution:
 2. A row in `executions` is inserted with status `queued` and an idempotency key.
 3. `orbit.execution.requested` is published on the event bus.
 4. The worker claims the execution (`queued → dispatched`, compare-and-set), resolves
-   the runtime adapter, creates/resumes a session and streams events.
+   the harness adapter, creates/resumes a session and streams events.
 5. Events are persisted in `execution_events`; execution status transitions are
    persisted and published as `orbit.execution.updated`.
 6. The frontend stream (`GET /api/v1/executions/{id}/events/stream`) replays persisted
@@ -81,7 +81,7 @@ PostgreSQL (`processed_events`, unique `idempotency_key`), not in memory.
 ## 5. Isolation & security
 
 - Agent tasks are **never** executed inside `orbit-api`.
-- Adapters receive a constrained `RuntimeExecutionContext` (timeout, CPU/memory,
+- Adapters receive a constrained `HarnessExecutionContext` (timeout, CPU/memory,
   network policy, filesystem policy, injected secret handles — never raw secrets in
   prompts or logs).
 - Autonomy is enforced by the platform before dispatch and at capability invocation
@@ -90,15 +90,15 @@ PostgreSQL (`processed_events`, unique `idempotency_key`), not in memory.
   capabilities.
 - All secret material is encrypted at rest (AES-256-GCM, `ORBIT_MASTER_KEY`) and is
   never returned by the API. `SecretStore` is pluggable (Vault later).
-- External content is untrusted: runtime input is wrapped with provenance metadata and
+- External content is untrusted: harness input is wrapped with provenance metadata and
   trusted system instructions are transported separately.
 
 ## 6. Extensibility
 
-- **New runtime** → implement `RuntimeAdapter` in `crates/orbit-runtime`, register it in
+- **New harness** → implement `HarnessAdapter` in `crates/orbit-harness`, register it in
   the registry; no domain/API changes.
 - **New provider kind** → add a `ProviderKind` variant with a config struct and
-  capability set; runtime adapters translate it to their own provider format.
+  capability set; harness adapters translate it to their own provider format.
 - **New connector** → implement the connector trait (Phase 2) and register capabilities;
   API and UI read the registry.
 - **New infrastructure** → Compose and Helm consume the same env-var contract.
@@ -115,5 +115,5 @@ Expo/React Native client can share `packages/api-client` and `packages/contracts
 - Structured JSON logs (`tracing`) with request IDs and trace IDs.
 - `GET /healthz` (liveness) and `GET /readyz` (DB + event bus readiness).
 - `GET /metrics` Prometheus text endpoint (Phase 0: core counters; OTel export seam).
-- Execution events carry `execution_id`, `agent_id`, `runtime`, and timestamps for
+- Execution events carry `execution_id`, `agent_id`, `harness`, and timestamps for
   correlation across control and execution planes.

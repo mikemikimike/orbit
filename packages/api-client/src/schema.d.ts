@@ -374,6 +374,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/harnesses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_harnesses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -465,22 +481,6 @@ export interface paths {
         put?: never;
         /** Probe an OpenAI-compatible endpoint by listing models. */
         post: operations["probe_provider"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/runtimes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["list_runtimes"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -796,6 +796,9 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             deploymentTarget: string;
+            /** Format: uuid */
+            harnessId: string;
+            harnessRef?: string | null;
             health: unknown;
             /** Format: uuid */
             id: string;
@@ -804,9 +807,6 @@ export interface components {
             name: string;
             /** Format: uuid */
             orgId: string;
-            /** Format: uuid */
-            runtimeId: string;
-            runtimeRef?: string | null;
             state: string;
             /** Format: date-time */
             updatedAt: string;
@@ -834,11 +834,11 @@ export interface components {
         AgentSpec: {
             autonomy?: components["schemas"]["AutonomySpec"];
             connectors?: components["schemas"]["ConnectorBinding"][];
+            harness: components["schemas"]["HarnessSpec"];
             instructions: components["schemas"]["Instructions"];
             memory?: components["schemas"]["MemorySpec"];
             model?: components["schemas"]["ModelSpec"];
             resources?: components["schemas"]["ResourceLimits"];
-            runtime: components["schemas"]["RuntimeSpec"];
             /** @description Slugs from the organization's skill library to materialize in the workspace. */
             skills?: string[];
             triggers?: components["schemas"]["TriggerSpec"][];
@@ -857,12 +857,12 @@ export interface components {
             /** Format: int32 */
             currentVersion: number;
             description: string;
+            harness?: string | null;
             /** Format: uuid */
             id: string;
             labels: unknown;
             model?: string | null;
             name: string;
-            runtime?: string | null;
             slug: string;
             status: string;
             /** Format: date-time */
@@ -1096,13 +1096,13 @@ export interface components {
             authSecretName?: string | null;
             env?: unknown;
             executionDriver?: string;
+            harnessKind: string;
             image?: string;
             imageTag?: string;
             model?: string | null;
             name: string;
             provider?: string | null;
             resources?: unknown;
-            runtimeKind: string;
             skillSlugs?: string[];
             target?: string;
         };
@@ -1193,6 +1193,7 @@ export interface components {
             error?: unknown;
             /** Format: date-time */
             finishedAt?: string | null;
+            harnessKind: string;
             /** Format: uuid */
             id: string;
             idempotencyKey?: string | null;
@@ -1203,7 +1204,6 @@ export interface components {
             placement: string;
             /** Format: uuid */
             requestedBy?: string | null;
-            runtimeKind: string;
             sessionRef?: string | null;
             /** Format: date-time */
             startedAt?: string | null;
@@ -1223,6 +1223,77 @@ export interface components {
          * @enum {string}
          */
         ExecutionStatus: "queued" | "dispatched" | "running" | "awaiting_approval" | "succeeded" | "failed" | "timed_out" | "cancelled" | "rejected";
+        /**
+         * @description Capabilities a harness advertises. The UI and dispatch logic must branch on these,
+         *     never on a hardcoded harness name.
+         */
+        HarnessCapabilities: {
+            executionModes: components["schemas"]["ExecutionMode"][];
+            /** @description The harness owns its provider inventory and credentials (OpenCode Go, Claude Code). */
+            harnessManagedProviders: boolean;
+            /** Format: int32 */
+            maxMemoryMb: number;
+            /** Format: int64 */
+            maxTimeoutSeconds: number;
+            supportsCancel: boolean;
+            supportsInstances: boolean;
+            /** @description Harnesses that can consume a provider configured by ORBIT. */
+            supportsPlatformProviders: boolean;
+            supportsResume: boolean;
+            supportsSessions: boolean;
+            supportsStreaming: boolean;
+            supportsToolEvents: boolean;
+            supportsUsageReporting: boolean;
+        };
+        /** @description Static description of a harness family, exposed through `GET /api/v1/harnesses`. */
+        HarnessDescriptor: {
+            capabilities: components["schemas"]["HarnessCapabilities"];
+            configSchema: unknown;
+            description: string;
+            docsUrl?: string | null;
+            implementationStatus: components["schemas"]["ImplementationStatus"];
+            kind: components["schemas"]["HarnessKind"];
+            name: string;
+        };
+        HarnessHealthView: {
+            message?: string | null;
+            /** Format: date-time */
+            reportedAt?: string | null;
+            /** @description `unknown` in Phase 0: harness health is reported by workers in a later phase. */
+            status: string;
+        };
+        /**
+         * @description Agent harness families ORBIT can orchestrate.
+         *
+         *     The enumeration is intentionally small and lives in the domain so that the API and
+         *     UI can reason about harnesses without depending on adapter crates. New harnesses can be
+         *     added here plus a registered `HarnessAdapter`; no other domain changes are required.
+         * @enum {string}
+         */
+        HarnessKind: "mock" | "opencode" | "claude_code" | "pi" | "generic";
+        HarnessSpec: {
+            /** @description Harness-specific configuration. Validated by the adapter, opaque to the core. */
+            config?: unknown;
+            executionMode?: components["schemas"]["ExecutionMode"];
+            /** @description Where the agent may execute. `auto` lets any matching worker claim it. */
+            placement?: components["schemas"]["PlacementTarget"];
+            type: components["schemas"]["HarnessKind"];
+        };
+        HarnessView: {
+            capabilities: unknown;
+            config: unknown;
+            description: string;
+            descriptor: components["schemas"]["HarnessDescriptor"];
+            enabled: boolean;
+            health: components["schemas"]["HarnessHealthView"];
+            /** Format: uuid */
+            id: string;
+            implementationStatus: string;
+            kind: string;
+            name: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
         /** @enum {string} */
         ImplementationStatus: "available" | "scaffolded" | "planned";
         Instructions: {
@@ -1252,8 +1323,8 @@ export interface components {
             apiTokens: boolean;
             approvals: boolean;
             connectorsInvocation: boolean;
+            harnessExecution: boolean;
             oidc: boolean;
-            runtimeExecution: boolean;
             scheduledTriggers: boolean;
             webhookTriggers: boolean;
         };
@@ -1266,7 +1337,7 @@ export interface components {
             version: string;
         };
         /** @enum {string} */
-        ModelManagement: "runtime" | "platform";
+        ModelManagement: "harness" | "platform";
         ModelSpec: {
             management?: components["schemas"]["ModelManagement"];
             model?: string | null;
@@ -1327,7 +1398,7 @@ export interface components {
          *     modules are unaffected.
          * @enum {string}
          */
-        ProviderKind: "open_ai_compatible" | "runtime_managed";
+        ProviderKind: "open_ai_compatible" | "harness_managed";
         ProviderProbeResponse: {
             error?: string | null;
             /** Format: int64 */
@@ -1349,7 +1420,7 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
-        /** @description Limits enforced by the platform and honoured by runtime isolation. */
+        /** @description Limits enforced by the platform and honoured by harness isolation. */
         ResourceLimits: {
             /** Format: int32 */
             cpuMillis?: number;
@@ -1362,77 +1433,6 @@ export interface components {
             network?: null | components["schemas"]["NetworkPolicy"];
             /** Format: int64 */
             timeoutSeconds?: number;
-        };
-        /**
-         * @description Capabilities a runtime advertises. The UI and dispatch logic must branch on these,
-         *     never on a hardcoded runtime name.
-         */
-        RuntimeCapabilities: {
-            executionModes: components["schemas"]["ExecutionMode"][];
-            /** Format: int32 */
-            maxMemoryMb: number;
-            /** Format: int64 */
-            maxTimeoutSeconds: number;
-            /** @description The runtime owns its provider inventory and credentials (OpenCode Go, Claude Code). */
-            runtimeManagedProviders: boolean;
-            supportsCancel: boolean;
-            supportsInstances: boolean;
-            /** @description Runtimes that can consume a provider configured by ORBIT. */
-            supportsPlatformProviders: boolean;
-            supportsResume: boolean;
-            supportsSessions: boolean;
-            supportsStreaming: boolean;
-            supportsToolEvents: boolean;
-            supportsUsageReporting: boolean;
-        };
-        /** @description Static description of a runtime family, exposed through `GET /api/v1/runtimes`. */
-        RuntimeDescriptor: {
-            capabilities: components["schemas"]["RuntimeCapabilities"];
-            configSchema: unknown;
-            description: string;
-            docsUrl?: string | null;
-            implementationStatus: components["schemas"]["ImplementationStatus"];
-            kind: components["schemas"]["RuntimeKind"];
-            name: string;
-        };
-        RuntimeHealthView: {
-            message?: string | null;
-            /** Format: date-time */
-            reportedAt?: string | null;
-            /** @description `unknown` in Phase 0: runtime health is reported by workers in a later phase. */
-            status: string;
-        };
-        /**
-         * @description Agent runtime families ORBIT can orchestrate.
-         *
-         *     The enumeration is intentionally small and lives in the domain so that the API and
-         *     UI can reason about runtimes without depending on adapter crates. New runtimes can be
-         *     added here plus a registered `RuntimeAdapter`; no other domain changes are required.
-         * @enum {string}
-         */
-        RuntimeKind: "mock" | "opencode" | "claude_code" | "pi" | "generic";
-        RuntimeSpec: {
-            /** @description Runtime-specific configuration. Validated by the adapter, opaque to the core. */
-            config?: unknown;
-            executionMode?: components["schemas"]["ExecutionMode"];
-            /** @description Where the agent may execute. `auto` lets any matching worker claim it. */
-            placement?: components["schemas"]["PlacementTarget"];
-            type: components["schemas"]["RuntimeKind"];
-        };
-        RuntimeView: {
-            capabilities: unknown;
-            config: unknown;
-            description: string;
-            descriptor: components["schemas"]["RuntimeDescriptor"];
-            enabled: boolean;
-            health: components["schemas"]["RuntimeHealthView"];
-            /** Format: uuid */
-            id: string;
-            implementationStatus: string;
-            kind: string;
-            name: string;
-            /** Format: date-time */
-            updatedAt: string;
         };
         Skill: {
             content: string;
@@ -1548,6 +1548,7 @@ export interface components {
             enabled: boolean;
             env: unknown;
             executionDriver: string;
+            harnessKind: string;
             /** Format: uuid */
             id: string;
             image: string;
@@ -1558,18 +1559,17 @@ export interface components {
             orgId: string;
             provider?: string | null;
             resources: unknown;
-            runtimeKind: string;
             skillSlugs: string[];
             target: string;
             /** Format: date-time */
             updatedAt: string;
         };
         WorkerView: {
+            harnesses: string[];
             hostname?: string | null;
             /** Format: date-time */
             lastHeartbeatAt: string;
             live: boolean;
-            runtimes: string[];
             /** Format: date-time */
             startedAt: string;
             target: string;
@@ -2232,6 +2232,25 @@ export interface operations {
             };
         };
     };
+    list_harnesses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessView"][];
+                };
+            };
+        };
+    };
     me: {
         parameters: {
             query?: never;
@@ -2392,25 +2411,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderProbeResponse"];
-                };
-            };
-        };
-    };
-    list_runtimes: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RuntimeView"][];
                 };
             };
         };

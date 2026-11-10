@@ -27,7 +27,7 @@ const NAV = [
   { href: "/executions", label: "Executions", icon: Activity },
   { href: "/approvals", label: "Approvals", icon: ShieldCheck },
   { href: "/connections", label: "Connections", icon: Cable },
-  { href: "/runtimes", label: "Harnesses", icon: Cpu },
+  { href: "/harnesses", label: "Harnesses", icon: Cpu },
   { href: "/models", label: "Providers", icon: Boxes },
   { href: "/skills", label: "Skills", icon: BookOpen },
   { href: "/workers", label: "Workers", icon: Server },
@@ -105,7 +105,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="rounded-lg bg-muted/60 p-3">
             <p className="text-xs font-medium">Self-hosted</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Your agents, runtimes and credentials stay in your infrastructure.
+              Your agents, harnesses and credentials stay in your infrastructure.
             </p>
           </div>
         </div>

@@ -33,7 +33,7 @@ export default function AgentsPage() {
       <PageHeader
         eyebrow="Agent registry"
         title="Agents"
-        description="Persistent agent definitions with instructions, runtimes, connectors, triggers and autonomy."
+        description="Persistent agent definitions with instructions, harnesses, connectors, triggers and autonomy."
         actions={
           <Button asChild>
             <Link href="/agents/new">
@@ -99,7 +99,7 @@ export default function AgentsPage() {
         <EmptyState
           icon={<Bot className="h-7 w-7" />}
           title={query || status ? "No agents match this filter" : "No agents yet"}
-          description="Create an agent with instructions, a runtime, a model and optional connectors. You can test it as a draft."
+          description="Create an agent with instructions, a harness, a model and optional connectors. You can test it as a draft."
           action={
             <Button asChild>
               <Link href="/agents/new">

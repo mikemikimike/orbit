@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use orbit_api::{build_router, initialize, telemetry, ApiConfig, AppState};
 use orbit_events::{connect as connect_bus, EventBusConfig};
-use orbit_runtime::RuntimeRegistry;
+use orbit_harness::HarnessRegistry;
 use orbit_security::{JwtValidator, SecretCipher};
 use orbit_store::Store;
 use tokio::net::TcpListener;
@@ -36,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
     let bus = connect_bus(&bus_config)
         .await
         .context("could not connect to the event bus")?;
-    let registry = Arc::new(RuntimeRegistry::builtin());
+    let registry = Arc::new(HarnessRegistry::builtin());
 
     let initialized = initialize(&store, &registry, &config, bus.as_ref())
         .await

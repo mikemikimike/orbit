@@ -1,6 +1,6 @@
 [package]
 name = "orbit-mcp-broker"
-description = "MCP stdio bridge from agent runtimes to the ORBIT policy-enforcing tool broker"
+description = "MCP stdio bridge from agent harnesses to the ORBIT policy-enforcing tool broker"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

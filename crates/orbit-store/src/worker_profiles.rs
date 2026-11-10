@@ -41,7 +41,7 @@ impl Store {
         &self,
         org_id: Uuid,
         name: &str,
-        runtime_kind: &str,
+        harness_kind: &str,
         target: &str,
         execution_driver: &str,
         image: &str,
@@ -56,7 +56,7 @@ impl Store {
     ) -> StoreResult<WorkerProfile> {
         sqlx::query_as::<_, WorkerProfile>(
             r#"
-            INSERT INTO worker_profiles (id, org_id, name, runtime_kind, target, execution_driver,
+            INSERT INTO worker_profiles (id, org_id, name, harness_kind, target, execution_driver,
                 image, image_tag, agent_ids, skill_slugs, provider, model, auth_secret_name, env, resources)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             RETURNING *
@@ -65,7 +65,7 @@ impl Store {
         .bind(Uuid::now_v7())
         .bind(org_id)
         .bind(name)
-        .bind(runtime_kind)
+        .bind(harness_kind)
         .bind(target)
         .bind(execution_driver)
         .bind(image)

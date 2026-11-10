@@ -5,10 +5,10 @@ This file is the operating manual for AI coding agents and human contributors.
 ## What ORBIT is (and is not)
 
 ORBIT is a self-hosted **control plane** for persistent AI agents. It manages agent
-definitions, runtimes, model providers, connectors, triggers, executions and policy.
+definitions, harnesses, model providers, connectors, triggers, executions and policy.
 
 - ORBIT is **not** an agent framework and must not implement an agent reasoning loop.
-- Agent execution belongs to runtime adapters running in the **execution plane**
+- Agent execution belongs to harness adapters running in the **execution plane**
   (`orbit-worker` and, later, isolated containers/Jobs).
 - `orbit-api` must never execute agent tasks.
 
@@ -21,11 +21,11 @@ packages/contracts/    Zod schemas shared by web and future mobile app
 services/api/          orbit-api binary (control plane HTTP)
 services/worker/       orbit-worker binary (execution plane supervisor)
 crates/orbit-domain/   Pure domain types + validation + autonomy policy
-crates/orbit-contracts/ Runtime/provider/connector/event contracts (traits + DTOs)
+crates/orbit-contracts/ Harness/provider/connector/event contracts (traits + DTOs)
 crates/orbit-store/    PostgreSQL repositories + SQL migrations
 crates/orbit-events/   Event bus (memory + NATS JetStream)
 crates/orbit-security/ Auth abstractions, permissions, secret encryption
-crates/orbit-runtime/  Runtime registry + adapters (mock implemented, opencode scaffolded)
+crates/orbit-harness/  Harness registry + adapters (mock implemented, opencode scaffolded)
 crates/orbit-api/      HTTP router, handlers, OpenAPI, SSE
 deploy/                Compose, Docker files, Helm chart, seed data
 docs/                  Architecture, ADRs, development and deployment docs
@@ -83,7 +83,7 @@ helm template orbit deploy/helm/orbit -f deploy/helm/orbit/values.yaml
 5. **Durable state lives in PostgreSQL.** The event bus is an accelerator, not the source
    of truth. Any bus loss must be recoverable by polling/replay.
 6. **Honesty about integrations.** An adapter is only "available" after integration tests
-   against the real runtime. `mock` is available; `opencode` is scaffolded; Claude Code,
+   against the real harness. `mock` is available; `opencode` is scaffolded; Claude Code,
    Pi and generic are planned. Keep `ImplementationStatus` accurate.
 7. **Migrations are append-only.** Never edit an applied migration; add a new one.
 8. **UI must be responsive and mobile-first.** No desktop-only tables as the primary
@@ -101,15 +101,15 @@ helm template orbit deploy/helm/orbit -f deploy/helm/orbit/values.yaml
 | 3 | Long-running agents, Pi, memory, scheduling hardening | Pi + skills + worker profiles done; K8s Jobs/service mode pending |
 | 4 | Enterprise RBAC, shared connections, quotas, marketplace | Not started |
 
-## Adding a runtime
+## Adding a harness
 
-1. Add/extend `RuntimeKind` only if a new family is required.
-2. Implement `RuntimeAdapter` in `crates/orbit-runtime/src/<name>.rs`.
-3. Add a descriptor with accurate `RuntimeCapabilities` and `ImplementationStatus`.
-4. Register it in `RuntimeRegistry::builtin()`.
-5. Pass `orbit_runtime::testing::assert_adapter_contract` in `crates/orbit-runtime/tests`.
-6. Add a compliance test against the real runtime binary/container and document the
-   tested version in `docs/architecture/runtime-contract.md`.
+1. Add/extend `HarnessKind` only if a new family is required.
+2. Implement `HarnessAdapter` in `crates/orbit-harness/src/<name>.rs`.
+3. Add a descriptor with accurate `HarnessCapabilities` and `ImplementationStatus`.
+4. Register it in `HarnessRegistry::builtin()`.
+5. Pass `orbit_harness::testing::assert_adapter_contract` in `crates/orbit-harness/tests`.
+6. Add a compliance test against the real harness binary/container and document the
+   tested version in `docs/architecture/harness-contract.md`.
 7. Never hardcode provider names or model inventories.
 
 ## Adding a provider kind
@@ -133,7 +133,7 @@ helm template orbit deploy/helm/orbit -f deploy/helm/orbit/values.yaml
 - Domain rule change → unit tests in `crates/orbit-domain`.
 - Store/schema change → migration + integration tests in `crates/orbit-store/tests`.
 - API change → handler tests in `crates/orbit-api/tests` + regenerated OpenAPI client.
-- Runtime change → contract tests + real-runtime integration evidence.
+- Harness change → contract tests + real-harness integration evidence.
 - UI change → `pnpm typecheck` + `pnpm build`; keep pages usable at 360px width.
 
 ## Local requirements

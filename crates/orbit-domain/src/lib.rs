@@ -1,7 +1,7 @@
 //! ORBIT domain model.
 //!
 //! This crate is pure: no I/O, no database, no HTTP. It owns the vocabulary shared by
-//! the control plane, runtime adapters and the generated API contract.
+//! the control plane, harness adapters and the generated API contract.
 
 pub mod agent;
 pub mod autonomy;
@@ -9,7 +9,7 @@ pub mod error;
 pub mod execution;
 pub mod ids;
 pub mod pagination;
-pub mod runtime_kind;
+pub mod harness_kind;
 
 pub use agent::*;
 pub use autonomy::*;
@@ -17,7 +17,7 @@ pub use error::*;
 pub use execution::*;
 pub use ids::*;
 pub use pagination::*;
-pub use runtime_kind::*;
+pub use harness_kind::*;
 
 /// Definition API version accepted by this build.
 pub const AGENT_API_VERSION: &str = "orbit.io/v1";

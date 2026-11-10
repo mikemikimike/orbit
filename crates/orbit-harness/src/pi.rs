@@ -9,24 +9,24 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
 use orbit_contracts::{
-    CreateInstanceRequest, ExecutionOutcome, ExecutionRequest, RuntimeAdapter, RuntimeCapabilities,
-    RuntimeConfig, RuntimeDescriptor, RuntimeError, RuntimeErrorKind, RuntimeEvent,
-    RuntimeEventKind, RuntimeHealth, RuntimeInstance, RuntimeInstanceRef, RuntimeInstanceStatus,
+    CreateInstanceRequest, ExecutionOutcome, ExecutionRequest, HarnessAdapter, HarnessCapabilities,
+    HarnessConfig, HarnessDescriptor, HarnessError, HarnessErrorKind, HarnessEvent,
+    HarnessEventKind, HarnessHealth, HarnessInstance, HarnessInstanceRef, HarnessInstanceStatus,
 };
 use orbit_domain::{
-    AutonomyLevel, ExecutionMode, ExecutionStatus, ImplementationStatus, LogLevel, RuntimeKind,
+    AutonomyLevel, ExecutionMode, ExecutionStatus, ImplementationStatus, LogLevel, HarnessKind,
     Usage, ValidationReport,
 };
 
-/// Pi runtime adapter.
+/// Pi harness adapter.
 ///
 /// Executes `pi --print --mode json` in a per-execution workspace, maps Pi's JSONL session
-/// events to ORBIT runtime events, captures the session id and applies a platform tool
+/// events to ORBIT harness events, captures the session id and applies a platform tool
 /// allowlist: autonomy levels 1–2 are read-only (no shell/edit/write).
 ///
 /// Tested against Pi **1.5.0** (see `tests/pi_e2e.rs`).
 #[derive(Debug, Clone, Default)]
-pub struct PiRuntimeAdapter;
+pub struct PiHarnessAdapter;
 
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
@@ -54,20 +54,20 @@ pub struct PiMcpBridge {
 }
 
 impl PiSettings {
-    pub fn from_config(config: &RuntimeConfig) -> Result<Self, RuntimeError> {
-        if config.kind != RuntimeKind::Pi {
-            return Err(RuntimeError::new(
-                RuntimeErrorKind::InvalidConfig,
-                "Pi adapter received a non-Pi runtime configuration",
+    pub fn from_config(config: &HarnessConfig) -> Result<Self, HarnessError> {
+        if config.kind != HarnessKind::Pi {
+            return Err(HarnessError::new(
+                HarnessErrorKind::InvalidConfig,
+                "Pi adapter received a non-Pi harness configuration",
             ));
         }
         if config.settings.is_null() {
             return Ok(Self::default());
         }
         serde_json::from_value(config.settings.clone()).map_err(|e| {
-            RuntimeError::new(
-                RuntimeErrorKind::InvalidConfig,
-                format!("invalid Pi runtime config: {e}"),
+            HarnessError::new(
+                HarnessErrorKind::InvalidConfig,
+                format!("invalid Pi harness config: {e}"),
             )
         })
     }
@@ -90,7 +90,7 @@ impl PiSettings {
         }
         let selection = request?.selection.clone();
         match selection {
-            orbit_contracts::ModelSelection::Runtime { provider, model } => {
+            orbit_contracts::ModelSelection::Harness { provider, model } => {
                 match (provider, model) {
                     (Some(provider), Some(model)) if !model.contains('/') => {
                         Some(format!("{provider}/{model}"))
@@ -152,15 +152,15 @@ impl PiSettings {
     }
 }
 
-impl PiRuntimeAdapter {
-    pub fn descriptor() -> RuntimeDescriptor {
-        RuntimeDescriptor {
-            kind: RuntimeKind::Pi,
+impl PiHarnessAdapter {
+    pub fn descriptor() -> HarnessDescriptor {
+        HarnessDescriptor {
+            kind: HarnessKind::Pi,
             name: "Pi".into(),
             description:
-                "Pi coding-agent runtime (headless JSON mode) with sessions, skills and platform-enforced read-only tools at low autonomy. Tested against Pi 1.5.0."
+                "Pi coding-agent harness (headless JSON mode) with sessions, skills and platform-enforced read-only tools at low autonomy. Tested against Pi 1.5.0."
                     .into(),
-            capabilities: RuntimeCapabilities {
+            capabilities: HarnessCapabilities {
                 supports_sessions: true,
                 supports_resume: true,
                 supports_streaming: true,
@@ -168,7 +168,7 @@ impl PiRuntimeAdapter {
                 supports_instances: false,
                 supports_tool_events: true,
                 supports_usage_reporting: true,
-                runtime_managed_providers: true,
+                harness_managed_providers: true,
                 supports_platform_providers: false,
                 execution_modes: vec![ExecutionMode::OnDemand],
                 max_timeout_seconds: 86_400,
@@ -192,7 +192,7 @@ impl PiRuntimeAdapter {
         }
     }
 
-    pub async fn probe(&self, settings: &PiSettings) -> Result<String, RuntimeError> {
+    pub async fn probe(&self, settings: &PiSettings) -> Result<String, HarnessError> {
         let candidate = settings.binary();
         let mut command = Command::new(candidate);
         command.arg("--version");
@@ -200,16 +200,16 @@ impl PiRuntimeAdapter {
         command.stderr(Stdio::piped());
         let output = tokio::time::timeout(Duration::from_secs(8), command.output())
             .await
-            .map_err(|_| RuntimeError::unavailable("pi --version timed out"))?
+            .map_err(|_| HarnessError::unavailable("pi --version timed out"))?
             .map_err(|e| {
-                RuntimeError::new(
-                    RuntimeErrorKind::Unavailable,
+                HarnessError::new(
+                    HarnessErrorKind::Unavailable,
                     format!("pi binary '{candidate}' is not available: {e}"),
                 )
             })?;
         if !output.status.success() {
-            return Err(RuntimeError::new(
-                RuntimeErrorKind::Unavailable,
+            return Err(HarnessError::new(
+                HarnessErrorKind::Unavailable,
                 format!(
                     "pi --version exited with {}: {}",
                     output.status,
@@ -289,7 +289,7 @@ fn truncate(value: &str, limit: usize) -> String {
     }
 }
 
-fn map_event(value: &Value, usage: &mut Usage, text: String) -> (Option<RuntimeEvent>, String) {
+fn map_event(value: &Value, usage: &mut Usage, text: String) -> (Option<HarnessEvent>, String) {
     match value.get("type").and_then(Value::as_str) {
         Some("message_update") => {
             let Some(inner) = value.get("assistantMessageEvent") else {
@@ -302,8 +302,8 @@ fn map_event(value: &Value, usage: &mut Usage, text: String) -> (Option<RuntimeE
                         (None, text)
                     } else {
                         (
-                            Some(RuntimeEvent::new(
-                                RuntimeEventKind::OutputDelta,
+                            Some(HarnessEvent::new(
+                                HarnessEventKind::OutputDelta,
                                 LogLevel::Debug,
                                 truncate(delta, 8_000),
                             )),
@@ -320,8 +320,8 @@ fn map_event(value: &Value, usage: &mut Usage, text: String) -> (Option<RuntimeE
                         .and_then(Value::as_str)
                         .unwrap_or("tool");
                     let interesting = tool.contains("github") || tool.contains("orbit");
-                    let mut event = RuntimeEvent::new(
-                        RuntimeEventKind::ToolCall,
+                    let mut event = HarnessEvent::new(
+                        HarnessEventKind::ToolCall,
                         if interesting {
                             LogLevel::Info
                         } else {
@@ -341,8 +341,8 @@ fn map_event(value: &Value, usage: &mut Usage, text: String) -> (Option<RuntimeE
                         .and_then(Value::as_str)
                         .unwrap_or("error");
                     (
-                        Some(RuntimeEvent::new(
-                            RuntimeEventKind::Error,
+                        Some(HarnessEvent::new(
+                            HarnessEventKind::Error,
                             LogLevel::Error,
                             reason.to_string(),
                         )),
@@ -389,8 +389,8 @@ fn map_event(value: &Value, usage: &mut Usage, text: String) -> (Option<RuntimeE
                     .and_then(Value::as_str)
                     .unwrap_or("Pi reported an error");
                 return (
-                    Some(RuntimeEvent::new(
-                        RuntimeEventKind::Error,
+                    Some(HarnessEvent::new(
+                        HarnessEventKind::Error,
                         LogLevel::Error,
                         error.to_string(),
                     )),
@@ -403,7 +403,7 @@ fn map_event(value: &Value, usage: &mut Usage, text: String) -> (Option<RuntimeE
     }
 }
 
-async fn emit(sender: &Option<tokio::sync::mpsc::Sender<RuntimeEvent>>, event: RuntimeEvent) {
+async fn emit(sender: &Option<tokio::sync::mpsc::Sender<HarnessEvent>>, event: HarnessEvent) {
     if let Some(sender) = sender {
         let _ = sender.send(event).await;
     }
@@ -421,17 +421,17 @@ fn terminate(child: &mut tokio::process::Child) {
     let _ = child.start_kill();
 }
 
-impl PiRuntimeAdapter {
+impl PiHarnessAdapter {
     async fn run_pi(
         &self,
         request: ExecutionRequest,
         settings: PiSettings,
         session_ref: Option<String>,
-    ) -> Result<ExecutionOutcome, RuntimeError> {
+    ) -> Result<ExecutionOutcome, HarnessError> {
         let workspace = PathBuf::from(&request.workspace.root);
         tokio::fs::create_dir_all(&workspace).await.map_err(|e| {
-            RuntimeError::new(
-                RuntimeErrorKind::Internal,
+            HarnessError::new(
+                HarnessErrorKind::Internal,
                 format!("could not create workspace {}: {e}", workspace.display()),
             )
         })?;
@@ -440,16 +440,16 @@ impl PiRuntimeAdapter {
             _ => workspace.join(".pi-sessions"),
         };
         tokio::fs::create_dir_all(&session_dir).await.map_err(|e| {
-            RuntimeError::new(
-                RuntimeErrorKind::Internal,
+            HarnessError::new(
+                HarnessErrorKind::Internal,
                 format!("could not create Pi session dir: {e}"),
             )
         })?;
 
         if let Some(bridge) = &settings.orbit_mcp {
             write_pi_mcp_config(&workspace, bridge).map_err(|e| {
-                RuntimeError::new(
-                    RuntimeErrorKind::Internal,
+                HarnessError::new(
+                    HarnessErrorKind::Internal,
                     format!("could not write .pi/mcp.json: {e}"),
                 )
             })?;
@@ -480,8 +480,8 @@ impl PiRuntimeAdapter {
             command.as_std_mut().process_group(0);
         }
         let mut child = command.spawn().map_err(|e| {
-            RuntimeError::new(
-                RuntimeErrorKind::Unavailable,
+            HarnessError::new(
+                HarnessErrorKind::Unavailable,
                 format!(
                     "could not start Pi binary '{}': {e}. The worker image must include Pi.",
                     settings.binary()
@@ -489,10 +489,10 @@ impl PiRuntimeAdapter {
             )
         })?;
         let stdout = child.stdout.take().ok_or_else(|| {
-            RuntimeError::new(RuntimeErrorKind::Internal, "pi stdout unavailable")
+            HarnessError::new(HarnessErrorKind::Internal, "pi stdout unavailable")
         })?;
         let stderr = child.stderr.take().ok_or_else(|| {
-            RuntimeError::new(RuntimeErrorKind::Internal, "pi stderr unavailable")
+            HarnessError::new(HarnessErrorKind::Internal, "pi stderr unavailable")
         })?;
 
         let stderr_buffer = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
@@ -513,7 +513,7 @@ impl PiRuntimeAdapter {
                     if debug_logs {
                         if let Some(sender) = &stderr_events {
                             let _ = sender
-                                .send(RuntimeEvent::log(LogLevel::Debug, format!("pi: {line}")))
+                                .send(HarnessEvent::log(LogLevel::Debug, format!("pi: {line}")))
                                 .await;
                         }
                     }
@@ -568,29 +568,29 @@ impl PiRuntimeAdapter {
             }
         }
         let status = child.wait().await.map_err(|e| {
-            RuntimeError::new(RuntimeErrorKind::Internal, format!("pi wait failed: {e}"))
+            HarnessError::new(HarnessErrorKind::Internal, format!("pi wait failed: {e}"))
         })?;
         let _ = tokio::time::timeout(Duration::from_secs(2), stderr_task).await;
         usage.wall_time_ms = Some(started.elapsed().as_millis() as i64);
         usage.cpu_millis = usage.wall_time_ms;
 
         if cancelled {
-            let mut outcome = ExecutionOutcome::failed(RuntimeError::cancelled());
+            let mut outcome = ExecutionOutcome::failed(HarnessError::cancelled());
             outcome.status = ExecutionStatus::Cancelled;
             outcome.session_ref = session;
             outcome.usage = usage;
             return Ok(outcome);
         }
         if timed_out {
-            let mut outcome = ExecutionOutcome::failed(RuntimeError::timeout(timeout.as_secs()));
+            let mut outcome = ExecutionOutcome::failed(HarnessError::timeout(timeout.as_secs()));
             outcome.status = ExecutionStatus::TimedOut;
             outcome.session_ref = session;
             outcome.usage = usage;
             return Ok(outcome);
         }
         if let Some(message) = error {
-            let mut outcome = ExecutionOutcome::failed(RuntimeError::new(
-                RuntimeErrorKind::ExecutionFailed,
+            let mut outcome = ExecutionOutcome::failed(HarnessError::new(
+                HarnessErrorKind::ExecutionFailed,
                 message,
             ));
             outcome.status = ExecutionStatus::Failed;
@@ -600,8 +600,8 @@ impl PiRuntimeAdapter {
         }
         if !status.success() {
             let stderr = stderr_buffer.lock().expect("stderr lock").clone();
-            let mut outcome = ExecutionOutcome::failed(RuntimeError::new(
-                RuntimeErrorKind::ExecutionFailed,
+            let mut outcome = ExecutionOutcome::failed(HarnessError::new(
+                HarnessErrorKind::ExecutionFailed,
                 format!(
                     "pi exited with {}: {}",
                     status
@@ -620,7 +620,7 @@ impl PiRuntimeAdapter {
         let output = json!({
             "text": text.trim(),
             "sessionRef": session,
-            "runtime": "pi",
+            "harness": "pi",
             "wallTimeMs": usage.wall_time_ms,
         });
         let mut outcome = ExecutionOutcome::succeeded(output, session);
@@ -630,15 +630,15 @@ impl PiRuntimeAdapter {
 }
 
 #[async_trait]
-impl RuntimeAdapter for PiRuntimeAdapter {
-    fn kind(&self) -> RuntimeKind {
-        RuntimeKind::Pi
+impl HarnessAdapter for PiHarnessAdapter {
+    fn kind(&self) -> HarnessKind {
+        HarnessKind::Pi
     }
-    fn descriptor(&self) -> RuntimeDescriptor {
+    fn descriptor(&self) -> HarnessDescriptor {
         Self::descriptor()
     }
 
-    async fn validate_config(&self, config: &RuntimeConfig) -> ValidationReport {
+    async fn validate_config(&self, config: &HarnessConfig) -> ValidationReport {
         let mut report = ValidationReport::default();
         match PiSettings::from_config(config) {
             Ok(settings) => {
@@ -665,46 +665,46 @@ impl RuntimeAdapter for PiRuntimeAdapter {
         report
     }
 
-    async fn health(&self, config: &RuntimeConfig) -> Result<RuntimeHealth, RuntimeError> {
+    async fn health(&self, config: &HarnessConfig) -> Result<HarnessHealth, HarnessError> {
         let settings = PiSettings::from_config(config)?;
         match self.probe(&settings).await {
             Ok(version) => {
-                let mut health = RuntimeHealth::healthy();
+                let mut health = HarnessHealth::healthy();
                 health
                     .details
                     .insert("version".into(), version.trim().to_string());
                 Ok(health)
             }
-            Err(err) => Ok(RuntimeHealth::degraded(err.message)),
+            Err(err) => Ok(HarnessHealth::degraded(err.message)),
         }
     }
 
     async fn create_instance(
         &self,
         _request: CreateInstanceRequest,
-    ) -> Result<RuntimeInstance, RuntimeError> {
-        Err(RuntimeError::unsupported("long-running instances"))
+    ) -> Result<HarnessInstance, HarnessError> {
+        Err(HarnessError::unsupported("long-running instances"))
     }
-    async fn start_instance(&self, _instance: &RuntimeInstanceRef) -> Result<(), RuntimeError> {
-        Err(RuntimeError::unsupported("long-running instances"))
+    async fn start_instance(&self, _instance: &HarnessInstanceRef) -> Result<(), HarnessError> {
+        Err(HarnessError::unsupported("long-running instances"))
     }
-    async fn stop_instance(&self, _instance: &RuntimeInstanceRef) -> Result<(), RuntimeError> {
-        Err(RuntimeError::unsupported("long-running instances"))
+    async fn stop_instance(&self, _instance: &HarnessInstanceRef) -> Result<(), HarnessError> {
+        Err(HarnessError::unsupported("long-running instances"))
     }
-    async fn delete_instance(&self, _instance: &RuntimeInstanceRef) -> Result<(), RuntimeError> {
-        Err(RuntimeError::unsupported("long-running instances"))
+    async fn delete_instance(&self, _instance: &HarnessInstanceRef) -> Result<(), HarnessError> {
+        Err(HarnessError::unsupported("long-running instances"))
     }
     async fn instance_status(
         &self,
-        _instance: &RuntimeInstanceRef,
-    ) -> Result<RuntimeInstanceStatus, RuntimeError> {
-        Err(RuntimeError::unsupported("long-running instances"))
+        _instance: &HarnessInstanceRef,
+    ) -> Result<HarnessInstanceStatus, HarnessError> {
+        Err(HarnessError::unsupported("long-running instances"))
     }
 
-    async fn execute(&self, request: ExecutionRequest) -> Result<ExecutionOutcome, RuntimeError> {
-        let settings = PiSettings::from_config(&RuntimeConfig {
-            kind: RuntimeKind::Pi,
-            settings: request.runtime_config.clone(),
+    async fn execute(&self, request: ExecutionRequest) -> Result<ExecutionOutcome, HarnessError> {
+        let settings = PiSettings::from_config(&HarnessConfig {
+            kind: HarnessKind::Pi,
+            settings: request.harness_config.clone(),
         })?;
         self.probe(&settings).await?;
         let session = request.session.session_ref.clone();
@@ -714,10 +714,10 @@ impl RuntimeAdapter for PiRuntimeAdapter {
     async fn resume(
         &self,
         request: orbit_contracts::ResumeRequest,
-    ) -> Result<ExecutionOutcome, RuntimeError> {
-        let settings = PiSettings::from_config(&RuntimeConfig {
-            kind: RuntimeKind::Pi,
-            settings: request.runtime_config.clone(),
+    ) -> Result<ExecutionOutcome, HarnessError> {
+        let settings = PiSettings::from_config(&HarnessConfig {
+            kind: HarnessKind::Pi,
+            settings: request.harness_config.clone(),
         })?;
         self.probe(&settings).await?;
         let execution_request = ExecutionRequest {
@@ -734,7 +734,7 @@ impl RuntimeAdapter for PiRuntimeAdapter {
             grants: vec![],
             autonomy: AutonomyLevel::OBSERVE,
             resources: request.resources,
-            runtime_config: request.runtime_config,
+            harness_config: request.harness_config,
             session: orbit_contracts::SessionRequest {
                 session_ref: Some(request.session_ref.clone()),
                 mode: ExecutionMode::OnDemand,

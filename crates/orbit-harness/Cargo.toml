@@ -1,6 +1,6 @@
 [package]
-name = "orbit-runtime"
-description = "Runtime adapter registry and implementations"
+name = "orbit-harness"
+description = "Harness adapter registry and implementations"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

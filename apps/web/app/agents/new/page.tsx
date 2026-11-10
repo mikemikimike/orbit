@@ -37,7 +37,7 @@ export default function NewAgentPage() {
       <PageHeader
         eyebrow="Agent Studio"
         title="New agent"
-        description="Define identity, runtime, model and behaviour. Saving creates immutable version 1."
+        description="Define identity, harness, model and behaviour. Saving creates immutable version 1."
       />
       <AgentForm submitLabel="Create agent" submitting={submitting} onSubmit={handleSubmit} />
     </div>

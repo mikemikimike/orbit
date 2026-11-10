@@ -2,7 +2,7 @@
 
 ORBIT is a self-hosted **control plane** for creating, configuring, connecting, deploying
 and governing persistent AI agents. It is deliberately *not* another agent framework:
-agent reasoning runs in dedicated runtime processes behind a stable adapter contract,
+agent reasoning runs in dedicated harness processes behind a stable adapter contract,
 while ORBIT owns identity, configuration, orchestration, policy and history.
 
 ```
@@ -13,10 +13,10 @@ Browser / future mobile app
 │   agents · executions · providers · connectors · policy │
 │   PostgreSQL (durable state) · NATS JetStream (events)  │
 └───────▲────────────────────────────────────────────────┘
-        │ RuntimeAdapter contract
+        │ HarnessAdapter contract
 ┌───────▼────────────────────────────────────────────────┐
 │ Execution plane: orbit-worker                          │
-│   mock runtime (working) · opencode (scaffolded, Phase 1)│
+│   mock harness (working) · opencode (scaffolded, Phase 1)│
 │   claude_code / pi / generic (registered, planned)      │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -32,27 +32,27 @@ deployment topology): [`docs/architecture/diagram.md`](docs/architecture/diagram
 
 Phase 0 foundation is implemented and validated:
 
-- Rust workspace: domain, contracts, store, events, security, runtime adapters, HTTP API,
+- Rust workspace: domain, contracts, store, events, security, harness adapters, HTTP API,
   worker.
 - PostgreSQL schema with migrations (18 tables), encrypted secrets, audit trail.
 - Agent CRUD with immutable versions, import/export YAML, activation lifecycle.
 - Manual executions with idempotency, concurrency/rate limits, persisted events and live
   SSE streaming with replay.
-- Mock runtime executed **in the worker**, with cancellation and timeouts.
-- **OpenCode runtime executes real tasks** in a separate worker image, tested against
+- Mock harness executed **in the worker**, with cancellation and timeouts.
+- **OpenCode harness executes real tasks** in a separate worker image, tested against
   OpenCode v2.2.5: NDJSON event streaming, tool events, session capture, cancellation,
   usage tokens and `AGENTS.md` instruction isolation.
-- **X read connector**: X recent-search posts are hydrated into the runtime input as
+- **X read connector**: X recent-search posts are hydrated into the harness input as
   untrusted context (bearer token from an encrypted connection).
 - **GitHub read via the policy-enforcing tool broker** (OpenCode → MCP → broker → GitHub),
   verified end-to-end; write capabilities are approval-gated.
 - **Approvals UI**, worker heartbeats + orphaned-execution reaper, and opt-in
   **per-execution Docker containers** for local/single-user deployments.
-- Providers (custom OpenAI-compatible endpoints, runtime-managed), connectors,
+- Providers (custom OpenAI-compatible endpoints, harness-managed), connectors,
   connections, triggers, dashboard, API tokens, health/readiness/metrics, OpenAPI 3.1 +
   Swagger UI.
 - Next.js mobile-first web app (dashboard, Agent Studio, agent detail, executions with
-  live logs, runtimes, models, connections, settings) with PWA assets.
+  live logs, harnesses, models, connections, settings) with PWA assets.
 - Docker images (non-root, reproducible) and a Helm chart deployed and smoke-tested on a
   local Kubernetes cluster with ingress host `orbit.mdk.local`.
 
@@ -64,7 +64,7 @@ Not yet implemented — do not assume otherwise:
 - ORBIT platform provider → OpenCode provider mapping (use OpenCode-managed auth today).
 - Claude Code / Pi / generic adapters (registered descriptors only, fail closed).
 - Connector capability invocation, OAuth flows, webhook verification, approvals (Phase 2).
-- Container/Job-per-execution runtime isolation (Phase 1/3 hardening).
+- Container/Job-per-execution harness isolation (Phase 1/3 hardening).
 - Browser OIDC login flow (API-side JWT validation is implemented).
 
 See `CHANGELOG.md` for the detailed list and `docs/` for architecture and decisions.
@@ -81,14 +81,14 @@ docker compose -f deploy/compose/compose.yaml up --build
 - Postgres: `localhost:5432` (`orbit`/`orbit`, db `orbit`)
 - NATS: `localhost:4222`, monitoring `http://localhost:8222`
 
-The stack seeds demo agents (mock runtime). Open an agent → **Run agent** → watch the
+The stack seeds demo agents (mock harness). Open an agent → **Run agent** → watch the
 live execution timeline.
 
 ## OpenCode + X quick start
 
 1. In **Connections**, add an X connection with a bearer token and optional
    `config.query` (for example `{"query":"#ORBIT"}`), selecting `posts.search`.
-2. Create an agent with runtime **OpenCode**, a runtime-managed model
+2. Create an agent with harness **OpenCode**, a harness-managed model
    (`opencode-go/<model>`), and the X connector bound to that connection with
    `posts.search`.
 3. Run it with a task such as "Summarize recent X posts" and optionally
@@ -156,7 +156,7 @@ apps/web/                 Next.js web app (App Router, Tailwind, shadcn-style UI
 packages/api-client/      OpenAPI-generated typed client
 packages/contracts/       Shared Zod schemas (web + future Expo app)
 services/api|worker/      Rust binaries
-crates/orbit-*/           domain · contracts · store · events · security · runtime · api
+crates/orbit-*/           domain · contracts · store · events · security · harness · api
 deploy/docker/            Dockerfiles
 deploy/compose/           Local stacks
 deploy/helm/orbit/        Helm chart
@@ -169,7 +169,7 @@ docs/                     Architecture, ADRs, development and deployment guides
 - Provider/connector credentials are AES-256-GCM encrypted at rest with a master key
   (`ORBIT_MASTER_KEY`), write-only through the API, and never logged or serialized.
 - The control plane never executes agent tasks; execution belongs to the worker and,
-  in production, isolated runtime containers/Jobs.
+  in production, isolated harness containers/Jobs.
 - External content is untrusted: trusted system instructions are transported separately
   with provenance metadata.
 - Never commit real credentials; `.env` is ignored and the example key is development-only.
@@ -178,7 +178,7 @@ docs/                     Architecture, ADRs, development and deployment guides
 
 - `docs/architecture/overview.md` — layers, modules, flows
 - `docs/architecture/domain-model.md` — entities and invariants
-- `docs/architecture/runtime-contract.md` — adapter contract and implementation status
+- `docs/architecture/harness-contract.md` — adapter contract and implementation status
 - `docs/architecture/provider-connector-contract.md`
 - `docs/architecture/api.md` — REST/OpenAPI/SSE/auth conventions
 - `docs/architecture/events.md` — event bus, durability, triggers

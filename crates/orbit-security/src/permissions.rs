@@ -11,7 +11,7 @@ pub enum Permission {
     ExecutionsCreate,
     ExecutionsCancel,
     ApprovalsDecide,
-    RuntimesRead,
+    HarnessesRead,
     ProvidersRead,
     ProvidersWrite,
     ConnectionsRead,
@@ -32,7 +32,7 @@ impl Permission {
             Self::ExecutionsCreate => "executions:create",
             Self::ExecutionsCancel => "executions:cancel",
             Self::ApprovalsDecide => "approvals:decide",
-            Self::RuntimesRead => "runtimes:read",
+            Self::HarnessesRead => "harnesses:read",
             Self::ProvidersRead => "providers:read",
             Self::ProvidersWrite => "providers:write",
             Self::ConnectionsRead => "connections:read",
@@ -52,7 +52,7 @@ impl Permission {
                 permission,
                 AgentsRead
                     | ExecutionsRead
-                    | RuntimesRead
+                    | HarnessesRead
                     | ProvidersRead
                     | ConnectionsRead
                     | SettingsRead
@@ -65,7 +65,7 @@ impl Permission {
                     | ExecutionsRead
                     | ExecutionsCreate
                     | ExecutionsCancel
-                    | RuntimesRead
+                    | HarnessesRead
                     | ProvidersRead
                     | ConnectionsRead
                     | ConnectionsWrite
@@ -86,7 +86,7 @@ impl Permission {
             Permission::ExecutionsCreate,
             Permission::ExecutionsCancel,
             Permission::ApprovalsDecide,
-            Permission::RuntimesRead,
+            Permission::HarnessesRead,
             Permission::ProvidersRead,
             Permission::ProvidersWrite,
             Permission::ConnectionsRead,

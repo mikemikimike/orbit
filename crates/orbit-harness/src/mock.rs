@@ -2,25 +2,25 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use orbit_contracts::{
-    CreateInstanceRequest, ExecutionOutcome, ExecutionRequest, RuntimeAdapter, RuntimeCapabilities,
-    RuntimeConfig, RuntimeDescriptor, RuntimeError, RuntimeErrorKind, RuntimeEvent,
-    RuntimeEventKind, RuntimeHealth, RuntimeInstance, RuntimeInstanceRef, RuntimeInstanceStatus,
+    CreateInstanceRequest, ExecutionOutcome, ExecutionRequest, HarnessAdapter, HarnessCapabilities,
+    HarnessConfig, HarnessDescriptor, HarnessError, HarnessErrorKind, HarnessEvent,
+    HarnessEventKind, HarnessHealth, HarnessInstance, HarnessInstanceRef, HarnessInstanceStatus,
 };
 use orbit_domain::{
-    ExecutionMode, ExecutionStatus, ImplementationStatus, LogLevel, RuntimeKind, Usage,
+    ExecutionMode, ExecutionStatus, ImplementationStatus, LogLevel, HarnessKind, Usage,
     ValidationReport,
 };
 
-/// Deterministic, in-process runtime used for development, demos and contract tests.
+/// Deterministic, in-process harness used for development, demos and contract tests.
 ///
-/// It never executes untrusted code; it simulates a runtime so the full control-plane
+/// It never executes untrusted code; it simulates a harness so the full control-plane
 /// flow (queue → dispatch → events → terminal state) can be exercised without credentials.
 #[derive(Debug, Clone)]
-pub struct MockRuntimeAdapter {
+pub struct MockHarnessAdapter {
     pub step_delay: Duration,
 }
 
-impl Default for MockRuntimeAdapter {
+impl Default for MockHarnessAdapter {
     fn default() -> Self {
         Self {
             step_delay: Duration::from_millis(150),
@@ -28,15 +28,15 @@ impl Default for MockRuntimeAdapter {
     }
 }
 
-impl MockRuntimeAdapter {
-    pub fn descriptor() -> RuntimeDescriptor {
-        RuntimeDescriptor {
-            kind: RuntimeKind::Mock,
-            name: "Mock runtime".into(),
+impl MockHarnessAdapter {
+    pub fn descriptor() -> HarnessDescriptor {
+        HarnessDescriptor {
+            kind: HarnessKind::Mock,
+            name: "Mock harness".into(),
             description:
-                "Deterministic local runtime for development and testing. Does not call a model."
+                "Deterministic local harness for development and testing. Does not call a model."
                     .into(),
-            capabilities: RuntimeCapabilities {
+            capabilities: HarnessCapabilities {
                 supports_sessions: true,
                 supports_resume: true,
                 supports_streaming: true,
@@ -44,7 +44,7 @@ impl MockRuntimeAdapter {
                 supports_instances: false,
                 supports_tool_events: true,
                 supports_usage_reporting: true,
-                runtime_managed_providers: false,
+                harness_managed_providers: false,
                 supports_platform_providers: true,
                 execution_modes: vec![ExecutionMode::OnDemand],
                 max_timeout_seconds: 3600,
@@ -61,13 +61,13 @@ impl MockRuntimeAdapter {
         }
     }
 
-    async fn emit(sender: &Option<tokio::sync::mpsc::Sender<RuntimeEvent>>, event: RuntimeEvent) {
+    async fn emit(sender: &Option<tokio::sync::mpsc::Sender<HarnessEvent>>, event: HarnessEvent) {
         if let Some(sender) = sender {
             let _ = sender.send(event).await;
         }
     }
 
-    async fn run(request: ExecutionRequest) -> Result<ExecutionOutcome, RuntimeError> {
+    async fn run(request: ExecutionRequest) -> Result<ExecutionOutcome, HarnessError> {
         let started = Instant::now();
         let task = request.input.task.trim().to_string();
         let task_is_empty = task.is_empty();
@@ -77,10 +77,10 @@ impl MockRuntimeAdapter {
             .clone()
             .unwrap_or_else(|| format!("mock-{}", uuid::Uuid::now_v7()));
 
-        Self::emit(&request.events, RuntimeEvent::started(&session_ref)).await;
+        Self::emit(&request.events, HarnessEvent::started(&session_ref)).await;
         Self::emit(
             &request.events,
-            RuntimeEvent::log(LogLevel::Info, "mock runtime: received execution").with_data(
+            HarnessEvent::log(LogLevel::Info, "mock harness: received execution").with_data(
                 serde_json::json!({
                     "autonomy": request.autonomy.level(),
                     "trustedSource": request.input.provenance.source,
@@ -97,15 +97,15 @@ impl MockRuntimeAdapter {
         if task.contains("fail") {
             Self::emit(
                 &request.events,
-                RuntimeEvent::new(
-                    RuntimeEventKind::Error,
+                HarnessEvent::new(
+                    HarnessEventKind::Error,
                     LogLevel::Error,
-                    "simulated runtime failure",
+                    "simulated harness failure",
                 ),
             )
             .await;
-            let mut outcome = ExecutionOutcome::failed(RuntimeError::new(
-                RuntimeErrorKind::ExecutionFailed,
+            let mut outcome = ExecutionOutcome::failed(HarnessError::new(
+                HarnessErrorKind::ExecutionFailed,
                 "simulated failure requested by the task",
             ));
             outcome.session_ref = Some(session_ref);
@@ -128,7 +128,7 @@ impl MockRuntimeAdapter {
             tokio::time::sleep(Duration::from_millis(50)).await;
             Self::emit(
                 &request.events,
-                RuntimeEvent::log(LogLevel::Info, format!("{}. {}", index + 1, step)),
+                HarnessEvent::log(LogLevel::Info, format!("{}. {}", index + 1, step)),
             )
             .await;
         }
@@ -137,7 +137,7 @@ impl MockRuntimeAdapter {
             "No task provided; the agent produced an empty observation.".to_string()
         } else {
             format!(
-                "Mock runtime processed {} characters of input for agent '{}'.",
+                "Mock harness processed {} characters of input for agent '{}'.",
                 task.chars().count(),
                 request.agent_name
             )
@@ -145,7 +145,7 @@ impl MockRuntimeAdapter {
         let output = serde_json::json!({
             "summary": summary,
             "task": task,
-            "runtime": "mock",
+            "harness": "mock",
             "model": request.model.as_ref().map(|m| serde_json::to_value(&m.selection).unwrap_or_default()),
             "grantedCapabilities": request.grants.iter().map(|g| g.capability.clone()).collect::<Vec<_>>(),
             "observedInput": {
@@ -154,7 +154,7 @@ impl MockRuntimeAdapter {
             },
         });
 
-        Self::emit(&request.events, RuntimeEvent::output(summary.clone())).await;
+        Self::emit(&request.events, HarnessEvent::output(summary.clone())).await;
 
         let mut outcome = ExecutionOutcome::succeeded(output, Some(session_ref));
         outcome.usage = Usage {
@@ -168,19 +168,19 @@ impl MockRuntimeAdapter {
 }
 
 #[async_trait]
-impl RuntimeAdapter for MockRuntimeAdapter {
-    fn kind(&self) -> RuntimeKind {
-        RuntimeKind::Mock
+impl HarnessAdapter for MockHarnessAdapter {
+    fn kind(&self) -> HarnessKind {
+        HarnessKind::Mock
     }
 
-    fn descriptor(&self) -> RuntimeDescriptor {
+    fn descriptor(&self) -> HarnessDescriptor {
         Self::descriptor()
     }
 
-    async fn validate_config(&self, config: &RuntimeConfig) -> ValidationReport {
+    async fn validate_config(&self, config: &HarnessConfig) -> ValidationReport {
         let mut report = ValidationReport::default();
-        if config.kind != RuntimeKind::Mock {
-            report.push("type", "this adapter only accepts the 'mock' runtime kind");
+        if config.kind != HarnessKind::Mock {
+            report.push("type", "this adapter only accepts the 'mock' harness kind");
         }
         if let Some(delay) = config.settings.get("stepDelayMs").and_then(|v| v.as_u64()) {
             if delay > 10_000 {
@@ -190,37 +190,37 @@ impl RuntimeAdapter for MockRuntimeAdapter {
         report
     }
 
-    async fn health(&self, _config: &RuntimeConfig) -> Result<RuntimeHealth, RuntimeError> {
-        Ok(RuntimeHealth::healthy())
+    async fn health(&self, _config: &HarnessConfig) -> Result<HarnessHealth, HarnessError> {
+        Ok(HarnessHealth::healthy())
     }
 
     async fn create_instance(
         &self,
         _request: CreateInstanceRequest,
-    ) -> Result<RuntimeInstance, RuntimeError> {
-        Err(RuntimeError::unsupported("long-running instances"))
+    ) -> Result<HarnessInstance, HarnessError> {
+        Err(HarnessError::unsupported("long-running instances"))
     }
 
-    async fn start_instance(&self, _instance: &RuntimeInstanceRef) -> Result<(), RuntimeError> {
-        Err(RuntimeError::unsupported("long-running instances"))
+    async fn start_instance(&self, _instance: &HarnessInstanceRef) -> Result<(), HarnessError> {
+        Err(HarnessError::unsupported("long-running instances"))
     }
 
-    async fn stop_instance(&self, _instance: &RuntimeInstanceRef) -> Result<(), RuntimeError> {
-        Err(RuntimeError::unsupported("long-running instances"))
+    async fn stop_instance(&self, _instance: &HarnessInstanceRef) -> Result<(), HarnessError> {
+        Err(HarnessError::unsupported("long-running instances"))
     }
 
-    async fn delete_instance(&self, _instance: &RuntimeInstanceRef) -> Result<(), RuntimeError> {
-        Err(RuntimeError::unsupported("long-running instances"))
+    async fn delete_instance(&self, _instance: &HarnessInstanceRef) -> Result<(), HarnessError> {
+        Err(HarnessError::unsupported("long-running instances"))
     }
 
     async fn instance_status(
         &self,
-        _instance: &RuntimeInstanceRef,
-    ) -> Result<RuntimeInstanceStatus, RuntimeError> {
-        Err(RuntimeError::unsupported("long-running instances"))
+        _instance: &HarnessInstanceRef,
+    ) -> Result<HarnessInstanceStatus, HarnessError> {
+        Err(HarnessError::unsupported("long-running instances"))
     }
 
-    async fn execute(&self, request: ExecutionRequest) -> Result<ExecutionOutcome, RuntimeError> {
+    async fn execute(&self, request: ExecutionRequest) -> Result<ExecutionOutcome, HarnessError> {
         let timeout = Duration::from_secs(request.resources.timeout_seconds);
         let cancel = request.cancel.clone();
         let events = request.events.clone();
@@ -233,15 +233,15 @@ impl RuntimeAdapter for MockRuntimeAdapter {
         let outcome = tokio::select! {
             biased;
             _ = cancel.cancelled() => {
-                Self::emit(&events, RuntimeEvent::log(LogLevel::Warn, "execution cancelled")).await;
-                let mut outcome = ExecutionOutcome::failed(RuntimeError::cancelled());
+                Self::emit(&events, HarnessEvent::log(LogLevel::Warn, "execution cancelled")).await;
+                let mut outcome = ExecutionOutcome::failed(HarnessError::cancelled());
                 outcome.status = ExecutionStatus::Cancelled;
                 outcome
             }
             result = &mut future => result?,
             _ = tokio::time::sleep(timeout) => {
-                Self::emit(&events, RuntimeEvent::new(RuntimeEventKind::Error, LogLevel::Error, "execution timed out")).await;
-                let mut outcome = ExecutionOutcome::failed(RuntimeError::timeout(timeout_seconds));
+                Self::emit(&events, HarnessEvent::new(HarnessEventKind::Error, LogLevel::Error, "execution timed out")).await;
+                let mut outcome = ExecutionOutcome::failed(HarnessError::timeout(timeout_seconds));
                 outcome.status = ExecutionStatus::TimedOut;
                 outcome
             }
@@ -257,7 +257,7 @@ impl RuntimeAdapter for MockRuntimeAdapter {
     async fn resume(
         &self,
         request: orbit_contracts::ResumeRequest,
-    ) -> Result<ExecutionOutcome, RuntimeError> {
+    ) -> Result<ExecutionOutcome, HarnessError> {
         let execution_request = ExecutionRequest {
             execution_id: request.execution_id,
             agent_id: uuid::Uuid::nil(),
@@ -272,7 +272,7 @@ impl RuntimeAdapter for MockRuntimeAdapter {
             grants: vec![],
             autonomy: orbit_domain::AutonomyLevel::default(),
             resources: orbit_domain::ResourceLimits::default(),
-            runtime_config: serde_json::Value::Null,
+            harness_config: serde_json::Value::Null,
             session: orbit_contracts::SessionRequest {
                 session_ref: Some(request.session_ref),
                 mode: ExecutionMode::OnDemand,

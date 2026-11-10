@@ -1,0 +1,25 @@
+//! Harness adapters and the harness registry.
+//!
+//! See `docs/architecture/harness-contract.md`. Adapters never touch PostgreSQL, HTTP or
+//! the frontend. The control plane only stores their descriptors and capabilities; the
+//! worker executes them.
+
+pub mod mock;
+pub mod opencode;
+pub mod pi;
+pub mod planned;
+pub mod registry;
+pub mod testing;
+
+pub use mock::MockHarnessAdapter;
+pub use opencode::OpenCodeHarnessAdapter;
+pub use pi::PiHarnessAdapter;
+pub use planned::DescriptorOnlyAdapter;
+pub use registry::HarnessRegistry;
+
+pub use orbit_contracts::{
+    CreateInstanceRequest, ExecutionOutcome, ExecutionRequest, InstanceHealth, HarnessAdapter,
+    HarnessCapabilities, HarnessConfig, HarnessDescriptor, HarnessError, HarnessErrorKind,
+    HarnessEvent, HarnessEventKind, HarnessHealth, HarnessInstance, HarnessInstanceRef,
+    HarnessInstanceStatus,
+};

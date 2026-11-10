@@ -185,7 +185,7 @@ export default function SettingsPage() {
           icon={<ShieldCheck className="h-4 w-4" />}
         />
         <ShortcutCard
-          href="/runtimes"
+          href="/harnesses"
           title="Harnesses"
           description="Capabilities and harness status"
           icon={<Cpu className="h-4 w-4" />}

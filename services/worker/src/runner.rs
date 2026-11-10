@@ -3,12 +3,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use orbit_contracts::{
-    subjects, ExecutionOutcome, ExecutionRequest, InstructionsBlock, OrbitEvent, RuntimeError,
-    RuntimeErrorKind, RuntimeEvent, RuntimeEventKind, SessionRequest,
+    subjects, ExecutionOutcome, ExecutionRequest, InstructionsBlock, OrbitEvent, HarnessError,
+    HarnessErrorKind, HarnessEvent, HarnessEventKind, SessionRequest,
 };
 use orbit_domain::{
     AutonomyLevel, ExecutionEventKind, ExecutionStatus, GrantedCapability, LogLevel,
-    ResourceLimits, RuntimeKind,
+    ResourceLimits, HarnessKind,
 };
 use orbit_store::{ExecutionRecord, Store};
 use tokio::sync::{mpsc, Semaphore};
@@ -20,10 +20,10 @@ pub struct WorkerState {
     pub worker_id: String,
     pub store: Store,
     pub bus: Arc<dyn orbit_events::EventBus>,
-    pub registry: Arc<orbit_runtime::RuntimeRegistry>,
+    pub registry: Arc<orbit_harness::HarnessRegistry>,
     pub workspace_root: std::path::PathBuf,
-    /// Runtime kinds this worker is allowed to claim.
-    pub runtimes: Vec<String>,
+    /// Harness kinds this worker is allowed to claim.
+    pub harnesses: Vec<String>,
     /// `process` or `docker` (per-execution container).
     pub execution_driver: String,
     /// Worker target class (`local`, `docker`, `kubernetes`).
@@ -54,7 +54,7 @@ pub async fn claim_and_dispatch(
             .store
             .claim_next_queued(
                 &state.worker_id,
-                &state.runtimes,
+                &state.harnesses,
                 &state.target,
                 &state.profile_agent_ids,
             )
@@ -118,26 +118,26 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
     let spec: orbit_domain::AgentSpec = serde_json::from_value(spec_version.spec.clone())
         .map_err(|e| anyhow::anyhow!("stored agent spec is invalid: {e}"))?;
 
-    let runtime_kind = spec.runtime.kind;
+    let harness_kind = spec.harness.kind;
     if let Some(record) = state
         .store
-        .get_runtime_by_kind(org_id, runtime_kind.as_str())
+        .get_harness_by_kind(org_id, harness_kind.as_str())
         .await?
     {
         if !record.enabled {
             return fail_execution(
                 &state,
                 &execution,
-                RuntimeError::new(
-                    RuntimeErrorKind::Unavailable,
-                    format!("runtime '{runtime_kind}' is disabled"),
+                HarnessError::new(
+                    HarnessErrorKind::Unavailable,
+                    format!("harness '{harness_kind}' is disabled"),
                 ),
             )
             .await;
         }
     }
 
-    let adapter = match state.registry.require(runtime_kind) {
+    let adapter = match state.registry.require(harness_kind) {
         Ok(adapter) => adapter,
         Err(err) => return fail_execution(&state, &execution, err).await,
     };
@@ -151,7 +151,7 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
             return fail_execution(
                 &state,
                 &execution,
-                RuntimeError::new(RuntimeErrorKind::InvalidConfig, err.to_string()),
+                HarnessError::new(HarnessErrorKind::InvalidConfig, err.to_string()),
             )
             .await
         }
@@ -164,8 +164,8 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
                 return fail_execution(
                     &state,
                     &execution,
-                    RuntimeError::new(
-                        RuntimeErrorKind::InvalidConfig,
+                    HarnessError::new(
+                        HarnessErrorKind::InvalidConfig,
                         format!("execution input is invalid: {err}"),
                     ),
                 )
@@ -197,17 +197,17 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
     let grants = resolve_grants(&state.store, org_id, &spec).await;
     let workspace = state.workspace_root.join(execution_id.to_string());
 
-    // Policy-enforcing tool broker: only for runtimes that can consume MCP today
+    // Policy-enforcing tool broker: only for harnesses that can consume MCP today
     // (OpenCode). It is execution-scoped and dropped at the end of this function.
-    let broker = if matches!(runtime_kind, RuntimeKind::OpenCode | RuntimeKind::Pi) {
+    let broker = if matches!(harness_kind, HarnessKind::OpenCode | HarnessKind::Pi) {
         match crate::broker::start(state.store.clone(), &spec, &execution).await {
             Ok(broker) => broker,
             Err(error) => {
                 return fail_execution(
                     &state,
                     &execution,
-                    RuntimeError::new(
-                        RuntimeErrorKind::InvalidConfig,
+                    HarnessError::new(
+                        HarnessErrorKind::InvalidConfig,
                         format!("tool broker could not start: {error}"),
                     ),
                 )
@@ -247,7 +247,7 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
         .await;
     }
 
-    let (event_tx, mut event_rx) = mpsc::channel::<RuntimeEvent>(256);
+    let (event_tx, mut event_rx) = mpsc::channel::<HarnessEvent>(256);
     let cancel = tokio_util::sync::CancellationToken::new();
     state
         .active
@@ -264,17 +264,17 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
         &execution,
         ExecutionEventKind::Status,
         LogLevel::Info,
-        "execution dispatched to runtime",
-        serde_json::json!({ "runtime": runtime_kind.as_str(), "worker": state.worker_id }),
+        "execution dispatched to harness",
+        serde_json::json!({ "harness": harness_kind.as_str(), "worker": state.worker_id }),
     )
     .await;
 
-    // Persist runtime events as they arrive.
+    // Persist harness events as they arrive.
     let event_state = state.clone();
     let event_execution = execution.clone();
     let event_task = tokio::spawn(async move {
         while let Some(event) = event_rx.recv().await {
-            let (kind, level, message, data) = map_runtime_event(event);
+            let (kind, level, message, data) = map_harness_event(event);
             append_event(&event_state, &event_execution, kind, level, &message, data).await;
         }
     });
@@ -289,7 +289,7 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
             tokio::time::sleep(Duration::from_millis(1000)).await;
             match watcher_state.store.is_cancel_requested(execution_id).await {
                 Ok(true) => {
-                    tracing::info!(%execution_id, "cancellation requested; cancelling runtime");
+                    tracing::info!(%execution_id, "cancellation requested; cancelling harness");
                     watcher_cancel.cancel();
                     break;
                 }
@@ -299,14 +299,14 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
         }
     });
 
-    // Add the MCP bridge details to the runtime config. This stays in memory only; the
+    // Add the MCP bridge details to the harness config. This stays in memory only; the
     // execution-scoped token is invalid as soon as the broker is dropped.
-    let mut runtime_config = spec.runtime.config.clone();
-    if let (Some(handle), RuntimeKind::OpenCode | RuntimeKind::Pi) = (&broker, runtime_kind) {
-        if !runtime_config.is_object() {
-            runtime_config = serde_json::json!({});
+    let mut harness_config = spec.harness.config.clone();
+    if let (Some(handle), HarnessKind::OpenCode | HarnessKind::Pi) = (&broker, harness_kind) {
+        if !harness_config.is_object() {
+            harness_config = serde_json::json!({});
         }
-        runtime_config["orbitMcp"] = serde_json::json!({
+        harness_config["orbitMcp"] = serde_json::json!({
             "command": handle.mcp_command(),
             "environment": {
                 "ORBIT_BROKER_URL": handle.url,
@@ -333,10 +333,10 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
             timeout_seconds: execution.timeout_seconds.max(1) as u64,
             ..spec.resources.clone()
         },
-        runtime_config,
+        harness_config,
         session: SessionRequest {
             session_ref: execution.session_ref.clone(),
-            mode: spec.runtime.execution_mode,
+            mode: spec.harness.execution_mode,
         },
         workspace: orbit_contracts::WorkspaceSpec {
             root: workspace.to_string_lossy().to_string(),
@@ -350,7 +350,7 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
     let started = std::time::Instant::now();
     let outcome = tokio::select! {
         _ = cancel.cancelled() => {
-            let mut outcome = ExecutionOutcome::failed(RuntimeError::cancelled());
+            let mut outcome = ExecutionOutcome::failed(HarnessError::cancelled());
             outcome.status = ExecutionStatus::Cancelled;
             outcome
         }
@@ -361,7 +361,7 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
             Ok(Ok(outcome)) => outcome,
             Ok(Err(err)) => outcome_from_error(err),
             Err(_) => {
-                let mut outcome = ExecutionOutcome::failed(RuntimeError::timeout(timeout_seconds));
+                let mut outcome = ExecutionOutcome::failed(HarnessError::timeout(timeout_seconds));
                 outcome.status = ExecutionStatus::TimedOut;
                 outcome
             }
@@ -445,10 +445,10 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
     Ok(())
 }
 
-fn outcome_from_error(error: RuntimeError) -> ExecutionOutcome {
+fn outcome_from_error(error: HarnessError) -> ExecutionOutcome {
     let status = match error.kind {
-        RuntimeErrorKind::Cancelled => ExecutionStatus::Cancelled,
-        RuntimeErrorKind::Timeout => ExecutionStatus::TimedOut,
+        HarnessErrorKind::Cancelled => ExecutionStatus::Cancelled,
+        HarnessErrorKind::Timeout => ExecutionStatus::TimedOut,
         _ => ExecutionStatus::Failed,
     };
     let mut outcome = ExecutionOutcome::failed(error);
@@ -459,7 +459,7 @@ fn outcome_from_error(error: RuntimeError) -> ExecutionOutcome {
 pub(crate) async fn fail_execution(
     state: &WorkerState,
     execution: &ExecutionRecord,
-    error: RuntimeError,
+    error: HarnessError,
 ) -> anyhow::Result<()> {
     let outcome = outcome_from_error(error);
     append_event(
@@ -550,16 +550,16 @@ async fn publish_status(state: &WorkerState, execution: &ExecutionRecord) {
     }
 }
 
-fn map_runtime_event(
-    event: RuntimeEvent,
+fn map_harness_event(
+    event: HarnessEvent,
 ) -> (ExecutionEventKind, LogLevel, String, serde_json::Value) {
     let kind = match event.kind {
-        RuntimeEventKind::Started | RuntimeEventKind::Status => ExecutionEventKind::Status,
-        RuntimeEventKind::Log => ExecutionEventKind::Log,
-        RuntimeEventKind::ToolCall => ExecutionEventKind::ToolCall,
-        RuntimeEventKind::OutputDelta => ExecutionEventKind::Output,
-        RuntimeEventKind::Usage => ExecutionEventKind::Metric,
-        RuntimeEventKind::Error => ExecutionEventKind::Error,
+        HarnessEventKind::Started | HarnessEventKind::Status => ExecutionEventKind::Status,
+        HarnessEventKind::Log => ExecutionEventKind::Log,
+        HarnessEventKind::ToolCall => ExecutionEventKind::ToolCall,
+        HarnessEventKind::OutputDelta => ExecutionEventKind::Output,
+        HarnessEventKind::Usage => ExecutionEventKind::Metric,
+        HarnessEventKind::Error => ExecutionEventKind::Error,
     };
     (kind, event.level, event.message, event.data)
 }

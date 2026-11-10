@@ -78,7 +78,7 @@ async fn beat(state: &WorkerState) {
         .store
         .upsert_worker_heartbeat(
             &state.worker_id,
-            &state.runtimes,
+            &state.harnesses,
             &state.target,
             hostname.as_deref(),
         )

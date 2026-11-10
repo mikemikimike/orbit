@@ -29,7 +29,7 @@ export function AgentCard({ agent }: { agent: AgentSummary }) {
 
           <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
             <span className="rounded bg-muted px-1.5 py-0.5 font-medium">
-              {agent.runtime ? titleCase(agent.runtime) : "runtime?"}
+              {agent.harness ? titleCase(agent.harness) : "harness?"}
             </span>
             <span className="inline-flex items-center gap-1">
               <ShieldCheck className="h-3 w-3" /> L{agent.autonomyLevel ?? "?"}

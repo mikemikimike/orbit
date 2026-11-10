@@ -3,11 +3,11 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-/// Agent runtime families ORBIT can orchestrate.
+/// Agent harness families ORBIT can orchestrate.
 ///
 /// The enumeration is intentionally small and lives in the domain so that the API and
-/// UI can reason about runtimes without depending on adapter crates. New runtimes can be
-/// added here plus a registered `RuntimeAdapter`; no other domain changes are required.
+/// UI can reason about harnesses without depending on adapter crates. New harnesses can be
+/// added here plus a registered `HarnessAdapter`; no other domain changes are required.
 #[derive(
     Debug,
     Clone,
@@ -22,19 +22,19 @@ use serde::{Deserialize, Serialize};
     utoipa::ToSchema,
 )]
 #[serde(rename_all = "snake_case")]
-pub enum RuntimeKind {
-    /// In-process deterministic runtime used for development and contract tests.
+pub enum HarnessKind {
+    /// In-process deterministic harness used for development and contract tests.
     Mock,
     #[serde(rename = "opencode")]
     OpenCode,
     ClaudeCode,
     Pi,
-    /// Custom worker that speaks the ORBIT runtime protocol.
+    /// Custom worker that speaks the ORBIT harness protocol.
     Generic,
 }
 
-impl RuntimeKind {
-    pub const ALL: [RuntimeKind; 5] = [
+impl HarnessKind {
+    pub const ALL: [HarnessKind; 5] = [
         Self::Mock,
         Self::OpenCode,
         Self::ClaudeCode,
@@ -54,11 +54,11 @@ impl RuntimeKind {
 
     pub fn display_name(&self) -> &'static str {
         match self {
-            Self::Mock => "Mock runtime",
+            Self::Mock => "Mock harness",
             Self::OpenCode => "OpenCode",
             Self::ClaudeCode => "Claude Code",
             Self::Pi => "Pi",
-            Self::Generic => "Generic runtime",
+            Self::Generic => "Generic harness",
         }
     }
 
@@ -73,13 +73,13 @@ impl RuntimeKind {
     }
 }
 
-impl fmt::Display for RuntimeKind {
+impl fmt::Display for HarnessKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
     }
 }
 
-impl FromStr for RuntimeKind {
+impl FromStr for HarnessKind {
     type Err = String;
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
@@ -88,7 +88,7 @@ impl FromStr for RuntimeKind {
             "claude_code" | "claude-code" | "claudecode" => Ok(Self::ClaudeCode),
             "pi" => Ok(Self::Pi),
             "generic" => Ok(Self::Generic),
-            other => Err(format!("unknown runtime kind: {other}")),
+            other => Err(format!("unknown harness kind: {other}")),
         }
     }
 }
@@ -98,7 +98,7 @@ impl FromStr for RuntimeKind {
 pub enum ImplementationStatus {
     /// Implemented and exercised by contract tests.
     Available,
-    /// Contract implemented, real execution not yet certified against the runtime.
+    /// Contract implemented, real execution not yet certified against the harness.
     Scaffolded,
     /// Registered descriptor only.
     Planned,
@@ -117,10 +117,10 @@ impl ImplementationStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionMode {
-    /// A runtime is created per execution (containers/Jobs).
+    /// A harness is created per execution (containers/Jobs).
     #[default]
     OnDemand,
-    /// A runtime instance stays alive and receives multiple executions.
+    /// A harness instance stays alive and receives multiple executions.
     LongRunning,
 }
 
@@ -149,7 +149,7 @@ impl FromStr for ExecutionMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum PlacementTarget {
-    /// Any worker that supports the selected runtime.
+    /// Any worker that supports the selected harness.
     #[default]
     Auto,
     /// A worker running natively on the host.

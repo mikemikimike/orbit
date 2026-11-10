@@ -51,7 +51,7 @@ export default function WorkersPage() {
   const [bootstrapProfile, setBootstrapProfile] = useState<WorkerProfile | null>(null);
 
   const [name, setName] = useState("Pi production");
-  const [runtime, setRuntime] = useState("pi");
+  const [harness, setHarness] = useState("pi");
   const [target, setTarget] = useState("docker");
   const [driver, setDriver] = useState("process");
   const [image, setImage] = useState(DEFAULT_IMAGES.pi);
@@ -68,7 +68,7 @@ export default function WorkersPage() {
         await api.POST("/api/v1/worker-profiles", {
           body: {
             name,
-            runtimeKind: runtime,
+            harnessKind: harness,
             target,
             executionDriver: driver,
             image,
@@ -128,7 +128,7 @@ export default function WorkersPage() {
       <PageHeader
         eyebrow="Execution plane"
         title="Workers"
-        description="Bootstrap profiles: one image, one target, a fixed set of agents, skills and runtime auth. Generate Docker, Compose or Kubernetes output."
+        description="Bootstrap profiles: one image, one target, a fixed set of agents, skills and harness auth. Generate Docker, Compose or Kubernetes output."
         actions={
           <Button onClick={() => setOpen(true)}>
             <Plus /> New worker profile
@@ -144,7 +144,7 @@ export default function WorkersPage() {
         <EmptyState
           icon={<Server className="h-6 w-6" />}
           title="No worker profiles"
-          description="A profile pins the runtime, image, target, agents, skills and auth secret. Workers start with ORBIT_WORKER_PROFILE_ID."
+          description="A profile pins the harness, image, target, agents, skills and auth secret. Workers start with ORBIT_WORKER_PROFILE_ID."
           action={
             <Button onClick={() => setOpen(true)}>
               <Plus /> Create profile
@@ -163,7 +163,7 @@ export default function WorkersPage() {
                   </Badge>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  {titleCase(profile.runtimeKind)} · {profile.target} ·{" "}
+                  {titleCase(profile.harnessKind)} · {profile.target} ·{" "}
                   {profile.executionDriver} · {profile.image}:{profile.imageTag}
                 </p>
               </CardHeader>
@@ -226,9 +226,9 @@ export default function WorkersPage() {
               <Label>Harness</Label>
               <select
                 className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                value={runtime}
+                value={harness}
                 onChange={(event) => {
-                  setRuntime(event.target.value);
+                  setHarness(event.target.value);
                   setImage(DEFAULT_IMAGES[event.target.value] ?? "");
                 }}
               >
@@ -365,7 +365,7 @@ function BootstrapDialog({
           <DialogTitle>Bootstrap {profile?.name}</DialogTitle>
           <DialogDescription>
             Set <code className="font-mono">ORBIT_WORKER_PROFILE_ID</code> (included below).
-            Provide database, NATS, master key and runtime auth from your secret store.
+            Provide database, NATS, master key and harness auth from your secret store.
           </DialogDescription>
         </DialogHeader>
         {bootstrap.isLoading ? (

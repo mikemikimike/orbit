@@ -1,28 +1,28 @@
 use serde_json::Value;
 use uuid::Uuid;
 
-use orbit_contracts::{ConnectorManifest, RuntimeDescriptor};
+use orbit_contracts::{ConnectorManifest, HarnessDescriptor};
 use orbit_domain::new_id;
 
 use crate::models::{
-    Connection, ConnectionWithConnector, ConnectorRecord, Provider, RuntimeRecord,
+    Connection, ConnectionWithConnector, ConnectorRecord, Provider, HarnessRecord,
 };
 use crate::{Store, StoreError, StoreResult};
 
 impl Store {
-    // -------------------------------------------------------------------- runtimes
+    // -------------------------------------------------------------------- harnesses
 
-    /// Upsert the built-in runtime catalog from the adapter registry.
-    pub async fn upsert_runtime_descriptor(
+    /// Upsert the built-in harness catalog from the adapter registry.
+    pub async fn upsert_harness_descriptor(
         &self,
-        descriptor: &RuntimeDescriptor,
-    ) -> StoreResult<RuntimeRecord> {
+        descriptor: &HarnessDescriptor,
+    ) -> StoreResult<HarnessRecord> {
         let capabilities = serde_json::to_value(&descriptor.capabilities)
             .map_err(|e| StoreError::Internal(e.to_string()))?;
         let config_schema = descriptor.config_schema.clone();
-        sqlx::query_as::<_, RuntimeRecord>(
+        sqlx::query_as::<_, HarnessRecord>(
             r#"
-            INSERT INTO runtimes (id, org_id, kind, name, description, enabled, implementation_status, capabilities, config)
+            INSERT INTO harnesses (id, org_id, kind, name, description, enabled, implementation_status, capabilities, config)
             VALUES ($1, NULL, $2, $3, $4, true, $5, $6, $7)
             ON CONFLICT (kind) WHERE org_id IS NULL
             DO UPDATE SET
@@ -47,10 +47,10 @@ impl Store {
         .map_err(Into::into)
     }
 
-    pub async fn list_runtimes(&self, org_id: Uuid) -> StoreResult<Vec<RuntimeRecord>> {
-        Ok(sqlx::query_as::<_, RuntimeRecord>(
+    pub async fn list_harnesses(&self, org_id: Uuid) -> StoreResult<Vec<HarnessRecord>> {
+        Ok(sqlx::query_as::<_, HarnessRecord>(
             r#"
-            SELECT * FROM runtimes
+            SELECT * FROM harnesses
             WHERE org_id IS NULL OR org_id = $1
             ORDER BY kind ASC
             "#,
@@ -60,14 +60,14 @@ impl Store {
         .await?)
     }
 
-    pub async fn get_runtime_by_kind(
+    pub async fn get_harness_by_kind(
         &self,
         org_id: Uuid,
         kind: &str,
-    ) -> StoreResult<Option<RuntimeRecord>> {
-        Ok(sqlx::query_as::<_, RuntimeRecord>(
+    ) -> StoreResult<Option<HarnessRecord>> {
+        Ok(sqlx::query_as::<_, HarnessRecord>(
             r#"
-            SELECT * FROM runtimes
+            SELECT * FROM harnesses
             WHERE (org_id IS NULL OR org_id = $1) AND kind = $2
             ORDER BY org_id NULLS LAST
             LIMIT 1
@@ -79,15 +79,15 @@ impl Store {
         .await?)
     }
 
-    pub async fn set_runtime_enabled(
+    pub async fn set_harness_enabled(
         &self,
         org_id: Uuid,
         kind: &str,
         enabled: bool,
-    ) -> StoreResult<RuntimeRecord> {
-        sqlx::query_as::<_, RuntimeRecord>(
+    ) -> StoreResult<HarnessRecord> {
+        sqlx::query_as::<_, HarnessRecord>(
             r#"
-            UPDATE runtimes SET enabled = $3, updated_at = now()
+            UPDATE harnesses SET enabled = $3, updated_at = now()
             WHERE (org_id IS NULL OR org_id = $1) AND kind = $2
             RETURNING *
             "#,
@@ -97,7 +97,7 @@ impl Store {
         .bind(enabled)
         .fetch_optional(&self.pool)
         .await?
-        .ok_or_else(|| StoreError::NotFound("runtime".into()))
+        .ok_or_else(|| StoreError::NotFound("harness".into()))
     }
 
     // ------------------------------------------------------------------- providers

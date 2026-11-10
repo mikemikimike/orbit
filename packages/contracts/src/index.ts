@@ -5,8 +5,8 @@ import { z } from "zod";
  * Keep these aligned with `crates/orbit-domain` (camelCase JSON, orbit.io/v1).
  */
 
-export const runtimeKindSchema = z.enum(["mock", "opencode", "claude_code", "pi", "generic"]);
-export type RuntimeKind = z.infer<typeof runtimeKindSchema>;
+export const harnessKindSchema = z.enum(["mock", "opencode", "claude_code", "pi", "generic"]);
+export type HarnessKind = z.infer<typeof harnessKindSchema>;
 
 export const executionModeSchema = z.enum(["on_demand", "long_running"]);
 export const placementTargetSchema = z.enum(["auto", "local", "docker", "kubernetes"]);
@@ -24,7 +24,7 @@ export const executionStatusSchema = z.enum([
 ]);
 export type ExecutionStatus = z.infer<typeof executionStatusSchema>;
 
-export const modelManagementSchema = z.enum(["runtime", "platform"]);
+export const modelManagementSchema = z.enum(["harness", "platform"]);
 
 export const cronSchema = z
   .string()
@@ -63,20 +63,20 @@ export const resourceLimitsSchema = z.object({
 });
 
 export const agentSpecSchema = z.object({
-  runtime: z.object({
-    type: runtimeKindSchema,
+  harness: z.object({
+    type: harnessKindSchema,
     executionMode: executionModeSchema.default("on_demand"),
     placement: placementTargetSchema.default("auto"),
     config: z.record(z.string(), z.unknown()).default({}),
   }),
   model: z
     .object({
-      management: modelManagementSchema.default("runtime"),
+      management: modelManagementSchema.default("harness"),
       provider: z.string().optional(),
       model: z.string().optional(),
       params: z.record(z.string(), z.unknown()).default({}),
     })
-    .default({ management: "runtime", params: {} }),
+    .default({ management: "harness", params: {} }),
   instructions: z.object({
     system: z.string().min(1, "system instructions are required").max(200_000),
     constraints: z.array(z.string()).default([]),
@@ -110,7 +110,7 @@ export const agentDefinitionSchema = z.object({
 });
 export type AgentDefinition = z.infer<typeof agentDefinitionSchema>;
 
-export const providerKindSchema = z.enum(["openai_compatible", "runtime_managed"]);
+export const providerKindSchema = z.enum(["openai_compatible", "harness_managed"]);
 
 export const providerConfigSchema = z
   .object({
@@ -163,8 +163,8 @@ export function emptyAgentDefinition(): AgentDefinition {
     kind: "Agent",
     metadata: { name: "", description: "", labels: {} },
     spec: {
-      runtime: { type: "mock", executionMode: "on_demand", placement: "auto", config: {} },
-      model: { management: "runtime", params: {} },
+      harness: { type: "mock", executionMode: "on_demand", placement: "auto", config: {} },
+      model: { management: "harness", params: {} },
       instructions: { system: "", constraints: [] },
       connectors: [],
       skills: [],

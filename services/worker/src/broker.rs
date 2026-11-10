@@ -1,9 +1,9 @@
 //! Execution-scoped, policy-enforcing tool broker.
 //!
-//! The agent runtime talks MCP to `orbit-mcp-broker`, which forwards tool calls to this
+//! The agent harness talks MCP to `orbit-mcp-broker`, which forwards tool calls to this
 //! loopback HTTP broker. The broker validates the execution token, enforces autonomy and
 //! capability allowlists, pauses for approvals, leases credentials, invokes connectors and
-//! writes audit/execution events. The runtime never receives provider credentials.
+//! writes audit/execution events. The harness never receives provider credentials.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -635,7 +635,7 @@ mod tests {
             agent_id: Uuid::nil(),
             agent_version_id: Uuid::nil(),
             agent_name: "test".into(),
-            runtime_kind: "opencode".into(),
+            harness_kind: "opencode".into(),
             trigger_id: None,
             trigger_source: "manual".into(),
             placement: "auto".into(),

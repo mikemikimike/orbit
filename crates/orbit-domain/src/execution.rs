@@ -137,7 +137,7 @@ impl TriggerSource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum EgressMode {
-    /// Deployment/runtime default; no ORBIT-imposed restriction.
+    /// Deployment/harness default; no ORBIT-imposed restriction.
     Default,
     /// Only the listed hosts are reachable.
     Allowlist,
@@ -154,7 +154,7 @@ pub struct NetworkPolicy {
     pub allowed_hosts: Vec<String>,
 }
 
-/// Limits enforced by the platform and honoured by runtime isolation.
+/// Limits enforced by the platform and honoured by harness isolation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResourceLimits {
@@ -357,7 +357,7 @@ pub struct Execution {
     pub agent_id: Uuid,
     pub agent_version_id: Uuid,
     pub agent_name: String,
-    pub runtime_kind: crate::RuntimeKind,
+    pub harness_kind: crate::HarnessKind,
     pub status: ExecutionStatus,
     pub trigger_source: TriggerSource,
     pub trigger_id: Option<Uuid>,

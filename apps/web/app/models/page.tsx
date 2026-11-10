@@ -29,7 +29,7 @@ import { relativeTime } from "@/lib/utils";
 
 interface ProviderForm {
   name: string;
-  kind: "openai_compatible" | "runtime_managed";
+  kind: "openai_compatible" | "harness_managed";
   baseUrl: string;
   model: string;
   credential: string;
@@ -40,8 +40,8 @@ interface ProviderForm {
   jsonMode: boolean;
   vision: boolean;
   modelsEndpoint: boolean;
-  runtimeProvider: string;
-  runtimeKind: string;
+  harnessProvider: string;
+  harnessKind: string;
 }
 
 const EMPTY_FORM: ProviderForm = {
@@ -57,8 +57,8 @@ const EMPTY_FORM: ProviderForm = {
   jsonMode: false,
   vision: false,
   modelsEndpoint: true,
-  runtimeProvider: "opencode-go",
-  runtimeKind: "opencode",
+  harnessProvider: "opencode-go",
+  harnessKind: "opencode",
 };
 
 export default function ModelsPage() {
@@ -92,8 +92,8 @@ export default function ModelsPage() {
               },
             }
           : {
-              runtime: form.runtimeKind,
-              provider: form.runtimeProvider.trim() || undefined,
+              harness: form.harnessKind,
+              provider: form.harnessProvider.trim() || undefined,
               model: form.model.trim() || undefined,
             };
 
@@ -189,8 +189,8 @@ export default function ModelsPage() {
       jsonMode: Boolean(compat.jsonMode),
       vision: Boolean(compat.vision),
       modelsEndpoint: compat.modelsEndpoint !== false,
-      runtimeProvider: String(config.provider ?? "opencode-go"),
-      runtimeKind: String(config.runtime ?? "opencode"),
+      harnessProvider: String(config.provider ?? "opencode-go"),
+      harnessKind: String(config.harness ?? "opencode"),
     });
     setOpen(true);
   }
@@ -200,7 +200,7 @@ export default function ModelsPage() {
       <PageHeader
         eyebrow="Model layer"
         title="Providers &amp; models"
-        description="Configure OpenAI-compatible endpoints or runtime-managed providers. Credentials are encrypted at rest and never returned by the API."
+        description="Configure OpenAI-compatible endpoints or harness-managed providers. Credentials are encrypted at rest and never returned by the API."
         actions={
           <Button onClick={openCreate}>
             <Plus /> Add provider
@@ -220,7 +220,7 @@ export default function ModelsPage() {
         <EmptyState
           icon={<Boxes className="h-6 w-6" />}
           title="No providers configured"
-          description="Add a vLLM, LiteLLM, API gateway or any OpenAI-compatible endpoint. Providers are separate from runtimes so agents can mix them freely."
+          description="Add a vLLM, LiteLLM, API gateway or any OpenAI-compatible endpoint. Providers are separate from harnesses so agents can mix them freely."
           action={
             <Button onClick={openCreate}>
               <Plus /> Add provider
@@ -260,7 +260,7 @@ export default function ModelsPage() {
                     ) : (
                       <>
                         <p className="text-muted-foreground">
-                          runtime: <span className="font-mono">{String(config.runtime ?? "—")}</span>
+                          harness: <span className="font-mono">{String(config.harness ?? "—")}</span>
                         </p>
                         <p className="text-muted-foreground">
                           provider: <span className="font-mono">{String(config.provider ?? "—")}</span>
@@ -344,7 +344,7 @@ export default function ModelsPage() {
                   }
                 >
                   <option value="openai_compatible">OpenAI-compatible endpoint</option>
-                  <option value="runtime_managed">Runtime-managed (e.g. OpenCode Go)</option>
+                  <option value="harness_managed">Harness-managed (e.g. OpenCode Go)</option>
                 </select>
               </div>
             </div>
@@ -411,11 +411,11 @@ export default function ModelsPage() {
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label>Runtime</Label>
+                  <Label>Harness</Label>
                   <select
                     className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                    value={form.runtimeKind}
-                    onChange={(event) => setForm({ ...form, runtimeKind: event.target.value })}
+                    value={form.harnessKind}
+                    onChange={(event) => setForm({ ...form, harnessKind: event.target.value })}
                   >
                     <option value="opencode">OpenCode</option>
                     <option value="claude_code">Claude Code</option>
@@ -423,22 +423,22 @@ export default function ModelsPage() {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Runtime provider name</Label>
+                  <Label>Harness provider name</Label>
                   <Input
-                    value={form.runtimeProvider}
+                    value={form.harnessProvider}
                     placeholder="opencode-go"
-                    onChange={(event) => setForm({ ...form, runtimeProvider: event.target.value })}
+                    onChange={(event) => setForm({ ...form, harnessProvider: event.target.value })}
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label>Default model (optional)</Label>
                   <Input
                     value={form.model}
-                    placeholder="runtime default"
+                    placeholder="harness default"
                     onChange={(event) => setForm({ ...form, model: event.target.value })}
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Runtime-managed providers are authenticated by their runtime; ORBIT only stores
+                    Harness-managed providers are authenticated by their harness; ORBIT only stores
                     the credential reference.
                   </p>
                 </div>

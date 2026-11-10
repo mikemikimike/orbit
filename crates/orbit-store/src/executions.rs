@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use uuid::Uuid;
 
-use orbit_domain::{new_id, ExecutionStatus, LogLevel, RuntimeKind, TriggerSource};
+use orbit_domain::{new_id, ExecutionStatus, LogLevel, HarnessKind, TriggerSource};
 
 use crate::models::{ExecutionEventRecord, ExecutionRecord};
 use crate::{decode_cursor, page_of, Store, StoreError, StoreResult};
@@ -12,7 +12,7 @@ pub struct NewExecution<'a> {
     pub agent_id: Uuid,
     pub agent_version_id: Uuid,
     pub agent_name: &'a str,
-    pub runtime_kind: RuntimeKind,
+    pub harness_kind: HarnessKind,
     pub trigger_source: TriggerSource,
     pub placement: &'a str,
     pub trigger_id: Option<Uuid>,
@@ -38,7 +38,7 @@ impl Store {
         let id = new_id();
         let inserted = sqlx::query_as::<_, ExecutionRecord>(
             r#"
-            INSERT INTO executions (id, org_id, agent_id, agent_version_id, agent_name, runtime_kind,
+            INSERT INTO executions (id, org_id, agent_id, agent_version_id, agent_name, harness_kind,
                                     trigger_id, trigger_source, placement, status, input, timeout_seconds,
                                     idempotency_key, requested_by)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $10, $11, $12, $13)
@@ -51,7 +51,7 @@ impl Store {
         .bind(new.agent_id)
         .bind(new.agent_version_id)
         .bind(new.agent_name)
-        .bind(new.runtime_kind.as_str())
+        .bind(new.harness_kind.as_str())
         .bind(new.trigger_id)
         .bind(new.trigger_source.as_str())
         .bind(new.placement)
@@ -204,7 +204,7 @@ impl Store {
     }
 
     /// Move an execution to a terminal state. Terminal states are never overwritten and
-    /// cancellation always wins over a late runtime result.
+    /// cancellation always wins over a late harness result.
     pub async fn finish_execution(
         &self,
         execution_id: Uuid,
@@ -268,7 +268,7 @@ impl Store {
     }
 
     /// Request cancellation. Queued executions are cancelled immediately; running ones
-    /// are flagged for the worker to abort the runtime.
+    /// are flagged for the worker to abort the harness.
     pub async fn request_execution_cancel(
         &self,
         org_id: Uuid,
@@ -439,11 +439,11 @@ impl Store {
         .await?)
     }
 
-    pub async fn list_agents_with_runtime(&self, org_id: Uuid) -> StoreResult<Vec<(Uuid, String)>> {
+    pub async fn list_agents_with_harness(&self, org_id: Uuid) -> StoreResult<Vec<(Uuid, String)>> {
         Ok(sqlx::query_as::<_, (Uuid, String)>(
             r#"
             SELECT DISTINCT a.id,
-                   COALESCE(av.spec->'runtime'->>'type', 'mock')
+                   COALESCE(av.spec->'harness'->>'type', 'mock')
             FROM agents a
             JOIN agent_versions av ON av.agent_id = a.id AND av.version = a.current_version
             WHERE a.org_id = $1 AND a.status = 'active'
@@ -460,7 +460,7 @@ impl Store {
     pub async fn claim_next_queued(
         &self,
         worker_id: &str,
-        runtimes: &[String],
+        harnesses: &[String],
         worker_target: &str,
         agent_ids: &[Uuid],
     ) -> StoreResult<Option<ExecutionRecord>> {
@@ -472,7 +472,7 @@ impl Store {
             WHERE id = (
                 SELECT id FROM executions
                 WHERE status = 'queued'
-                  AND runtime_kind = ANY($2)
+                  AND harness_kind = ANY($2)
                   AND (placement = 'auto' OR placement = $3)
                   AND (cardinality($4::uuid[]) = 0 OR agent_id = ANY($4))
                 ORDER BY created_at ASC
@@ -483,7 +483,7 @@ impl Store {
             "#,
         )
         .bind(worker_id)
-        .bind(runtimes)
+        .bind(harnesses)
         .bind(worker_target)
         .bind(agent_ids)
         .fetch_optional(&self.pool)

@@ -3,8 +3,8 @@
 #
 # The base worker image is extended with the OpenCode CLI (not bundled into the control
 # plane). In Kubernetes this runs as a separate Deployment with
-# ORBIT_WORKER_RUNTIMES=opencode so only this image claims OpenCode executions.
-ARG WORKER_BASE=192.168.1.201:5000/orbit-worker:0.3.0
+# ORBIT_WORKER_HARNESSS=opencode so only this image claims OpenCode executions.
+ARG WORKER_BASE=192.168.1.201:5000/orbit-worker:0.4.0
 FROM ${WORKER_BASE}
 
 USER root
@@ -12,7 +12,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git \
     && rm -rf /var/lib/apt/lists/*
 
-# Tested version: OpenCode v2.2.5 (see crates/orbit-runtime/tests/opencode_e2e.rs).
+# Tested version: OpenCode v2.2.5 (see crates/orbit-harness/tests/opencode_e2e.rs).
 ARG OPENCODE_VERSION=2.2.5
 ARG OPENCODE_ARCH=x64
 RUN mkdir -p /usr/local/lib/opencode \
@@ -32,7 +32,7 @@ ENV HOME=/home/orbit \
     XDG_DATA_HOME=/home/orbit/.local/share \
     XDG_CONFIG_HOME=/home/orbit/.config \
     XDG_CACHE_HOME=/home/orbit/.cache \
-    ORBIT_WORKER_RUNTIMES=opencode
+    ORBIT_WORKER_HARNESSS=opencode
 
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/orbit-worker"]

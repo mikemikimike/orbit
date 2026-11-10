@@ -201,7 +201,7 @@ export default function DashboardPage() {
         {!agents.isLoading && !agents.data?.items.length ? (
           <EmptyState
             title="Create your first agent"
-            description="Agents are persistent definitions: instructions, runtime, model, connectors, triggers and autonomy."
+            description="Agents are persistent definitions: instructions, harness, model, connectors, triggers and autonomy."
             action={
               <Button asChild>
                 <Link href="/agents/new">

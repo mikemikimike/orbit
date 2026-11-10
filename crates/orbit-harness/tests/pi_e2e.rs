@@ -2,12 +2,12 @@
 //!
 //!   ORBIT_PI_E2E=1 \
 //!   ORBIT_PI_TEST_MODEL=opencode-go/deepseek-v4-pro \
-//!   cargo test -p orbit-runtime --test pi_e2e -- --ignored --nocapture
+//!   cargo test -p orbit-harness --test pi_e2e -- --ignored --nocapture
 use std::time::Duration;
 
-use orbit_contracts::{ExecutionRequest, InputProvenance, InstructionsBlock, RuntimeAdapter};
+use orbit_contracts::{ExecutionRequest, InputProvenance, InstructionsBlock, HarnessAdapter};
 use orbit_domain::{AutonomyLevel, ExecutionMode, ExecutionStatus, ResourceLimits};
-use orbit_runtime::PiRuntimeAdapter;
+use orbit_harness::PiHarnessAdapter;
 
 #[tokio::test]
 #[ignore = "requires Pi CLI + provider auth"]
@@ -18,9 +18,9 @@ async fn pi_executes_a_task_and_streams_events() {
     }
     let model = std::env::var("ORBIT_PI_TEST_MODEL")
         .unwrap_or_else(|_| "opencode-go/deepseek-v4-pro".to_string());
-    let adapter = PiRuntimeAdapter;
-    let config = orbit_contracts::RuntimeConfig {
-        kind: orbit_domain::RuntimeKind::Pi,
+    let adapter = PiHarnessAdapter;
+    let config = orbit_contracts::HarnessConfig {
+        kind: orbit_domain::HarnessKind::Pi,
         settings: serde_json::json!({ "model": model, "thinking": "low" }),
     };
     let health = adapter.health(&config).await.expect("health");
@@ -55,7 +55,7 @@ async fn pi_executes_a_task_and_streams_events() {
             timeout_seconds: 180,
             ..Default::default()
         },
-        runtime_config: serde_json::json!({ "model": model, "thinking": "low" }),
+        harness_config: serde_json::json!({ "model": model, "thinking": "low" }),
         session: orbit_contracts::SessionRequest {
             session_ref: None,
             mode: ExecutionMode::OnDemand,
@@ -101,5 +101,5 @@ async fn pi_executes_a_task_and_streams_events() {
     assert!(outcome.usage.input_tokens.unwrap_or(0) > 0);
     assert!(events
         .iter()
-        .any(|e| e.kind == orbit_contracts::RuntimeEventKind::OutputDelta));
+        .any(|e| e.kind == orbit_contracts::HarnessEventKind::OutputDelta));
 }

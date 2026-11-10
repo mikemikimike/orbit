@@ -5,14 +5,14 @@ import { type NextRequest } from "next/server";
  *
  * The browser always talks to `/api/v1/...` on its own origin. This handler forwards
  * requests to the control plane using the server-side `ORBIT_API_INTERNAL_URL`
- * (read at runtime, not build time) and streams responses back, including SSE.
+ * (read at harness, not build time) and streams responses back, including SSE.
  *
  * In Kubernetes the ingress can route `/api/*` directly to the API service; this
  * handler is then bypassed. In Docker Compose it removes any CORS or mixed-origin
  * concerns.
  */
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
+export const harness = "nodejs";
 
 const HOP_BY_HOP = new Set([
   "connection",

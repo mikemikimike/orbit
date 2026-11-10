@@ -5,7 +5,7 @@
 | Image | Dockerfile | Notes |
 |---|---|---|
 | `ghcr.io/orbit-platform/orbit-api` | `deploy/docker/api.Dockerfile` | multi-stage, non-root, embedded migrations |
-| `ghcr.io/orbit-platform/orbit-worker` | `deploy/docker/worker.Dockerfile` | non-root, runtime adapters |
+| `ghcr.io/orbit-platform/orbit-worker` | `deploy/docker/worker.Dockerfile` | non-root, harness adapters |
 | `ghcr.io/orbit-platform/orbit-web` | `deploy/docker/web.Dockerfile` | Next.js standalone output, non-root |
 
 ```bash
@@ -45,7 +45,7 @@ helm --kube-context microk8s upgrade --install orbit deploy/helm/orbit \
 ```
 
 Ingress routes: `/docs`, `/healthz`, `/readyz` → `orbit-api`; `/api` → `orbit-web`
-(the web container proxies `/api/*` to the API at runtime, injecting the dev token
+(the web container proxies `/api/*` to the API at harness, injecting the dev token
 server-side when dev auth is enabled and forwarding OIDC/API bearer headers otherwise);
 `/` → `orbit-web`.
 The chart sets SSE-friendly nginx annotations (`proxy-buffering: off`, long
@@ -54,7 +54,7 @@ read/send timeouts). Point `orbit.mdk.local` at the ingress address (or add an
 
 Validation status: the chart has been deployed to the microk8s cluster
 (`http://orbit.mdk.local`, ingress address `192.168.1.200`) and smoke-tested end-to-end
-(ingress → web proxy → API → Postgres → worker → mock runtime → SSE). It was also
+(ingress → web proxy → API → Postgres → worker → mock harness → SSE). It was also
 deployed to a local test cluster.
 
 ### macOS "no route to host" while the cluster is up
@@ -76,16 +76,16 @@ Key values:
   for a test cluster.
 - `secrets.existingSecret` — chart does not manage secret material in production;
   `ORBIT_MASTER_KEY`, `ORBIT_DATABASE_URL`, OIDC client secret live there.
-- `runtimeWorker.*` — replicas, resources, runtime allowlist, isolation settings.
+- `harnessWorker.*` — replicas, resources, harness allowlist, isolation settings.
 - `ingress.*` — nginx annotations include SSE buffering disabled.
 
 The chart requires no cluster-admin permissions and creates a namespaced ServiceAccount.
 
-## OpenCode runtime worker
+## OpenCode harness worker
 
 OpenCode runs in a separate execution-plane image (`deploy/docker/worker-opencode.Dockerfile`)
-so the control plane and base worker do not bundle runtime frameworks. The worker claims
-only `runtime_kind=opencode` executions (`ORBIT_WORKER_RUNTIMES=opencode`).
+so the control plane and base worker do not bundle harness frameworks. The worker claims
+only `harness_kind=opencode` executions (`ORBIT_WORKER_HARNESSS=opencode`).
 
 ```bash
 # 1. export credentials from a logged-in OpenCode install (contains secrets)
@@ -103,7 +103,7 @@ An init container imports the credentials into a writable emptyDir; the main con
 runs as non-root and executes `opencode run --standalone --format json`. Tested with
 OpenCode v2.2.5. Rotate credentials by recreating the Secret and restarting the
 Deployment. For local Docker/OrbStack, mount the exported auth file similarly or run the
-worker with `ORBIT_WORKER_RUNTIMES=opencode` and a writable `HOME`.
+worker with `ORBIT_WORKER_HARNESSS=opencode` and a writable `HOME`.
 
 ## Bundled vs external dependencies
 
@@ -118,8 +118,8 @@ with token automounting disabled and namespaced Deployments/Services/Ingress onl
 Vault integration is env wiring only (`VAULT_ADDR`); the Vault secret backend lands in a
 later phase.
 
-## Kubernetes runtime execution
+## Kubernetes harness execution
 
-Phase 0 runs the mock runtime in the worker. Phase 1 adds the container/Job dispatcher:
+Phase 0 runs the mock harness in the worker. Phase 1 adds the container/Job dispatcher:
 the worker creates a per-execution Job in its own namespace using a ServiceAccount with
 only `pods`/`jobs` permissions in that namespace, with limits and a TTL for cleanup.

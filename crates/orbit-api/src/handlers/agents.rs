@@ -81,7 +81,7 @@ pub async fn create_agent(
         "agent.created",
         Some("agent"),
         Some(agent.id),
-        serde_json::json!({ "name": agent.name, "runtime": definition.spec.runtime.kind.as_str() }),
+        serde_json::json!({ "name": agent.name, "harness": definition.spec.harness.kind.as_str() }),
     )
     .await;
 

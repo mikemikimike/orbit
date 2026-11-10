@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     canonical_checksum, is_valid_slug, AutonomyLevel, ExecutionMode, PlacementTarget,
-    ResourceLimits, RuntimeKind, AGENT_API_VERSION, AGENT_KIND,
+    ResourceLimits, HarnessKind, AGENT_API_VERSION, AGENT_KIND,
 };
 
 /// Portable, versioned agent definition (`orbit.io/v1`).
@@ -36,7 +36,7 @@ pub struct AgentMetadata {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentSpec {
-    pub runtime: RuntimeSpec,
+    pub harness: HarnessSpec,
     #[serde(default)]
     pub model: ModelSpec,
     pub instructions: Instructions,
@@ -57,21 +57,21 @@ pub struct AgentSpec {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct RuntimeSpec {
+pub struct HarnessSpec {
     #[serde(rename = "type")]
-    pub kind: RuntimeKind,
+    pub kind: HarnessKind,
     #[serde(default)]
     pub execution_mode: ExecutionMode,
     /// Where the agent may execute. `auto` lets any matching worker claim it.
     #[serde(default)]
     pub placement: PlacementTarget,
-    /// Runtime-specific configuration. Validated by the adapter, opaque to the core.
+    /// Harness-specific configuration. Validated by the adapter, opaque to the core.
     #[serde(default)]
     pub config: Value,
 }
 
-impl RuntimeSpec {
-    pub fn new(kind: RuntimeKind) -> Self {
+impl HarnessSpec {
+    pub fn new(kind: HarnessKind) -> Self {
         Self {
             kind,
             execution_mode: ExecutionMode::OnDemand,
@@ -84,10 +84,10 @@ impl RuntimeSpec {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelManagement {
-    /// The runtime owns provider inventory and authentication (OpenCode Go, Claude Code).
+    /// The harness owns provider inventory and authentication (OpenCode Go, Claude Code).
     #[default]
-    Runtime,
-    /// ORBIT supplies a resolved provider/model endpoint to the runtime.
+    Harness,
+    /// ORBIT supplies a resolved provider/model endpoint to the harness.
     Platform,
 }
 
@@ -359,14 +359,14 @@ impl AgentSpec {
     pub fn validate(&self) -> ValidationReport {
         let mut report = ValidationReport::default();
 
-        // Runtime
-        if !self.runtime.config.is_object() && !self.runtime.config.is_null() {
-            report.push("spec.runtime.config", "runtime config must be an object");
+        // Harness
+        if !self.harness.config.is_object() && !self.harness.config.is_null() {
+            report.push("spec.harness.config", "harness config must be an object");
         }
-        if self.runtime.kind == RuntimeKind::Generic && self.runtime.config.is_null() {
+        if self.harness.kind == HarnessKind::Generic && self.harness.config.is_null() {
             report.push(
-                "spec.runtime.config",
-                "generic runtimes require an explicit config object",
+                "spec.harness.config",
+                "generic harnesses require an explicit config object",
             );
         }
 
@@ -410,7 +410,7 @@ impl AgentSpec {
                     );
                 }
             }
-            ModelManagement::Runtime => {
+            ModelManagement::Harness => {
                 if self
                     .model
                     .provider
@@ -531,9 +531,9 @@ impl AgentSpec {
         report
     }
 
-    /// Stable identifier of the runtime configuration, used in execution records.
-    pub fn runtime_kind(&self) -> RuntimeKind {
-        self.runtime.kind
+    /// Stable identifier of the harness configuration, used in execution records.
+    pub fn harness_kind(&self) -> HarnessKind {
+        self.harness.kind
     }
 }
 
@@ -551,7 +551,7 @@ mod tests {
 
     fn minimal_spec() -> AgentSpec {
         AgentSpec {
-            runtime: RuntimeSpec::new(RuntimeKind::Mock),
+            harness: HarnessSpec::new(HarnessKind::Mock),
             model: ModelSpec::default(),
             instructions: Instructions {
                 system: "Be helpful.".into(),
@@ -575,11 +575,11 @@ metadata:
   name: social-monitor
   description: Monitors selected topics
 spec:
-  runtime:
+  harness:
     type: opencode
     executionMode: on_demand
   model:
-    management: runtime
+    management: harness
     provider: opencode-go
   instructions:
     system: |
@@ -599,7 +599,7 @@ spec:
         let definition = AgentDefinition::from_yaml(yaml).expect("valid yaml");
         let report = definition.validate();
         assert!(report.is_valid(), "{report:?}");
-        assert_eq!(definition.spec.runtime.kind, RuntimeKind::OpenCode);
+        assert_eq!(definition.spec.harness.kind, HarnessKind::OpenCode);
         assert_eq!(definition.spec.connectors.len(), 2);
         assert_eq!(definition.spec.triggers.len(), 1);
         let roundtrip = AgentDefinition::from_yaml(&definition.to_yaml().unwrap()).unwrap();

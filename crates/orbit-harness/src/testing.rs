@@ -1,18 +1,18 @@
 //! Shared contract test harness.
 //!
 //! Every registered adapter should pass [`assert_adapter_contract`]. This prevents a new
-//! runtime from silently violating cancellation, descriptor or outcome invariants.
+//! harness from silently violating cancellation, descriptor or outcome invariants.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use orbit_contracts::{
-    ExecutionRequest, InputProvenance, InstructionsBlock, RuntimeAdapter, RuntimeConfig,
-    RuntimeErrorKind,
+    ExecutionRequest, InputProvenance, InstructionsBlock, HarnessAdapter, HarnessConfig,
+    HarnessErrorKind,
 };
-use orbit_domain::{AutonomyLevel, ExecutionMode, ExecutionStatus, ResourceLimits, RuntimeKind};
+use orbit_domain::{AutonomyLevel, ExecutionMode, ExecutionStatus, ResourceLimits, HarnessKind};
 
-pub fn execution_request(_adapter: &dyn RuntimeAdapter, task: &str) -> ExecutionRequest {
+pub fn execution_request(_adapter: &dyn HarnessAdapter, task: &str) -> ExecutionRequest {
     let (events, _receiver) = tokio::sync::mpsc::channel(64);
     ExecutionRequest {
         execution_id: uuid::Uuid::now_v7(),
@@ -35,7 +35,7 @@ pub fn execution_request(_adapter: &dyn RuntimeAdapter, task: &str) -> Execution
             timeout_seconds: 10,
             ..Default::default()
         },
-        runtime_config: serde_json::json!({}),
+        harness_config: serde_json::json!({}),
         session: orbit_contracts::SessionRequest {
             session_ref: None,
             mode: ExecutionMode::OnDemand,
@@ -47,7 +47,7 @@ pub fn execution_request(_adapter: &dyn RuntimeAdapter, task: &str) -> Execution
 }
 
 /// Verify descriptor integrity and basic execute/cancel behaviour.
-pub async fn assert_adapter_contract(adapter: Arc<dyn RuntimeAdapter>) {
+pub async fn assert_adapter_contract(adapter: Arc<dyn HarnessAdapter>) {
     let descriptor = adapter.descriptor();
     assert_eq!(descriptor.kind, adapter.kind(), "descriptor kind mismatch");
     assert!(!descriptor.name.is_empty());
@@ -62,7 +62,7 @@ pub async fn assert_adapter_contract(adapter: Arc<dyn RuntimeAdapter>) {
         );
     }
 
-    let config = RuntimeConfig {
+    let config = HarnessConfig {
         kind: adapter.kind(),
         settings: serde_json::json!({}),
     };
@@ -76,8 +76,8 @@ pub async fn assert_adapter_contract(adapter: Arc<dyn RuntimeAdapter>) {
         "health check must not fail at the transport level for built-in adapters"
     );
 
-    if adapter.kind() == RuntimeKind::Mock {
-        // Streaming, success and cancellation are actually asserted for the mock runtime.
+    if adapter.kind() == HarnessKind::Mock {
+        // Streaming, success and cancellation are actually asserted for the mock harness.
         let request = execution_request(adapter.as_ref(), "summarize this contract test");
         let (sender, mut receiver) = tokio::sync::mpsc::channel(64);
         let mut request = request;
@@ -117,7 +117,7 @@ pub async fn assert_adapter_contract(adapter: Arc<dyn RuntimeAdapter>) {
 }
 
 /// Verify that an unimplemented adapter fails closed with `Unsupported`.
-pub async fn assert_fails_closed(adapter: Arc<dyn RuntimeAdapter>) {
+pub async fn assert_fails_closed(adapter: Arc<dyn HarnessAdapter>) {
     let request = execution_request(adapter.as_ref(), "anything");
     let error = adapter
         .execute(request)
@@ -126,9 +126,9 @@ pub async fn assert_fails_closed(adapter: Arc<dyn RuntimeAdapter>) {
     assert!(
         matches!(
             error.kind,
-            RuntimeErrorKind::Unsupported
-                | RuntimeErrorKind::Unavailable
-                | RuntimeErrorKind::InvalidConfig
+            HarnessErrorKind::Unsupported
+                | HarnessErrorKind::Unavailable
+                | HarnessErrorKind::InvalidConfig
         ),
         "unexpected error kind: {error:?}"
     );

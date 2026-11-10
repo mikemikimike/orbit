@@ -5,7 +5,7 @@
 ```
 organization 1─* user
 organization 1─* agent 1─* agent_version
-agent       1─* agent_instance *─1 runtime
+agent       1─* agent_instance *─1 harness
 agent       1─* trigger
 agent       1─* execution *─1 agent_version
 execution   1─* execution_event
@@ -44,20 +44,20 @@ exact `agent_version_id` they ran with.
 `definition` retains the original YAML for export.
 
 ### AgentInstance
-A deployed representation: `agent_version_id`, `runtime_id`, `state`
-(`pending → starting → running → stopping → stopped → failed`), `runtime_instance_ref`,
-`health`, runtime-specific `config`. On-demand runtimes may not need instances; the
+A deployed representation: `agent_version_id`, `harness_id`, `state`
+(`pending → starting → running → stopping → stopped → failed`), `harness_instance_ref`,
+`health`, harness-specific `config`. On-demand harnesses may not need instances; the
 model supports both long-running and ephemeral execution.
 
-### Runtime (registration)
+### Harness (registration)
 `kind ∈ {mock, opencode, claude_code, pi, generic}`. Carries a capability document
 (`supports_sessions`, `supports_resume`, `supports_streaming`, `supports_cancel`,
 `supports_long_running`, `max_timeout_seconds`, …). Health is reported by workers via
-heartbeats; the control plane never probes runtime internals directly.
+heartbeats; the control plane never probes harness internals directly.
 
 ### Provider
-Model provider configuration **separate from runtimes**. `kind ∈
-{openai_compatible, runtime_managed}`. Secrets are `secret_ref` handles resolved by the
+Model provider configuration **separate from harnesses**. `kind ∈
+{openai_compatible, harness_managed}`. Secrets are `secret_ref` handles resolved by the
 backend `SecretStore`; API responses redact them (`has_credential: true`).
 
 ### Connector / Connection / Capability / Policy

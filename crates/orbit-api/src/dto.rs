@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use orbit_contracts::{ProviderKind, RuntimeDescriptor};
-use orbit_domain::{AgentDefinition, AgentSpec, RuntimeKind};
+use orbit_contracts::{ProviderKind, HarnessDescriptor};
+use orbit_domain::{AgentDefinition, AgentSpec, HarnessKind};
 use orbit_store::{
     Agent, AgentInstance, AgentVersion, ConnectionWithConnector, ConnectorRecord, DashboardSummary,
     ExecutionEventRecord, ExecutionRecord, Organization, Provider, Trigger, User,
@@ -69,7 +69,7 @@ pub struct AgentSummary {
     pub current_version: i32,
     pub labels: serde_json::Value,
     #[schema(value_type = Option<String>)]
-    pub runtime: Option<RuntimeKind>,
+    pub harness: Option<HarnessKind>,
     pub autonomy_level: Option<u8>,
     pub model: Option<String>,
     pub connector_count: usize,
@@ -87,7 +87,7 @@ impl AgentSummary {
             status: agent.status.clone(),
             current_version: agent.current_version,
             labels: agent.labels.clone(),
-            runtime: spec.map(|s| s.runtime.kind),
+            harness: spec.map(|s| s.harness.kind),
             autonomy_level: spec.map(|s| s.autonomy.level),
             model: spec.and_then(|s| s.model.model.clone().or_else(|| s.model.provider.clone())),
             connector_count: spec.map(|s| s.connectors.len()).unwrap_or(0),
@@ -207,25 +207,25 @@ pub struct ExecutionEventPage {
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeView {
+pub struct HarnessView {
     pub id: Uuid,
     #[schema(value_type = String)]
-    pub kind: RuntimeKind,
+    pub kind: HarnessKind,
     pub name: String,
     pub description: String,
     pub enabled: bool,
     pub implementation_status: String,
     pub capabilities: serde_json::Value,
-    pub descriptor: RuntimeDescriptor,
+    pub descriptor: HarnessDescriptor,
     pub config: serde_json::Value,
-    pub health: RuntimeHealthView,
+    pub health: HarnessHealthView,
     pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeHealthView {
-    /// `unknown` in Phase 0: runtime health is reported by workers in a later phase.
+pub struct HarnessHealthView {
+    /// `unknown` in Phase 0: harness health is reported by workers in a later phase.
     pub status: String,
     pub message: Option<String>,
     pub reported_at: Option<DateTime<Utc>>,
@@ -419,7 +419,7 @@ pub struct MeResponse {
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MetaFeatures {
-    pub runtime_execution: bool,
+    pub harness_execution: bool,
     pub connectors_invocation: bool,
     pub approvals: bool,
     pub scheduled_triggers: bool,
@@ -471,6 +471,6 @@ pub struct CreatedApiToken {
 /// Helper used by handlers to build the effective provider kind.
 pub fn parse_provider_kind(value: &str) -> Result<ProviderKind, String> {
     ProviderKind::parse(value).ok_or_else(|| {
-        format!("unknown provider kind '{value}'; expected openai_compatible or runtime_managed")
+        format!("unknown provider kind '{value}'; expected openai_compatible or harness_managed")
     })
 }

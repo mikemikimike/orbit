@@ -8,7 +8,7 @@ use crate::{Store, StoreResult};
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct WorkerHeartbeat {
     pub worker_id: String,
-    pub runtimes: Vec<String>,
+    pub harnesses: Vec<String>,
     pub target: String,
     pub hostname: Option<String>,
     pub started_at: DateTime<Utc>,
@@ -19,23 +19,23 @@ impl Store {
     pub async fn upsert_worker_heartbeat(
         &self,
         worker_id: &str,
-        runtimes: &[String],
+        harnesses: &[String],
         target: &str,
         hostname: Option<&str>,
     ) -> StoreResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO worker_heartbeats (worker_id, runtimes, target, hostname, last_heartbeat_at)
+            INSERT INTO worker_heartbeats (worker_id, harnesses, target, hostname, last_heartbeat_at)
             VALUES ($1, $2, $3, $4, now())
             ON CONFLICT (worker_id) DO UPDATE SET
-                runtimes = EXCLUDED.runtimes,
+                harnesses = EXCLUDED.harnesses,
                 target = EXCLUDED.target,
                 hostname = COALESCE(EXCLUDED.hostname, worker_heartbeats.hostname),
                 last_heartbeat_at = now()
             "#,
         )
         .bind(worker_id)
-        .bind(runtimes)
+        .bind(harnesses)
         .bind(target)
         .bind(hostname)
         .execute(&self.pool)

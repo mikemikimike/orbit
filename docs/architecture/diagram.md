@@ -10,12 +10,12 @@ A high-resolution PNG is available at [`orbit-overview.png`](orbit-overview.png)
 |---|---|
 | **Agent Experience** | Web UI (and future Expo app). Configuration, monitoring, approvals. No business logic or durable state. |
 | **Control Plane** | `orbit-api`: auth, agents and immutable versions, providers, connections, executions, approvals, audit, SSE. PostgreSQL is the durable source of truth. NATS JetStream accelerates events; DB polling is the recovery path. |
-| **Execution Plane** | `orbit-worker` (mock/scheduler) and `orbit-worker-opencode` (real OpenCode). Workers claim only their configured runtimes. The policy-enforcing tool broker runs per execution. |
-| **External systems** | GitHub, X, GitLab, webhooks and model providers. All actions go through the broker; credentials never reach the runtime. |
+| **Execution Plane** | `orbit-worker` (mock/scheduler) and `orbit-worker-opencode` (real OpenCode). Workers claim only their configured harnesses. The policy-enforcing tool broker runs per execution. |
+| **External systems** | GitHub, X, GitLab, webhooks and model providers. All actions go through the broker; credentials never reach the harness. |
 
 | Status | Components |
 |---|---|
-| **Implemented** | API, PostgreSQL schema, NATS/memory bus, mock runtime, OpenCode v2.2.5, X read hydration, SSE, audit, encrypted secrets |
+| **Implemented** | API, PostgreSQL schema, NATS/memory bus, mock harness, OpenCode v2.2.5, X read hydration, SSE, audit, encrypted secrets |
 | **In progress** | Execution-scoped tool broker, GitHub capabilities, approval UI |
 | **Planned** | GitLab actions, X posting, webhook verification, long-running service mode, swarm simulations, per-execution container isolation |
 
@@ -37,7 +37,7 @@ flowchart LR
   subgraph Execution["Execution Plane"]
     Worker["orbit-worker<br/>mock · scheduler"]
     OCWorker["orbit-worker-opencode"]
-    Runtime["OpenCode CLI<br/>(isolated workspace)"]
+    Harness["OpenCode CLI<br/>(isolated workspace)"]
     Broker["Policy-enforcing<br/>tool broker"]
   end
 
@@ -55,8 +55,8 @@ flowchart LR
   Bus --> OCWorker
   Worker <--> DB
   OCWorker <--> DB
-  OCWorker -->|"spawn per execution"| Runtime
-  Runtime <-->|"MCP tools"| Broker
+  OCWorker -->|"spawn per execution"| Harness
+  Harness <-->|"MCP tools"| Broker
   Broker -->|"HTTPS + leased credentials"| GitHub
   Broker -->|"HTTPS + leased credentials"| X
   Broker -->|"HTTPS"| More
@@ -112,7 +112,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-  Call["Runtime calls tool via MCP"] --> Token{"Execution token valid?"}
+  Call["Harness calls tool via MCP"] --> Token{"Execution token valid?"}
   Token -- no --> Deny401["401 unauthorized + audit"]
   Token -- yes --> Allowed{"Capability in agent +<br/>connection allowlist?"}
   Allowed -- no --> Deny403["403 denied + event + audit"]
@@ -125,7 +125,7 @@ flowchart TD
   Approval --> Human{"Human decision"}
   Human -- "rejected / expired" --> Denied["Tool error + audit"]
   Human -- approved --> Invoke
-  Invoke --> Result["Tool result → runtime + events + audit"]
+  Invoke --> Result["Tool result → harness + events + audit"]
 ```
 
 ## Domain model
@@ -144,7 +144,7 @@ erDiagram
   AGENT ||--o{ EXECUTION : runs
 
   AGENT_VERSION ||--o{ EXECUTION : snapshot
-  RUNTIME ||--o{ AGENT_INSTANCE : provides
+  HARNESS ||--o{ AGENT_INSTANCE : provides
   CONNECTOR ||--o{ CONNECTION : instantiates
 
   EXECUTION ||--o{ EXECUTION_EVENT : emits
@@ -214,8 +214,8 @@ flowchart TB
     Ing -->|"/api, /docs, /healthz"| SvcApi["Service: api"]
     WebD["Deployment: web"] --> SvcWeb
     ApiD["Deployment: api"] --> SvcApi
-    WorkerD["Deployment: worker<br/>ORBIT_WORKER_RUNTIMES=mock"]
-    OpencodeD["Deployment: worker-opencode<br/>ORBIT_WORKER_RUNTIMES=opencode"]
+    WorkerD["Deployment: worker<br/>ORBIT_WORKER_HARNESSS=mock"]
+    OpencodeD["Deployment: worker-opencode<br/>ORBIT_WORKER_HARNESSS=opencode"]
     Pg[("PostgreSQL<br/>bundled or external")]
     Nats[("NATS<br/>bundled or external")]
     Secret["Secrets: DB URL, master key,<br/>OIDC, OpenCode auth export"]
@@ -230,10 +230,10 @@ flowchart TB
 
 ## Boundaries that keep the design honest
 
-1. **The control plane never runs agent code.** Only workers and runtime containers do.
+1. **The control plane never runs agent code.** Only workers and harness containers do.
 2. **PostgreSQL is the source of truth.** The event bus is an accelerator, not a queue you can lose.
 3. **Policy and approvals live outside the model.** Prompts are not a security boundary.
 4. **Credentials are leased by the broker per action**, never embedded in prompts, CLI arguments or tool output.
 5. **Agent versions are immutable.** Running executions keep the version they started with.
-6. **Workers are runtime-scoped.** The mock worker cannot claim OpenCode executions and vice versa.
+6. **Workers are harness-scoped.** The mock worker cannot claim OpenCode executions and vice versa.
 7. **External content is untrusted.** Trusted instructions travel separately from retrieved data.

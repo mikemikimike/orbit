@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use orbit_events::EventBus;
-use orbit_runtime::RuntimeRegistry;
+use orbit_harness::HarnessRegistry;
 use orbit_security::{AuthConfig, JwtValidator};
 use orbit_store::Store;
 use uuid::Uuid;
@@ -21,7 +21,7 @@ pub struct DevIdentity {
 pub struct AppState {
     pub store: Store,
     pub bus: Arc<dyn EventBus>,
-    pub registry: Arc<RuntimeRegistry>,
+    pub registry: Arc<HarnessRegistry>,
     pub auth: Arc<AuthConfig>,
     pub jwt: Option<Arc<JwtValidator>>,
     pub default_org_id: Uuid,

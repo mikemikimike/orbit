@@ -1,6 +1,6 @@
 [package]
 name = "orbit-contracts"
-description = "Cross-boundary contracts: runtime adapters, providers, connectors, events"
+description = "Cross-boundary contracts: harness adapters, providers, connectors, events"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

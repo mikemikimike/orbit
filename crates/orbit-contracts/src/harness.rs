@@ -4,13 +4,13 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use orbit_domain::{RuntimeKind, ValidationReport};
+use orbit_domain::{HarnessKind, ValidationReport};
 
-/// Capabilities a runtime advertises. The UI and dispatch logic must branch on these,
-/// never on a hardcoded runtime name.
+/// Capabilities a harness advertises. The UI and dispatch logic must branch on these,
+/// never on a hardcoded harness name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeCapabilities {
+pub struct HarnessCapabilities {
     pub supports_sessions: bool,
     pub supports_resume: bool,
     pub supports_streaming: bool,
@@ -18,16 +18,16 @@ pub struct RuntimeCapabilities {
     pub supports_instances: bool,
     pub supports_tool_events: bool,
     pub supports_usage_reporting: bool,
-    /// The runtime owns its provider inventory and credentials (OpenCode Go, Claude Code).
-    pub runtime_managed_providers: bool,
-    /// Runtimes that can consume a provider configured by ORBIT.
+    /// The harness owns its provider inventory and credentials (OpenCode Go, Claude Code).
+    pub harness_managed_providers: bool,
+    /// Harnesses that can consume a provider configured by ORBIT.
     pub supports_platform_providers: bool,
     pub execution_modes: Vec<orbit_domain::ExecutionMode>,
     pub max_timeout_seconds: u64,
     pub max_memory_mb: u32,
 }
 
-impl Default for RuntimeCapabilities {
+impl Default for HarnessCapabilities {
     fn default() -> Self {
         Self {
             supports_sessions: true,
@@ -37,7 +37,7 @@ impl Default for RuntimeCapabilities {
             supports_instances: false,
             supports_tool_events: false,
             supports_usage_reporting: false,
-            runtime_managed_providers: false,
+            harness_managed_providers: false,
             supports_platform_providers: true,
             execution_modes: vec![orbit_domain::ExecutionMode::OnDemand],
             max_timeout_seconds: 3600,
@@ -46,14 +46,14 @@ impl Default for RuntimeCapabilities {
     }
 }
 
-/// Static description of a runtime family, exposed through `GET /api/v1/runtimes`.
+/// Static description of a harness family, exposed through `GET /api/v1/harnesses`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeDescriptor {
-    pub kind: RuntimeKind,
+pub struct HarnessDescriptor {
+    pub kind: HarnessKind,
     pub name: String,
     pub description: String,
-    pub capabilities: RuntimeCapabilities,
+    pub capabilities: HarnessCapabilities,
     pub implementation_status: orbit_domain::ImplementationStatus,
     pub config_schema: serde_json::Value,
     #[serde(default)]
@@ -62,8 +62,8 @@ pub struct RuntimeDescriptor {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeConfig {
-    pub kind: RuntimeKind,
+pub struct HarnessConfig {
+    pub kind: HarnessKind,
     #[serde(default)]
     pub settings: serde_json::Value,
 }
@@ -104,14 +104,14 @@ impl InstanceHealth {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeHealth {
+pub struct HarnessHealth {
     pub healthy: bool,
     pub message: Option<String>,
     #[serde(default)]
     pub details: BTreeMap<String, String>,
 }
 
-impl RuntimeHealth {
+impl HarnessHealth {
     pub fn healthy() -> Self {
         Self {
             healthy: true,
@@ -153,7 +153,7 @@ pub struct CreateInstanceRequest {
     pub agent_id: Uuid,
     pub agent_version_id: Uuid,
     pub agent_name: String,
-    pub runtime_config: serde_json::Value,
+    pub harness_config: serde_json::Value,
     pub resources: orbit_domain::ResourceLimits,
     #[serde(default)]
     pub workspace: WorkspaceSpec,
@@ -161,23 +161,23 @@ pub struct CreateInstanceRequest {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeInstance {
+pub struct HarnessInstance {
     pub id: String,
-    pub runtime_kind: RuntimeKind,
+    pub harness_kind: HarnessKind,
     pub state: InstanceState,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeInstanceRef {
-    pub runtime_kind: RuntimeKind,
+pub struct HarnessInstanceRef {
+    pub harness_kind: HarnessKind,
     pub id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeInstanceStatus {
+pub struct HarnessInstanceStatus {
     pub state: InstanceState,
     pub health: InstanceHealth,
     #[serde(default)]
@@ -265,7 +265,7 @@ pub struct ExecutionRequest {
     pub agent_name: String,
     pub instructions: InstructionsBlock,
     pub input: ExecutionInput,
-    /// Resolved model/provider selection. Runtime-managed runtimes may receive `None`
+    /// Resolved model/provider selection. Harness-managed harnesses may receive `None`
     /// and use their own inventory.
     #[serde(default)]
     pub model: Option<crate::provider::ResolvedModel>,
@@ -274,15 +274,15 @@ pub struct ExecutionRequest {
     pub autonomy: orbit_domain::AutonomyLevel,
     pub resources: orbit_domain::ResourceLimits,
     #[serde(default)]
-    pub runtime_config: serde_json::Value,
+    pub harness_config: serde_json::Value,
     #[serde(default)]
     pub session: SessionRequest,
     #[serde(default)]
     pub workspace: WorkspaceSpec,
-    /// Incremental runtime events. Required for streaming; adapters may ignore it when
+    /// Incremental harness events. Required for streaming; adapters may ignore it when
     /// `capabilities().supports_streaming` is false.
     #[serde(skip)]
-    pub events: Option<tokio::sync::mpsc::Sender<RuntimeEvent>>,
+    pub events: Option<tokio::sync::mpsc::Sender<HarnessEvent>>,
     #[serde(skip, default = "default_cancellation")]
     pub cancel: tokio_util::sync::CancellationToken,
 }
@@ -300,20 +300,20 @@ pub struct ResumeRequest {
     #[serde(default)]
     pub model: Option<crate::provider::ResolvedModel>,
     #[serde(default)]
-    pub runtime_config: serde_json::Value,
+    pub harness_config: serde_json::Value,
     #[serde(default)]
     pub resources: orbit_domain::ResourceLimits,
     #[serde(default)]
     pub workspace: WorkspaceSpec,
     #[serde(skip)]
-    pub events: Option<tokio::sync::mpsc::Sender<RuntimeEvent>>,
+    pub events: Option<tokio::sync::mpsc::Sender<HarnessEvent>>,
     #[serde(skip, default = "default_cancellation")]
     pub cancel: tokio_util::sync::CancellationToken,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum RuntimeEventKind {
+pub enum HarnessEventKind {
     Started,
     Status,
     Log,
@@ -325,17 +325,17 @@ pub enum RuntimeEventKind {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeEvent {
-    pub kind: RuntimeEventKind,
+pub struct HarnessEvent {
+    pub kind: HarnessEventKind,
     pub level: orbit_domain::LogLevel,
     pub message: String,
     #[serde(default)]
     pub data: serde_json::Value,
 }
 
-impl RuntimeEvent {
+impl HarnessEvent {
     pub fn new(
-        kind: RuntimeEventKind,
+        kind: HarnessEventKind,
         level: orbit_domain::LogLevel,
         message: impl Into<String>,
     ) -> Self {
@@ -348,14 +348,14 @@ impl RuntimeEvent {
     }
 
     pub fn log(level: orbit_domain::LogLevel, message: impl Into<String>) -> Self {
-        Self::new(RuntimeEventKind::Log, level, message)
+        Self::new(HarnessEventKind::Log, level, message)
     }
 
     pub fn started(session_ref: &str) -> Self {
         let mut event = Self::new(
-            RuntimeEventKind::Started,
+            HarnessEventKind::Started,
             orbit_domain::LogLevel::Info,
-            format!("runtime session {session_ref} started"),
+            format!("harness session {session_ref} started"),
         );
         event.data = serde_json::json!({ "sessionRef": session_ref });
         event
@@ -363,7 +363,7 @@ impl RuntimeEvent {
 
     pub fn output(text: impl Into<String>) -> Self {
         Self::new(
-            RuntimeEventKind::OutputDelta,
+            HarnessEventKind::OutputDelta,
             orbit_domain::LogLevel::Info,
             text,
         )
@@ -382,7 +382,7 @@ pub struct ExecutionOutcome {
     #[serde(default)]
     pub output: Option<serde_json::Value>,
     #[serde(default)]
-    pub error: Option<RuntimeError>,
+    pub error: Option<HarnessError>,
     #[serde(default)]
     pub usage: orbit_domain::Usage,
     #[serde(default)]
@@ -400,7 +400,7 @@ impl ExecutionOutcome {
         }
     }
 
-    pub fn failed(error: RuntimeError) -> Self {
+    pub fn failed(error: HarnessError) -> Self {
         Self {
             status: orbit_domain::ExecutionStatus::Failed,
             output: None,
@@ -417,7 +417,7 @@ fn default_usage() -> orbit_domain::Usage {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum RuntimeErrorKind {
+pub enum HarnessErrorKind {
     InvalidConfig,
     Unauthorized,
     Unavailable,
@@ -431,8 +431,8 @@ pub enum RuntimeErrorKind {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeError {
-    pub kind: RuntimeErrorKind,
+pub struct HarnessError {
+    pub kind: HarnessErrorKind,
     pub message: String,
     #[serde(default)]
     pub retryable: bool,
@@ -440,8 +440,8 @@ pub struct RuntimeError {
     pub details: serde_json::Value,
 }
 
-impl RuntimeError {
-    pub fn new(kind: RuntimeErrorKind, message: impl Into<String>) -> Self {
+impl HarnessError {
+    pub fn new(kind: HarnessErrorKind, message: impl Into<String>) -> Self {
         Self {
             kind,
             message: message.into(),
@@ -452,71 +452,71 @@ impl RuntimeError {
 
     pub fn unsupported(what: impl fmt::Display) -> Self {
         Self::new(
-            RuntimeErrorKind::Unsupported,
-            format!("runtime does not support {what}"),
+            HarnessErrorKind::Unsupported,
+            format!("harness does not support {what}"),
         )
     }
 
     pub fn unavailable(message: impl Into<String>) -> Self {
-        let mut err = Self::new(RuntimeErrorKind::Unavailable, message);
+        let mut err = Self::new(HarnessErrorKind::Unavailable, message);
         err.retryable = true;
         err
     }
 
     pub fn cancelled() -> Self {
-        Self::new(RuntimeErrorKind::Cancelled, "execution cancelled")
+        Self::new(HarnessErrorKind::Cancelled, "execution cancelled")
     }
 
     pub fn timeout(seconds: u64) -> Self {
         Self::new(
-            RuntimeErrorKind::Timeout,
+            HarnessErrorKind::Timeout,
             format!("execution timed out after {seconds}s"),
         )
     }
 }
 
-impl std::fmt::Display for RuntimeError {
+impl std::fmt::Display for HarnessError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}: {}", self.kind, self.message)
     }
 }
 
-impl std::error::Error for RuntimeError {}
+impl std::error::Error for HarnessError {}
 
-/// Adapter contract. See `docs/architecture/runtime-contract.md`.
+/// Adapter contract. See `docs/architecture/harness-contract.md`.
 #[async_trait::async_trait]
-pub trait RuntimeAdapter: Send + Sync {
-    fn kind(&self) -> RuntimeKind;
-    fn descriptor(&self) -> RuntimeDescriptor;
-    fn capabilities(&self) -> RuntimeCapabilities {
+pub trait HarnessAdapter: Send + Sync {
+    fn kind(&self) -> HarnessKind;
+    fn descriptor(&self) -> HarnessDescriptor;
+    fn capabilities(&self) -> HarnessCapabilities {
         self.descriptor().capabilities
     }
 
-    /// Validate runtime-specific configuration. Returns issues instead of failing, so
+    /// Validate harness-specific configuration. Returns issues instead of failing, so
     /// the UI can present all problems at once.
-    async fn validate_config(&self, config: &RuntimeConfig) -> ValidationReport;
+    async fn validate_config(&self, config: &HarnessConfig) -> ValidationReport;
 
-    async fn health(&self, config: &RuntimeConfig) -> Result<RuntimeHealth, RuntimeError>;
+    async fn health(&self, config: &HarnessConfig) -> Result<HarnessHealth, HarnessError>;
 
     async fn create_instance(
         &self,
         request: CreateInstanceRequest,
-    ) -> Result<RuntimeInstance, RuntimeError>;
+    ) -> Result<HarnessInstance, HarnessError>;
 
-    async fn start_instance(&self, instance: &RuntimeInstanceRef) -> Result<(), RuntimeError>;
-    async fn stop_instance(&self, instance: &RuntimeInstanceRef) -> Result<(), RuntimeError>;
-    async fn delete_instance(&self, instance: &RuntimeInstanceRef) -> Result<(), RuntimeError>;
+    async fn start_instance(&self, instance: &HarnessInstanceRef) -> Result<(), HarnessError>;
+    async fn stop_instance(&self, instance: &HarnessInstanceRef) -> Result<(), HarnessError>;
+    async fn delete_instance(&self, instance: &HarnessInstanceRef) -> Result<(), HarnessError>;
     async fn instance_status(
         &self,
-        instance: &RuntimeInstanceRef,
-    ) -> Result<RuntimeInstanceStatus, RuntimeError>;
+        instance: &HarnessInstanceRef,
+    ) -> Result<HarnessInstanceStatus, HarnessError>;
 
     /// Run one execution to completion. Must honour cancellation and timeouts and clean
     /// up all child processes/containers before returning.
-    async fn execute(&self, request: ExecutionRequest) -> Result<ExecutionOutcome, RuntimeError>;
+    async fn execute(&self, request: ExecutionRequest) -> Result<ExecutionOutcome, HarnessError>;
 
-    async fn resume(&self, request: ResumeRequest) -> Result<ExecutionOutcome, RuntimeError> {
+    async fn resume(&self, request: ResumeRequest) -> Result<ExecutionOutcome, HarnessError> {
         let _ = request;
-        Err(RuntimeError::unsupported("session resumption"))
+        Err(HarnessError::unsupported("session resumption"))
     }
 }

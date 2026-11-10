@@ -84,9 +84,9 @@ async fn fire_trigger(state: &WorkerState, trigger: Trigger) -> anyhow::Result<(
             agent_id: agent.id,
             agent_version_id: version.id,
             agent_name: &agent.name,
-            runtime_kind: spec.runtime.kind,
+            harness_kind: spec.harness.kind,
             trigger_source: TriggerSource::Schedule,
-            placement: spec.runtime.placement.as_str(),
+            placement: spec.harness.placement.as_str(),
             trigger_id: Some(trigger.id),
             input,
             timeout_seconds: spec.resources.timeout_seconds,
@@ -102,7 +102,7 @@ async fn fire_trigger(state: &WorkerState, trigger: Trigger) -> anyhow::Result<(
             "executionId": execution.id,
             "agentId": agent.id,
             "triggerId": trigger.id,
-            "runtime": spec.runtime.kind.as_str(),
+            "harness": spec.harness.kind.as_str(),
         }),
     )
     .with_org(trigger.org_id)

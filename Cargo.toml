@@ -6,7 +6,7 @@ members = [
   "crates/orbit-store",
   "crates/orbit-events",
   "crates/orbit-security",
-  "crates/orbit-runtime",
+  "crates/orbit-harness",
   "crates/orbit-api",
   "services/api",
   "services/worker",
@@ -14,7 +14,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -27,7 +27,7 @@ orbit-contracts = { path = "crates/orbit-contracts" }
 orbit-store = { path = "crates/orbit-store" }
 orbit-events = { path = "crates/orbit-events" }
 orbit-security = { path = "crates/orbit-security" }
-orbit-runtime = { path = "crates/orbit-runtime" }
+orbit-harness = { path = "crates/orbit-harness" }
 orbit-api = { path = "crates/orbit-api" }
 
 anyhow = "1"

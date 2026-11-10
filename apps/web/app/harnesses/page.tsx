@@ -8,12 +8,12 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { ImplementationBadge } from "@/components/ui/status-badge";
-import { useMeta, useRuntimes, useWorkers } from "@/lib/queries";
+import { useMeta, useHarnesses, useWorkers } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 import { titleCase } from "@/lib/utils";
 
-export default function RuntimesPage() {
-  const runtimes = useRuntimes();
+export default function HarnessesPage() {
+  const harnesses = useHarnesses();
   const meta = useMeta();
   const workers = useWorkers();
 
@@ -40,20 +40,20 @@ export default function RuntimesPage() {
         </CardContent>
       </Card>
 
-      {runtimes.isLoading ? (
+      {harnesses.isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2">
           {Array.from({ length: 4 }).map((_, index) => (
             <Skeleton key={index} className="h-64 rounded-xl" />
           ))}
         </div>
-      ) : runtimes.isError ? (
-        <p className="text-sm text-destructive">{errorMessage(runtimes.error)}</p>
-      ) : !runtimes.data?.length ? (
+      ) : harnesses.isError ? (
+        <p className="text-sm text-destructive">{errorMessage(harnesses.error)}</p>
+      ) : !harnesses.data?.length ? (
         <EmptyState icon={<Cpu className="h-6 w-6" />} title="No harnesses registered" />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {runtimes.data.map((runtime) => {
-            const capabilities = (runtime.descriptor?.capabilities ?? {}) as Record<
+          {harnesses.data.map((harness) => {
+            const capabilities = (harness.descriptor?.capabilities ?? {}) as Record<
               string,
               unknown
             >;
@@ -63,13 +63,13 @@ export default function RuntimesPage() {
               ["Streaming", capabilities.supportsStreaming],
               ["Cancel", capabilities.supportsCancel],
               ["Long-running", capabilities.supportsInstances],
-              ["Runtime providers", capabilities.runtimeManagedProviders],
+              ["Harness providers", capabilities.harnessManagedProviders],
               ["Platform providers", capabilities.supportsPlatformProviders],
               ["Usage reporting", capabilities.supportsUsageReporting],
             ] as const;
 
             return (
-              <Card key={runtime.kind} className="flex flex-col">
+              <Card key={harness.kind} className="flex flex-col">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2.5">
@@ -77,25 +77,25 @@ export default function RuntimesPage() {
                         <Cpu className="h-5 w-5" />
                       </span>
                       <div>
-                        <CardTitle>{runtime.name}</CardTitle>
-                        <p className="text-[11px] text-muted-foreground">{runtime.kind}</p>
+                        <CardTitle>{harness.name}</CardTitle>
+                        <p className="text-[11px] text-muted-foreground">{harness.kind}</p>
                       </div>
                     </div>
-                    <ImplementationBadge status={runtime.implementationStatus} />
+                    <ImplementationBadge status={harness.implementationStatus} />
                   </div>
                 </CardHeader>
                 <CardContent className="flex flex-1 flex-col gap-3">
-                  <p className="text-sm text-muted-foreground">{runtime.description}</p>
+                  <p className="text-sm text-muted-foreground">{harness.description}</p>
 
                   <div className="flex flex-wrap gap-1.5">
-                    {runtime.descriptor?.capabilities?.executionModes?.map((mode) => (
+                    {harness.descriptor?.capabilities?.executionModes?.map((mode) => (
                       <Badge key={mode} variant="secondary">
                         {titleCase(mode)}
                       </Badge>
                     ))}
-                    {runtime.descriptor?.capabilities?.maxTimeoutSeconds ? (
+                    {harness.descriptor?.capabilities?.maxTimeoutSeconds ? (
                       <Badge variant="outline">
-                        timeout ≤ {runtime.descriptor.capabilities.maxTimeoutSeconds}s
+                        timeout ≤ {harness.descriptor.capabilities.maxTimeoutSeconds}s
                       </Badge>
                     ) : null}
                   </div>
@@ -114,14 +114,14 @@ export default function RuntimesPage() {
                   <div className="mt-auto flex items-center justify-between border-t pt-3 text-[11px] text-muted-foreground">
                     <span className="inline-flex items-center gap-1">
                       <ShieldCheck className="h-3 w-3" />
-                      {runtime.enabled ? "enabled" : "disabled"}
+                      {harness.enabled ? "enabled" : "disabled"}
                     </span>
                     <span className="inline-flex items-center gap-1">
-                      <Sparkles className="h-3 w-3" /> health: {runtime.health.status}
+                      <Sparkles className="h-3 w-3" /> health: {harness.health.status}
                     </span>
-                    {runtime.descriptor?.docsUrl ? (
+                    {harness.descriptor?.docsUrl ? (
                       <a
-                        href={runtime.descriptor.docsUrl}
+                        href={harness.descriptor.docsUrl}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1 text-primary hover:underline"
@@ -149,7 +149,7 @@ export default function RuntimesPage() {
                   <div className="min-w-0">
                     <p className="truncate font-mono text-[11px]">{worker.workerId}</p>
                     <p className="text-muted-foreground">
-                      {worker.runtimes.join(", ")} · target {worker.target}
+                      {worker.harnesses.join(", ")} · target {worker.target}
                       {worker.hostname ? ` · ${worker.hostname}` : ""}
                     </p>
                   </div>
@@ -168,7 +168,7 @@ export default function RuntimesPage() {
       {meta.data ? (
         <p className="text-center text-[11px] text-muted-foreground">
           Event transport: {meta.data.eventsDriver} · environment: {meta.data.environment} ·
-          runtime health reporting arrives with worker heartbeats.
+          harness health reporting arrives with worker heartbeats.
         </p>
       ) : null}
     </div>

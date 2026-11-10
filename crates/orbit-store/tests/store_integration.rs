@@ -3,7 +3,7 @@ use std::sync::Arc;
 use base64::Engine;
 use orbit_domain::{
     AgentDefinition, AgentMetadata, AgentSpec, AgentStatus, AutonomySpec, ExecutionMode,
-    ExecutionStatus, Instructions, MemorySpec, ModelSpec, ResourceLimits, RuntimeKind, RuntimeSpec,
+    ExecutionStatus, Instructions, MemorySpec, ModelSpec, ResourceLimits, HarnessKind, HarnessSpec,
     TriggerSource, TriggerSpec, UserRole,
 };
 use orbit_security::{SecretCipher, SecretValue};
@@ -45,8 +45,8 @@ fn definition(name: &str) -> AgentDefinition {
             labels: Default::default(),
         },
         spec: AgentSpec {
-            runtime: RuntimeSpec {
-                kind: RuntimeKind::Mock,
+            harness: HarnessSpec {
+                kind: HarnessKind::Mock,
                 execution_mode: ExecutionMode::OnDemand,
                 placement: orbit_domain::PlacementTarget::Auto,
                 config: serde_json::json!({}),
@@ -169,7 +169,7 @@ async fn execution_lifecycle_and_events() {
             agent_id: agent.id,
             agent_version_id: version.id,
             agent_name: &agent.name,
-            runtime_kind: RuntimeKind::Mock,
+            harness_kind: HarnessKind::Mock,
             trigger_source: TriggerSource::Manual,
             placement: "auto",
             trigger_id: None,
@@ -189,7 +189,7 @@ async fn execution_lifecycle_and_events() {
             agent_id: agent.id,
             agent_version_id: version.id,
             agent_name: &agent.name,
-            runtime_kind: RuntimeKind::Mock,
+            harness_kind: HarnessKind::Mock,
             trigger_source: TriggerSource::Manual,
             placement: "auto",
             trigger_id: None,
@@ -397,23 +397,23 @@ async fn org_scoping_is_enforced() {
 }
 
 #[tokio::test]
-async fn runtime_catalog_upsert_is_idempotent() {
+async fn harness_catalog_upsert_is_idempotent() {
     let Some(store) = test_store().await else {
         return;
     };
     let (org, _) = seed_org(&store).await;
-    let descriptor = orbit_runtime::RuntimeRegistry::builtin()
+    let descriptor = orbit_harness::HarnessRegistry::builtin()
         .descriptors()
         .into_iter()
-        .find(|d| d.kind == RuntimeKind::Mock)
+        .find(|d| d.kind == HarnessKind::Mock)
         .unwrap();
-    store.upsert_runtime_descriptor(&descriptor).await.unwrap();
-    store.upsert_runtime_descriptor(&descriptor).await.unwrap();
-    let runtimes = store.list_runtimes(org).await.unwrap();
+    store.upsert_harness_descriptor(&descriptor).await.unwrap();
+    store.upsert_harness_descriptor(&descriptor).await.unwrap();
+    let harnesses = store.list_harnesses(org).await.unwrap();
     assert_eq!(
-        runtimes.iter().filter(|r| r.kind == "mock").count(),
+        harnesses.iter().filter(|r| r.kind == "mock").count(),
         1,
-        "upsert must not duplicate built-in runtimes"
+        "upsert must not duplicate built-in harnesses"
     );
 }
 
@@ -439,7 +439,7 @@ async fn orphaned_executions_are_failed_and_approvals_expired() {
                     agent_id: agent.id,
                     agent_version_id: version.id,
                     agent_name: &agent.name,
-                    runtime_kind: RuntimeKind::Mock,
+                    harness_kind: HarnessKind::Mock,
                     trigger_source: TriggerSource::Manual,
                     placement: "auto",
                     trigger_id: None,
@@ -528,7 +528,7 @@ async fn single_execution_mode_can_take_a_dispatched_execution() {
             agent_id: agent.id,
             agent_version_id: version.id,
             agent_name: &agent.name,
-            runtime_kind: RuntimeKind::Mock,
+            harness_kind: HarnessKind::Mock,
             trigger_source: TriggerSource::Manual,
             placement: "auto",
             trigger_id: None,
@@ -603,7 +603,7 @@ async fn skills_profiles_and_agent_scoped_claims() {
             agent_id: agent_a.id,
             agent_version_id: version_a.id,
             agent_name: &agent_a.name,
-            runtime_kind: RuntimeKind::Mock,
+            harness_kind: HarnessKind::Mock,
             trigger_source: TriggerSource::Manual,
             placement: "auto",
             trigger_id: None,
@@ -620,7 +620,7 @@ async fn skills_profiles_and_agent_scoped_claims() {
             agent_id: agent_b.id,
             agent_version_id: version_b.id,
             agent_name: &agent_b.name,
-            runtime_kind: RuntimeKind::Mock,
+            harness_kind: HarnessKind::Mock,
             trigger_source: TriggerSource::Manual,
             placement: "auto",
             trigger_id: None,

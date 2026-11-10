@@ -179,13 +179,13 @@ export default function ExecutionDetailPage() {
           <CardContent className="space-y-2 p-4 text-sm">
             <p className="font-medium">Waiting for a worker to claim this execution</p>
             <p className="text-muted-foreground">
-              Runtime <span className="font-mono">{execution.runtimeKind}</span> · placement{" "}
+              Harness <span className="font-mono">{execution.harnessKind}</span> · placement{" "}
               <span className="font-mono">{execution.placement ?? "auto"}</span>.
               {(() => {
                 const liveWorkers = (workers.data ?? []).filter((worker) => worker.live);
                 const matching = liveWorkers.filter(
                   (worker) =>
-                    worker.runtimes.includes(execution.runtimeKind) &&
+                    worker.harnesses.includes(execution.harnessKind) &&
                     (execution.placement === "auto" ||
                       worker.target === execution.placement),
                 );
@@ -193,9 +193,9 @@ export default function ExecutionDetailPage() {
                 if (matching.length > 0)
                   return ` ${matching.length} matching worker(s) online; waiting for a free slot.`;
                 if (liveWorkers.length === 0)
-                  return " No live workers found. Start a worker for this runtime.";
-                return ` No live worker matches this runtime/placement. Online: ${liveWorkers
-                  .map((worker) => `${worker.target}:${worker.runtimes.join("+")}`)
+                  return " No live workers found. Start a worker for this harness.";
+                return ` No live worker matches this harness/placement. Online: ${liveWorkers
+                  .map((worker) => `${worker.target}:${worker.harnesses.join("+")}`)
                   .join(", ")}.`;
               })()}
             </p>
@@ -211,7 +211,7 @@ export default function ExecutionDetailPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <InfoTile label="Trigger" value={titleCase(execution.triggerSource)} icon={<Cpu className="h-3.5 w-3.5" />} />
-        <InfoTile label="Harness" value={titleCase(execution.runtimeKind)} icon={<Terminal className="h-3.5 w-3.5" />} />
+        <InfoTile label="Harness" value={titleCase(execution.harnessKind)} icon={<Terminal className="h-3.5 w-3.5" />} />
         <InfoTile
           label="Duration"
           value={formatDuration(execution.startedAt, execution.finishedAt)}
@@ -236,7 +236,7 @@ export default function ExecutionDetailPage() {
         <Card className="lg:col-span-3">
           <CardHeader className="flex-row items-center justify-between pb-3">
             <CardTitle className="flex items-center gap-2">
-              <Terminal className="h-4 w-4 text-primary" /> Runtime timeline
+              <Terminal className="h-4 w-4 text-primary" /> Harness timeline
             </CardTitle>
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
               <span>{visibleEvents.length} events</span>
@@ -270,7 +270,7 @@ export default function ExecutionDetailPage() {
                   {events.length > 0
                     ? `${events.length} verbose event(s) hidden.`
                     : active
-                      ? "Waiting for runtime events…"
+                      ? "Waiting for harness events…"
                       : "No events were recorded."}
                 </p>
               ) : (
@@ -285,7 +285,7 @@ export default function ExecutionDetailPage() {
               {hiddenCount > 0 ? (
                 <p className="pt-2 text-[11px] text-muted-foreground">
                   Reasoning, internal steps, usage metrics and generic tool calls are hidden
-                  by default. Use “show verbose” for the raw runtime stream.
+                  by default. Use “show verbose” for the raw harness stream.
                 </p>
               ) : null}
             </div>
@@ -335,7 +335,7 @@ export default function ExecutionDetailPage() {
                 </pre>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {active ? "Output will appear when the runtime completes." : "No output."}
+                  {active ? "Output will appear when the harness completes." : "No output."}
                 </p>
               )}
             </CardContent>

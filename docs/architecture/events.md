@@ -22,13 +22,13 @@ delivery count, so worker crashes redeliver.
 
 ```
 orbit.execution.requested      execution accepted, awaiting dispatch
-orbit.execution.dispatch       worker claim / runtime assignment
+orbit.execution.dispatch       worker claim / harness assignment
 orbit.execution.updated        status transition (also drives UI tail)
-orbit.execution.event          individual runtime event
+orbit.execution.event          individual harness event
 orbit.trigger.fired            schedule/webhook/connector event matched a trigger
 orbit.connector.event          normalized inbound connector event
 orbit.agent.event              agent-emitted event (agent-to-agent, Phase 3)
-orbit.worker.heartbeat         runtime worker liveness
+orbit.worker.heartbeat         harness worker liveness
 ```
 
 Envelope:

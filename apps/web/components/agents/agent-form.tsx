@@ -23,7 +23,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ImplementationBadge } from "@/components/ui/status-badge";
-import { useConnections, useConnectors, useProviders, useRuntimes, useSkills } from "@/lib/queries";
+import { useConnections, useConnectors, useProviders, useHarnesses, useSkills } from "@/lib/queries";
 import type { AgentDefinition } from "@orbit/contracts";
 import {
   AUTONOMY_LEVELS,
@@ -48,7 +48,7 @@ export function AgentForm({
   submitting?: boolean;
   onSubmit: (definition: AgentDefinition) => Promise<void> | void;
 }) {
-  const runtimes = useRuntimes();
+  const harnesses = useHarnesses();
   const providers = useProviders();
   const connectors = useConnectors();
   const connections = useConnections();
@@ -57,14 +57,14 @@ export function AgentForm({
   const [definition, setDefinition] = useState<AgentDefinition>(() =>
     initial ? structuredClone(initial) : emptyAgentDefinition(),
   );
-  const [runtimeConfigText, setRuntimeConfigText] = useState(
-    JSON.stringify(initial?.spec.runtime.config ?? {}, null, 2),
+  const [harnessConfigText, setHarnessConfigText] = useState(
+    JSON.stringify(initial?.spec.harness.config ?? {}, null, 2),
   );
   const [configError, setConfigError] = useState<string | null>(null);
   const [issues, setIssues] = useState<Array<{ path: string; message: string }>>([]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  const selectedRuntime = runtimes.data?.find((r) => r.kind === definition.spec.runtime.type);
+  const selectedHarness = harnesses.data?.find((r) => r.kind === definition.spec.harness.type);
   const platformProviders = useMemo(
     () => providers.data?.filter((p) => p.kind === "openai_compatible") ?? [],
     [providers.data],
@@ -133,12 +133,12 @@ export function AgentForm({
 
   async function handleSubmit() {
     let config: unknown = {};
-    if (runtimeConfigText.trim()) {
+    if (harnessConfigText.trim()) {
       try {
-        config = JSON.parse(runtimeConfigText);
+        config = JSON.parse(harnessConfigText);
       } catch {
-        setConfigError("Runtime config must be valid JSON.");
-        setIssues([{ path: "spec.runtime.config", message: "invalid JSON" }]);
+        setConfigError("Harness config must be valid JSON.");
+        setIssues([{ path: "spec.harness.config", message: "invalid JSON" }]);
         return;
       }
     }
@@ -151,7 +151,7 @@ export function AgentForm({
       },
       spec: {
         ...definition.spec,
-        runtime: { ...definition.spec.runtime, config: config as Record<string, unknown> },
+        harness: { ...definition.spec.harness, config: config as Record<string, unknown> },
       },
     };
     const parsed = agentDefinitionSchema.safeParse(candidate);
@@ -240,17 +240,17 @@ export function AgentForm({
               <div className={fieldClass}>
                 <Label>Harness</Label>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  {(runtimes.data ?? []).map((runtime) => {
-                    const active = definition.spec.runtime.type === runtime.kind;
+                  {(harnesses.data ?? []).map((harness) => {
+                    const active = definition.spec.harness.type === harness.kind;
                     return (
                       <button
-                        key={runtime.kind}
+                        key={harness.kind}
                         type="button"
                         onClick={() =>
                           updateSpec({
-                            runtime: {
-                              ...definition.spec.runtime,
-                              type: runtime.kind as AgentDefinition["spec"]["runtime"]["type"],
+                            harness: {
+                              ...definition.spec.harness,
+                              type: harness.kind as AgentDefinition["spec"]["harness"]["type"],
                             },
                           })
                         }
@@ -262,22 +262,22 @@ export function AgentForm({
                         )}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-sm font-medium">{runtime.name}</span>
-                          <ImplementationBadge status={runtime.implementationStatus} />
+                          <span className="text-sm font-medium">{harness.name}</span>
+                          <ImplementationBadge status={harness.implementationStatus} />
                         </div>
                         <p className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
-                          {runtime.description}
+                          {harness.description}
                         </p>
                       </button>
                     );
                   })}
                 </div>
-                {selectedRuntime && selectedRuntime.implementationStatus !== "available" ? (
+                {selectedHarness && selectedHarness.implementationStatus !== "available" ? (
                   <p className="flex items-start gap-1.5 rounded-md bg-[hsl(var(--warning))]/10 p-2 text-[11px] text-[hsl(var(--warning))]">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    {selectedRuntime.implementationStatus === "scaffolded"
+                    {selectedHarness.implementationStatus === "scaffolded"
                       ? "This adapter is scaffolded: configuration and preflight work, but task execution is not enabled yet in this build."
-                      : "This runtime is registered but not implemented yet. Executions will fail closed."}
+                      : "This harness is registered but not implemented yet. Executions will fail closed."}
                   </p>
                 ) : null}
               </div>
@@ -287,13 +287,13 @@ export function AgentForm({
                   <Label>Placement</Label>
                   <select
                     className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                    value={definition.spec.runtime.placement}
+                    value={definition.spec.harness.placement}
                     onChange={(event) =>
                       updateSpec({
-                        runtime: {
-                          ...definition.spec.runtime,
+                        harness: {
+                          ...definition.spec.harness,
                           placement: event.target
-                            .value as AgentDefinition["spec"]["runtime"]["placement"],
+                            .value as AgentDefinition["spec"]["harness"]["placement"],
                         },
                       })
                     }
@@ -311,13 +311,13 @@ export function AgentForm({
                   <Label>Execution mode</Label>
                   <select
                     className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                    value={definition.spec.runtime.executionMode}
+                    value={definition.spec.harness.executionMode}
                     onChange={(event) =>
                       updateSpec({
-                        runtime: {
-                          ...definition.spec.runtime,
+                        harness: {
+                          ...definition.spec.harness,
                           executionMode: event.target
-                            .value as AgentDefinition["spec"]["runtime"]["executionMode"],
+                            .value as AgentDefinition["spec"]["harness"]["executionMode"],
                         },
                       })
                     }
@@ -344,12 +344,12 @@ export function AgentForm({
                       })
                     }
                   >
-                    <option value="runtime">Runtime managed</option>
+                    <option value="harness">Harness managed</option>
                     <option value="platform">ORBIT provider</option>
                   </select>
                   <p className={helpClass}>
-                    {definition.spec.model.management === "runtime"
-                      ? "The runtime owns provider inventory and credentials (e.g. OpenCode Go)."
+                    {definition.spec.model.management === "harness"
+                      ? "The harness owns provider inventory and credentials (e.g. OpenCode Go)."
                       : "ORBIT resolves an OpenAI-compatible endpoint and injects the credential at execution time."}
                   </p>
                 </div>
@@ -378,7 +378,7 @@ export function AgentForm({
                   ) : (
                     <Input
                       value={definition.spec.model.provider ?? ""}
-                      placeholder="e.g. opencode-go (free-form, runtime-defined)"
+                      placeholder="e.g. opencode-go (free-form, harness-defined)"
                       onChange={(event) =>
                         updateSpec({
                           model: { ...definition.spec.model, provider: event.target.value || undefined },
@@ -397,7 +397,7 @@ export function AgentForm({
                     placeholder={
                       definition.spec.model.management === "platform"
                         ? "model id at the provider"
-                        : "optional; runtime default"
+                        : "optional; harness default"
                     }
                     onChange={(event) =>
                       updateSpec({
@@ -419,19 +419,19 @@ export function AgentForm({
                   className="text-xs font-medium text-primary hover:underline"
                   onClick={() => setAdvancedOpen((open) => !open)}
                 >
-                  {advancedOpen ? "Hide" : "Show"} runtime-specific configuration (JSON)
+                  {advancedOpen ? "Hide" : "Show"} harness-specific configuration (JSON)
                 </button>
                 {advancedOpen ? (
                   <div className="mt-2 space-y-1.5">
                     <Textarea
                       className="min-h-[120px] font-mono text-xs"
-                      value={runtimeConfigText}
-                      onChange={(event) => setRuntimeConfigText(event.target.value)}
+                      value={harnessConfigText}
+                      onChange={(event) => setHarnessConfigText(event.target.value)}
                       placeholder="{}"
                     />
                     {configError ? <p className="text-[11px] text-destructive">{configError}</p> : null}
                     <p className={helpClass}>
-                      Passed to the runtime adapter unchanged. OpenCode accepts{" "}
+                      Passed to the harness adapter unchanged. OpenCode accepts{" "}
                       <code className="font-mono">binary</code>, <code className="font-mono">provider</code>,{" "}
                       <code className="font-mono">agent</code>, <code className="font-mono">extraArgs</code>.
                     </p>

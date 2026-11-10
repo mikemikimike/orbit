@@ -7,7 +7,7 @@ use http_body_util::BodyExt;
 use orbit_api::{build_router, AppState, DevIdentity};
 use orbit_domain::UserRole;
 use orbit_events::MemoryEventBus;
-use orbit_runtime::RuntimeRegistry;
+use orbit_harness::HarnessRegistry;
 use orbit_security::{AuthConfig, AuthMode, DevAuthConfig, SecretCipher};
 use orbit_store::Store;
 use serde_json::{json, Value};
@@ -46,11 +46,11 @@ async fn test_app(allow_anonymous: bool) -> Option<TestApp> {
         store.upsert_connector_manifest(&manifest).await.unwrap();
     }
     store
-        .upsert_runtime_descriptor(
-            &RuntimeRegistry::builtin()
+        .upsert_harness_descriptor(
+            &HarnessRegistry::builtin()
                 .descriptors()
                 .into_iter()
-                .find(|d| d.kind == orbit_domain::RuntimeKind::Mock)
+                .find(|d| d.kind == orbit_domain::HarnessKind::Mock)
                 .unwrap(),
         )
         .await
@@ -75,7 +75,7 @@ async fn test_app(allow_anonymous: bool) -> Option<TestApp> {
     let state = AppState {
         store: store.clone(),
         bus,
-        registry: Arc::new(RuntimeRegistry::builtin()),
+        registry: Arc::new(HarnessRegistry::builtin()),
         auth: Arc::new(auth_config),
         jwt: None,
         default_org_id: org.id,
@@ -115,8 +115,8 @@ fn definition() -> Value {
         "kind": "Agent",
         "metadata": { "name": "API Test Agent", "description": "created by tests" },
         "spec": {
-            "runtime": { "type": "mock", "executionMode": "on_demand", "config": {} },
-            "model": { "management": "runtime" },
+            "harness": { "type": "mock", "executionMode": "on_demand", "config": {} },
+            "model": { "management": "harness" },
             "instructions": { "system": "You are a test agent." },
             "connectors": [],
             "triggers": [{ "type": "schedule", "cron": "0 * * * *" }],
@@ -211,7 +211,7 @@ async fn agent_crud_validation_and_export() {
     let (status, body) = send(&app.router, get("/api/v1/agents?limit=10")).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["total"], 1);
-    assert_eq!(body["items"][0]["runtime"], "mock");
+    assert_eq!(body["items"][0]["harness"], "mock");
 
     let (status, body) = send(&app.router, post("/api/v1/agents", definition())).await;
     assert_eq!(status, StatusCode::CREATED, "{body}");
@@ -219,9 +219,9 @@ async fn agent_crud_validation_and_export() {
     assert_eq!(body["telegram_test"], Value::Null);
     assert_eq!(body["spec"]["autonomy"]["level"], 2);
 
-    // Unknown runtime → validation error envelope.
+    // Unknown harness → validation error envelope.
     let mut invalid = definition();
-    invalid["spec"]["runtime"]["type"] = json!("not-a-runtime");
+    invalid["spec"]["harness"]["type"] = json!("not-a-harness");
     let (status, body) = send(&app.router, post("/api/v1/agents", invalid)).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(body["error"]["code"], "validation_error");

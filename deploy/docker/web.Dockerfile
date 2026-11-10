@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# ORBIT web app: Next.js standalone output behind a runtime API proxy.
+# ORBIT web app: Next.js standalone output behind a harness API proxy.
 FROM node:22-alpine AS builder
 RUN corepack enable
 WORKDIR /app
@@ -14,7 +14,7 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @orbit/web build
 
-FROM node:22-alpine AS runtime
+FROM node:22-alpine AS harness
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \

@@ -4,7 +4,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use orbit_domain::{RuntimeKind, ValidationReport};
+use orbit_domain::{HarnessKind, ValidationReport};
 
 /// Provider families. New kinds extend this enum plus a config struct; unrelated
 /// modules are unaffected.
@@ -13,22 +13,22 @@ use orbit_domain::{RuntimeKind, ValidationReport};
 pub enum ProviderKind {
     /// Any endpoint implementing the OpenAI chat-completions shape.
     OpenAiCompatible,
-    /// Provider inventory and credentials owned by the runtime (OpenCode Go, Claude Code).
-    RuntimeManaged,
+    /// Provider inventory and credentials owned by the harness (OpenCode Go, Claude Code).
+    HarnessManaged,
 }
 
 impl ProviderKind {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::OpenAiCompatible => "openai_compatible",
-            Self::RuntimeManaged => "runtime_managed",
+            Self::HarnessManaged => "harness_managed",
         }
     }
 
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "openai_compatible" => Some(Self::OpenAiCompatible),
-            "runtime_managed" => Some(Self::RuntimeManaged),
+            "harness_managed" => Some(Self::HarnessManaged),
             _ => None,
         }
     }
@@ -97,9 +97,9 @@ pub struct OpenAiCompatibleConfig {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct RuntimeManagedConfig {
-    pub runtime: RuntimeKind,
-    /// Provider name as understood by the runtime (e.g. `opencode-go`). Not validated
+pub struct HarnessManagedConfig {
+    pub harness: HarnessKind,
+    /// Provider name as understood by the harness (e.g. `opencode-go`). Not validated
     /// against a hardcoded inventory.
     #[serde(default)]
     pub provider: Option<String>,
@@ -153,8 +153,8 @@ pub fn validate_provider_config(
                 }
             }
         }
-        ProviderKind::RuntimeManaged => {
-            match serde_json::from_value::<RuntimeManagedConfig>(config.clone()) {
+        ProviderKind::HarnessManaged => {
+            match serde_json::from_value::<HarnessManagedConfig>(config.clone()) {
                 Ok(parsed) => {
                     if let Some(provider) = &parsed.provider {
                         if provider.trim().is_empty() {
@@ -162,7 +162,7 @@ pub fn validate_provider_config(
                         }
                     }
                 }
-                Err(err) => report.push("config", format!("invalid runtime-managed config: {err}")),
+                Err(err) => report.push("config", format!("invalid harness-managed config: {err}")),
             }
         }
     }
@@ -173,8 +173,8 @@ pub fn validate_provider_config(
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "management", rename_all = "snake_case")]
 pub enum ModelSelection {
-    /// Runtime owns the model inventory and credentials.
-    Runtime {
+    /// Harness owns the model inventory and credentials.
+    Harness {
         provider: Option<String>,
         model: Option<String>,
     },
@@ -201,7 +201,7 @@ impl SecretLease {
         }
     }
 
-    /// Exposes the credential. Only for injection into an isolated runtime process.
+    /// Exposes the credential. Only for injection into an isolated harness process.
     pub fn expose(&self) -> &str {
         &self.value
     }
@@ -224,7 +224,7 @@ impl serde::Serialize for SecretLease {
     }
 }
 
-/// Endpoint handed to a runtime that can consume an OpenAI-compatible API.
+/// Endpoint handed to a harness that can consume an OpenAI-compatible API.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelEndpoint {
@@ -254,9 +254,9 @@ pub struct ResolvedModel {
 }
 
 impl ResolvedModel {
-    pub fn runtime_managed(provider: Option<String>, model: Option<String>) -> Self {
+    pub fn harness_managed(provider: Option<String>, model: Option<String>) -> Self {
         Self {
-            selection: ModelSelection::Runtime { provider, model },
+            selection: ModelSelection::Harness { provider, model },
             endpoint: None,
             credential: None,
         }

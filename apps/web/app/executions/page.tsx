@@ -32,7 +32,7 @@ export default function ExecutionsPage() {
       <PageHeader
         eyebrow="Observability"
         title="Executions"
-        description="Every agent invocation: input, output, status, runtime events and usage."
+        description="Every agent invocation: input, output, status, harness events and usage."
       />
 
       <div className="flex items-center gap-2">

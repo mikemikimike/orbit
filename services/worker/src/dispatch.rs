@@ -1,6 +1,6 @@
 //! Per-execution container dispatch.
 //!
-//! Instead of running the runtime inside the long-lived worker process, the parent
+//! Instead of running the harness inside the long-lived worker process, the parent
 //! claims the execution and starts a short-lived container running `orbit-worker` in
 //! single-execution mode. The child connects to PostgreSQL/NATS, runs exactly one
 //! execution (including its own tool broker/MCP bridge), writes events and exits.
@@ -11,16 +11,16 @@
 use std::time::Duration;
 
 use chrono::Utc;
-use orbit_contracts::{RuntimeError, RuntimeErrorKind};
+use orbit_contracts::{HarnessError, HarnessErrorKind};
 use orbit_store::ExecutionRecord;
 use tokio::process::Command;
 
 use crate::runner::WorkerState;
 
-fn image_for(runtime: &str) -> Option<String> {
+fn image_for(harness: &str) -> Option<String> {
     let key = format!(
         "ORBIT_EXECUTION_IMAGE_{}",
-        runtime.to_uppercase().replace('-', "_")
+        harness.to_uppercase().replace('-', "_")
     );
     std::env::var(&key)
         .ok()
@@ -44,16 +44,16 @@ fn rewrite_host(url: &str) -> String {
 }
 
 pub async fn run(state: &WorkerState, execution: &ExecutionRecord) -> anyhow::Result<()> {
-    let Some(image) = image_for(&execution.runtime_kind) else {
+    let Some(image) = image_for(&execution.harness_kind) else {
         crate::runner::fail_execution(
             state,
             execution,
-            RuntimeError::new(
-                RuntimeErrorKind::InvalidConfig,
+            HarnessError::new(
+                HarnessErrorKind::InvalidConfig,
                 format!(
-                    "docker execution driver has no image for runtime '{}' (set ORBIT_EXECUTION_IMAGE or ORBIT_EXECUTION_IMAGE_{})",
-                    execution.runtime_kind,
-                    execution.runtime_kind.to_uppercase()
+                    "docker execution driver has no image for harness '{}' (set ORBIT_EXECUTION_IMAGE or ORBIT_EXECUTION_IMAGE_{})",
+                    execution.harness_kind,
+                    execution.harness_kind.to_uppercase()
                 ),
             ),
         )
@@ -86,7 +86,7 @@ pub async fn run(state: &WorkerState, execution: &ExecutionRecord) -> anyhow::Re
     ];
 
     let auth_export = std::env::var("ORBIT_OPENCODE_AUTH_EXPORT").ok();
-    if execution.runtime_kind == "opencode" {
+    if execution.harness_kind == "opencode" {
         if let Some(path) = &auth_export {
             if std::path::Path::new(path).exists() {
                 args.push("-v".into());
@@ -112,7 +112,7 @@ pub async fn run(state: &WorkerState, execution: &ExecutionRecord) -> anyhow::Re
         ),
         ("ORBIT_SINGLE_EXECUTION_ID", execution.id.to_string()),
         ("ORBIT_WORKER_ID", worker_id.clone()),
-        ("ORBIT_WORKER_RUNTIMES", execution.runtime_kind.clone()),
+        ("ORBIT_WORKER_HARNESSS", execution.harness_kind.clone()),
         ("ORBIT_WORKER_TARGET", "docker".into()),
         ("ORBIT_SCHEDULER_ENABLED", "false".into()),
         ("ORBIT_EXECUTION_DRIVER", "process".into()),
@@ -154,7 +154,7 @@ pub async fn run(state: &WorkerState, execution: &ExecutionRecord) -> anyhow::Re
 
     tracing::info!(
         execution_id = %execution.id,
-        runtime = %execution.runtime_kind,
+        harness = %execution.harness_kind,
         image = %image,
         container = %container_name,
         "dispatching execution to a per-execution container"
@@ -182,7 +182,7 @@ pub async fn run(state: &WorkerState, execution: &ExecutionRecord) -> anyhow::Re
             crate::runner::fail_execution(
                 state,
                 execution,
-                RuntimeError::timeout(execution.timeout_seconds as u64),
+                HarnessError::timeout(execution.timeout_seconds as u64),
             )
             .await?;
             return Ok(());
@@ -205,7 +205,7 @@ pub async fn run(state: &WorkerState, execution: &ExecutionRecord) -> anyhow::Re
             crate::runner::fail_execution(
                 state,
                 execution,
-                RuntimeError::new(RuntimeErrorKind::ExecutionFailed, message),
+                HarnessError::new(HarnessErrorKind::ExecutionFailed, message),
             )
             .await?;
         }

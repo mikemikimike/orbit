@@ -1,8 +1,8 @@
 //! MCP stdio bridge.
 //!
-//! Agent runtimes (OpenCode) spawn this binary as a local MCP server. It forwards
+//! Agent harnesses (OpenCode) spawn this binary as a local MCP server. It forwards
 //! `tools/list` and `tools/call` to the ORBIT tool broker over loopback, authenticated
-//! with an execution-scoped token. The runtime never receives provider credentials; all
+//! with an execution-scoped token. The harness never receives provider credentials; all
 //! policy, approval and connector logic lives in the broker.
 
 use std::time::Duration;

@@ -3,7 +3,7 @@
 ## Part A — Model providers
 
 Source: `crates/orbit-contracts/src/provider.rs`. Providers are stored separately from
-runtimes because a runtime may manage its own models, or consume an ORBIT-configured
+harnesses because a harness may manage its own models, or consume an ORBIT-configured
 endpoint.
 
 ### Kinds
@@ -11,10 +11,10 @@ endpoint.
 | Kind | Use |
 |---|---|
 | `openai_compatible` | vLLM, LiteLLM, APISIX/AI gateway, OpenRouter-style, any `/v1` endpoint |
-| `runtime_managed` | runtime owns auth/inventory (OpenCode Go, Claude Code subscription, Pi) |
+| `harness_managed` | harness owns auth/inventory (OpenCode Go, Claude Code subscription, Pi) |
 
-OpenCode Go is **not** a runtime and not a generic provider: it is represented as a
-`runtime_managed` provider whose credential is stored in `secret_ref` and handed to the
+OpenCode Go is **not** a harness and not a generic provider: it is represented as a
+`harness_managed` provider whose credential is stored in `secret_ref` and handed to the
 OpenCode adapter (Phase 1). It is never hardcoded in the UI or domain.
 
 ### `openai_compatible` configuration
@@ -48,7 +48,7 @@ predictably and are visible in the UI.
 
 The worker resolves a provider into `ResolvedModel` for the adapter, which includes the
 endpoint, model id, custom headers, params and a short-lived `SecretLease`. Credentials
-are decrypted only in memory and injected into runtime processes through env vars or
+are decrypted only in memory and injected into harness processes through env vars or
 tmpfs files; they are never written to logs, execution events or the frontend.
 
 ## Part B — Connectors
@@ -109,7 +109,7 @@ transport option (`mcp` capability provider), not the only connector mechanism.
 - **X read hydration**: before an execution, the worker resolves `x` bindings with the
   `posts.search` capability, loads the selected connection's bearer token, calls
   `GET https://api.x.com/2/tweets/search/recent`, and injects up to 10 posts into the
-  runtime input as `externalContext` with `provenance.trusted=false`. The query comes from
+  harness input as `externalContext` with `provenance.trusted=false`. The query comes from
   `payload.query`, then `connection.config.query`, then the task text.
 - Failures (missing credential/query, API 401/403, network) fail the execution with an
   actionable message; bindings without a connection are skipped with a recorded event.

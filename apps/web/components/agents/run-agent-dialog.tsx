@@ -86,7 +86,7 @@ export function RunAgentDialog({
         <DialogHeader>
           <DialogTitle>Run {agentName}</DialogTitle>
           <DialogDescription>
-            The task is queued durably and executed by the runtime worker. Live events appear on the
+            The task is queued durably and executed by the harness worker. Live events appear on the
             execution page.
           </DialogDescription>
         </DialogHeader>

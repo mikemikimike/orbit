@@ -170,7 +170,7 @@ export default function AgentDetailPage() {
       <div className="flex flex-wrap items-center gap-2">
         <AgentStatusBadge status={data.status} />
         <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-medium">
-          {titleCase(spec.runtime.type)}
+          {titleCase(spec.harness.type)}
         </span>
         <span className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-[11px]">
           <ShieldCheck className="h-3 w-3" /> Autonomy L{autonomy.level}
@@ -222,16 +222,16 @@ export default function AgentDetailPage() {
                   <CardTitle>Harness</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  <Row label="Harness" value={titleCase(spec.runtime.type)} />
-                  <Row label="Mode" value={titleCase(spec.runtime.executionMode)} />
-                  <Row label="Placement" value={titleCase(spec.runtime.placement)} />
+                  <Row label="Harness" value={titleCase(spec.harness.type)} />
+                  <Row label="Mode" value={titleCase(spec.harness.executionMode)} />
+                  <Row label="Placement" value={titleCase(spec.harness.placement)} />
                   <Row
                     label="Model management"
                     value={titleCase(spec.model.management)}
                   />
                   <Row label="Skills" value={spec.skills.length ? spec.skills.join(", ") : "none"} />
-                  <Row label="Provider" value={spec.model.provider ?? "runtime default"} />
-                  <Row label="Model" value={spec.model.model ?? "runtime default"} />
+                  <Row label="Provider" value={spec.model.provider ?? "harness default"} />
+                  <Row label="Model" value={spec.model.model ?? "harness default"} />
                 </CardContent>
               </Card>
 

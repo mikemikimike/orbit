@@ -4,16 +4,16 @@
 //!
 //!   ORBIT_OPENCODE_E2E=1 \
 //!   ORBIT_OPENCODE_TEST_MODEL=opencode-go/deepseek-v4-pro \
-//!   cargo test -p orbit-runtime --test opencode_e2e -- --ignored --nocapture
+//!   cargo test -p orbit-harness --test opencode_e2e -- --ignored --nocapture
 //!
 //! The test is ignored by default so `cargo test --workspace` never spends model credits.
 use std::time::Duration;
 
 use orbit_contracts::{
-    ExecutionRequest, InputProvenance, InstructionsBlock, RuntimeAdapter, RuntimeConfig,
+    ExecutionRequest, InputProvenance, InstructionsBlock, HarnessAdapter, HarnessConfig,
 };
-use orbit_domain::{AutonomyLevel, ExecutionMode, ExecutionStatus, ResourceLimits, RuntimeKind};
-use orbit_runtime::OpenCodeRuntimeAdapter;
+use orbit_domain::{AutonomyLevel, ExecutionMode, ExecutionStatus, ResourceLimits, HarnessKind};
+use orbit_harness::OpenCodeHarnessAdapter;
 
 fn request(model: &str) -> ExecutionRequest {
     let (events, mut receiver) = tokio::sync::mpsc::channel(256);
@@ -39,7 +39,7 @@ fn request(model: &str) -> ExecutionRequest {
             timeout_seconds: 180,
             ..Default::default()
         },
-        runtime_config: serde_json::json!({
+        harness_config: serde_json::json!({
             "model": model,
             "autoApprove": true,
             "standalone": true
@@ -69,10 +69,10 @@ async fn opencode_executes_a_task_and_streams_events() {
     }
     let model = std::env::var("ORBIT_OPENCODE_TEST_MODEL")
         .unwrap_or_else(|_| "opencode-go/deepseek-v4-pro".to_string());
-    let adapter = OpenCodeRuntimeAdapter;
+    let adapter = OpenCodeHarnessAdapter;
 
-    let config = RuntimeConfig {
-        kind: RuntimeKind::OpenCode,
+    let config = HarnessConfig {
+        kind: HarnessKind::OpenCode,
         settings: serde_json::json!({ "model": model }),
     };
     let health = adapter.health(&config).await.expect("health");
@@ -120,11 +120,11 @@ async fn opencode_executes_a_task_and_streams_events() {
         "unexpected output: {text}"
     );
     assert!(outcome.session_ref.is_some(), "session id must be captured");
-    assert!(!events.is_empty(), "runtime events must be streamed");
+    assert!(!events.is_empty(), "harness events must be streamed");
     assert!(
         events
             .iter()
-            .any(|event| event.kind == orbit_contracts::RuntimeEventKind::OutputDelta),
+            .any(|event| event.kind == orbit_contracts::HarnessEventKind::OutputDelta),
         "expected output events"
     );
     assert!(

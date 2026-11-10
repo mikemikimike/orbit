@@ -9,7 +9,7 @@ fastest environment available:
 Use a fresh database for the full flow (`docker compose ... down -v` locally). Dev auth is
 enabled, so the browser needs no login; the web container injects the dev token server-side.
 
-Time: 15–20 minutes for flows 1–5, plus 10 minutes for connector/runtime checks.
+Time: 15–20 minutes for flows 1–5, plus 10 minutes for connector/harness checks.
 
 ---
 
@@ -30,7 +30,7 @@ Time: 15–20 minutes for flows 1–5, plus 10 minutes for connector/runtime che
 
 1. **Agents → New agent**
 2. Identity: name `UI Smoke Agent`, description “UI test”.
-3. Runtime: **Mock**; model management **Runtime**; leave provider/model empty.
+3. Harness: **Mock**; model management **Harness**; leave provider/model empty.
 4. Instructions: “You are a concise test agent. Summarize the task.”
 5. Add a **Schedule** trigger (`*/30 * * * *`) and leave it enabled.
 6. Autonomy: **L2 Recommend**; timeout 120s; concurrency 1.
@@ -44,7 +44,7 @@ Then:
 8. **Activate** → status `Active`.
 9. **Run agent** → task “Summarize the current ORBIT deployment.” → **Queue execution**.
 10. Execution page opens; status moves `queued → dispatched/running → succeeded`.
-11. Timeline streams events (dispatch, runtime session, logs, output).
+11. Timeline streams events (dispatch, harness session, logs, output).
 12. Output JSON is visible; usage shows tokens/time; agent link works.
 13. Open **Executions** → the run appears; filter by `Succeeded` and `Running`.
 
@@ -95,14 +95,14 @@ Then:
 
 ---
 
-## Flow 6 — Real OpenCode runtime (5 min, optional)
+## Flow 6 — Real OpenCode harness (5 min, optional)
 
 Requires a host OpenCode worker (`make worker-opencode`) or the Kubernetes OpenCode
 worker with imported auth.
 
-1. Create an agent: runtime **OpenCode**, model management **Runtime**,
+1. Create an agent: harness **OpenCode**, model management **Harness**,
    provider `opencode-go`, model `deepseek-v4-pro`, timeout 240s.
-2. Add a runtime config override if the UI exposes it:
+2. Add a harness config override if the UI exposes it:
    `{"autoApprove": true, "standalone": true, "model": "opencode-go/deepseek-v4-pro"}`.
 3. Activate, run: “Reply with exactly: UI_OPENCODE_OK”.
 4. Expected: `succeeded`, output text contains `UI_OPENCODE_OK`, session ref present,
@@ -117,14 +117,14 @@ Prerequisite: a host OpenCode worker (`make worker-opencode`) or the Kubernetes 
 worker, plus a GitHub connection for a public repo (no credential needed for reads).
 
 1. Create a GitHub connection with `{"allowedRepositories":["cli/cli"],"defaultRepository":"cli/cli"}`.
-2. Create an agent: runtime OpenCode, GitHub connector, capability `issues.list`,
+2. Create an agent: harness OpenCode, GitHub connector, capability `issues.list`,
    autonomy L1.
 3. Run: “Use tools.orbit.github_issues_list({owner:'cli',repo:'cli',state:'open'})
    and return 3 titles.”
 4. Expected: `succeeded`; timeline shows the broker ready, the `issues.list` tool call,
    and completion. Reasoning/step/usage noise is hidden by default; click
    “show verbose” to reveal it.
-5. `pwd` in a runtime shell must print `/tmp/orbit-workspaces/<execution-id>`, never the
+5. `pwd` in a harness shell must print `/tmp/orbit-workspaces/<execution-id>`, never the
    ORBIT repository directory.
 
 ## Flow 8 — Connector read path (X) (3 min)
@@ -148,7 +148,7 @@ approvals UI is still being finished.
 
 1. Create a GitHub connection (fine-grained PAT or read-only public access) with
    `allowedRepositories` set to a test repo.
-2. Agent: runtime OpenCode, GitHub connector, `issues.list` + `issues.comment`,
+2. Agent: harness OpenCode, GitHub connector, `issues.list` + `issues.comment`,
    autonomy **L3**.
 3. Run “List open issues and propose a comment on #1”.
 4. Expected: read tool succeeds; the write tool creates an approval and pauses.
@@ -165,7 +165,7 @@ approvals UI is still being finished.
 - No secret value appears in HTML, JSON responses, execution events, logs, or tool output.
 - Viewer-style access cannot mutate (when RBAC UI lands); dev mode is owner.
 - Validation errors return field paths; the form highlights the section.
-- Invalid cron, empty instructions, unknown runtime/provider are rejected.
+- Invalid cron, empty instructions, unknown harness/provider are rejected.
 - Idempotency: double-click **Queue execution** with the same key creates one execution.
 - Deleting/archiving an agent preserves execution history by default.
 

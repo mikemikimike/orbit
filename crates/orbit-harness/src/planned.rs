@@ -1,34 +1,34 @@
 use async_trait::async_trait;
 
 use orbit_contracts::{
-    CreateInstanceRequest, ExecutionOutcome, ExecutionRequest, RuntimeAdapter, RuntimeCapabilities,
-    RuntimeConfig, RuntimeDescriptor, RuntimeError, RuntimeErrorKind, RuntimeHealth,
-    RuntimeInstance, RuntimeInstanceRef, RuntimeInstanceStatus,
+    CreateInstanceRequest, ExecutionOutcome, ExecutionRequest, HarnessAdapter, HarnessCapabilities,
+    HarnessConfig, HarnessDescriptor, HarnessError, HarnessErrorKind, HarnessHealth,
+    HarnessInstance, HarnessInstanceRef, HarnessInstanceStatus,
 };
-use orbit_domain::{ExecutionMode, ImplementationStatus, RuntimeKind, ValidationReport};
+use orbit_domain::{ExecutionMode, ImplementationStatus, HarnessKind, ValidationReport};
 
-/// Adapter for runtimes that are registered (so agents can reference them and the UI can
+/// Adapter for harnesses that are registered (so agents can reference them and the UI can
 /// show capabilities) but are not implemented in this build. Execution fails with a
 /// precise, non-retryable error instead of pretending to work.
 #[derive(Debug, Clone)]
 pub struct DescriptorOnlyAdapter {
-    descriptor: RuntimeDescriptor,
+    descriptor: HarnessDescriptor,
 }
 
 impl DescriptorOnlyAdapter {
-    pub fn new(descriptor: RuntimeDescriptor) -> Self {
+    pub fn new(descriptor: HarnessDescriptor) -> Self {
         Self { descriptor }
     }
 }
 
 pub fn claude_code() -> DescriptorOnlyAdapter {
-    DescriptorOnlyAdapter::new(RuntimeDescriptor {
-        kind: RuntimeKind::ClaudeCode,
+    DescriptorOnlyAdapter::new(HarnessDescriptor {
+        kind: HarnessKind::ClaudeCode,
         name: "Claude Code".into(),
-        description: "Claude Code CLI runtime (headless/programmatic). Adapter lands in Phase 2; \
-             authentication and licensing are runtime-managed."
+        description: "Claude Code CLI harness (headless/programmatic). Adapter lands in Phase 2; \
+             authentication and licensing are harness-managed."
             .into(),
-        capabilities: RuntimeCapabilities {
+        capabilities: HarnessCapabilities {
             supports_sessions: true,
             supports_resume: true,
             supports_streaming: true,
@@ -36,7 +36,7 @@ pub fn claude_code() -> DescriptorOnlyAdapter {
             supports_instances: false,
             supports_tool_events: true,
             supports_usage_reporting: true,
-            runtime_managed_providers: true,
+            harness_managed_providers: true,
             supports_platform_providers: false,
             execution_modes: vec![ExecutionMode::OnDemand],
             max_timeout_seconds: 86_400,
@@ -57,11 +57,11 @@ pub fn claude_code() -> DescriptorOnlyAdapter {
 }
 
 pub fn pi() -> DescriptorOnlyAdapter {
-    DescriptorOnlyAdapter::new(RuntimeDescriptor {
-        kind: RuntimeKind::Pi,
+    DescriptorOnlyAdapter::new(HarnessDescriptor {
+        kind: HarnessKind::Pi,
         name: "Pi".into(),
-        description: "Pi runtime adapter (Phase 3).".into(),
-        capabilities: RuntimeCapabilities {
+        description: "Pi harness adapter (Phase 3).".into(),
+        capabilities: HarnessCapabilities {
             supports_sessions: true,
             supports_resume: true,
             supports_streaming: true,
@@ -69,7 +69,7 @@ pub fn pi() -> DescriptorOnlyAdapter {
             supports_instances: true,
             supports_tool_events: true,
             supports_usage_reporting: true,
-            runtime_managed_providers: true,
+            harness_managed_providers: true,
             supports_platform_providers: true,
             execution_modes: vec![ExecutionMode::OnDemand, ExecutionMode::LongRunning],
             max_timeout_seconds: 86_400,
@@ -82,13 +82,13 @@ pub fn pi() -> DescriptorOnlyAdapter {
 }
 
 pub fn generic() -> DescriptorOnlyAdapter {
-    DescriptorOnlyAdapter::new(RuntimeDescriptor {
-        kind: RuntimeKind::Generic,
-        name: "Generic runtime".into(),
-        description: "Bring-your-own runtime speaking the ORBIT runtime protocol (Phase 3+). \
-             Requires an explicit protocol endpoint in runtime config."
+    DescriptorOnlyAdapter::new(HarnessDescriptor {
+        kind: HarnessKind::Generic,
+        name: "Generic harness".into(),
+        description: "Bring-your-own harness speaking the ORBIT harness protocol (Phase 3+). \
+             Requires an explicit protocol endpoint in harness config."
             .into(),
-        capabilities: RuntimeCapabilities {
+        capabilities: HarnessCapabilities {
             supports_sessions: true,
             supports_resume: false,
             supports_streaming: true,
@@ -96,7 +96,7 @@ pub fn generic() -> DescriptorOnlyAdapter {
             supports_instances: true,
             supports_tool_events: true,
             supports_usage_reporting: false,
-            runtime_managed_providers: false,
+            harness_managed_providers: false,
             supports_platform_providers: true,
             execution_modes: vec![ExecutionMode::OnDemand, ExecutionMode::LongRunning],
             max_timeout_seconds: 86_400,
@@ -116,25 +116,25 @@ pub fn generic() -> DescriptorOnlyAdapter {
 }
 
 #[async_trait]
-impl RuntimeAdapter for DescriptorOnlyAdapter {
-    fn kind(&self) -> RuntimeKind {
+impl HarnessAdapter for DescriptorOnlyAdapter {
+    fn kind(&self) -> HarnessKind {
         self.descriptor.kind
     }
 
-    fn descriptor(&self) -> RuntimeDescriptor {
+    fn descriptor(&self) -> HarnessDescriptor {
         self.descriptor.clone()
     }
 
-    async fn validate_config(&self, config: &RuntimeConfig) -> ValidationReport {
+    async fn validate_config(&self, config: &HarnessConfig) -> ValidationReport {
         let mut report = ValidationReport::default();
         if config.kind != self.descriptor.kind {
-            report.push("type", "runtime kind does not match this adapter");
+            report.push("type", "harness kind does not match this adapter");
         }
         report
     }
 
-    async fn health(&self, _config: &RuntimeConfig) -> Result<RuntimeHealth, RuntimeError> {
-        Ok(RuntimeHealth::degraded(format!(
+    async fn health(&self, _config: &HarnessConfig) -> Result<HarnessHealth, HarnessError> {
+        Ok(HarnessHealth::degraded(format!(
             "{} adapter is not implemented in this build",
             self.descriptor.name
         )))
@@ -143,40 +143,40 @@ impl RuntimeAdapter for DescriptorOnlyAdapter {
     async fn create_instance(
         &self,
         _request: CreateInstanceRequest,
-    ) -> Result<RuntimeInstance, RuntimeError> {
+    ) -> Result<HarnessInstance, HarnessError> {
         Err(not_implemented(self.descriptor.kind))
     }
 
-    async fn start_instance(&self, _instance: &RuntimeInstanceRef) -> Result<(), RuntimeError> {
+    async fn start_instance(&self, _instance: &HarnessInstanceRef) -> Result<(), HarnessError> {
         Err(not_implemented(self.descriptor.kind))
     }
 
-    async fn stop_instance(&self, _instance: &RuntimeInstanceRef) -> Result<(), RuntimeError> {
+    async fn stop_instance(&self, _instance: &HarnessInstanceRef) -> Result<(), HarnessError> {
         Err(not_implemented(self.descriptor.kind))
     }
 
-    async fn delete_instance(&self, _instance: &RuntimeInstanceRef) -> Result<(), RuntimeError> {
+    async fn delete_instance(&self, _instance: &HarnessInstanceRef) -> Result<(), HarnessError> {
         Err(not_implemented(self.descriptor.kind))
     }
 
     async fn instance_status(
         &self,
-        _instance: &RuntimeInstanceRef,
-    ) -> Result<RuntimeInstanceStatus, RuntimeError> {
+        _instance: &HarnessInstanceRef,
+    ) -> Result<HarnessInstanceStatus, HarnessError> {
         Err(not_implemented(self.descriptor.kind))
     }
 
-    async fn execute(&self, _request: ExecutionRequest) -> Result<ExecutionOutcome, RuntimeError> {
+    async fn execute(&self, _request: ExecutionRequest) -> Result<ExecutionOutcome, HarnessError> {
         Err(not_implemented(self.descriptor.kind))
     }
 }
 
-fn not_implemented(kind: RuntimeKind) -> RuntimeError {
-    RuntimeError::new(
-        RuntimeErrorKind::Unsupported,
+fn not_implemented(kind: HarnessKind) -> HarnessError {
+    HarnessError::new(
+        HarnessErrorKind::Unsupported,
         format!(
-            "the '{kind}' runtime adapter is registered but not implemented in this build; \
-             use the mock runtime or implement the adapter in crates/orbit-runtime"
+            "the '{kind}' harness adapter is registered but not implemented in this build; \
+             use the mock harness or implement the adapter in crates/orbit-harness"
         ),
     )
 }

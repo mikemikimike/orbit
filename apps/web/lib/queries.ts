@@ -15,7 +15,7 @@ import type {
   MeResponse,
   MetaResponse,
   ProviderView,
-  RuntimeView,
+  HarnessView,
   TriggerRecord,
   ApiTokenView,
   AgentInstanceView,
@@ -47,7 +47,7 @@ export const queryKeys = {
   executions: (params?: Record<string, unknown>) => ["executions", params ?? {}] as const,
   execution: (id: string) => ["execution", id] as const,
   executionEvents: (id: string) => ["execution", id, "events"] as const,
-  runtimes: ["runtimes"] as const,
+  harnesses: ["harnesses"] as const,
   providers: ["providers"] as const,
   connectors: ["connectors"] as const,
   connections: ["connections"] as const,
@@ -175,10 +175,10 @@ export function useExecutionEvents(id: string | undefined, options?: { enabled?:
   });
 }
 
-export function useRuntimes() {
-  return useQuery<RuntimeView[]>({
-    queryKey: queryKeys.runtimes,
-    queryFn: async () => unwrap(await api.GET("/api/v1/runtimes")),
+export function useHarnesses() {
+  return useQuery<HarnessView[]>({
+    queryKey: queryKeys.harnesses,
+    queryFn: async () => unwrap(await api.GET("/api/v1/harnesses")),
     staleTime: 60_000,
   });
 }

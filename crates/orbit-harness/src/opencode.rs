@@ -9,27 +9,27 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
 use orbit_contracts::{
-    CreateInstanceRequest, ExecutionOutcome, ExecutionRequest, InstructionsBlock, RuntimeAdapter,
-    RuntimeCapabilities, RuntimeConfig, RuntimeDescriptor, RuntimeError, RuntimeErrorKind,
-    RuntimeEvent, RuntimeEventKind, RuntimeHealth, RuntimeInstance, RuntimeInstanceRef,
-    RuntimeInstanceStatus, SessionRequest,
+    CreateInstanceRequest, ExecutionOutcome, ExecutionRequest, InstructionsBlock, HarnessAdapter,
+    HarnessCapabilities, HarnessConfig, HarnessDescriptor, HarnessError, HarnessErrorKind,
+    HarnessEvent, HarnessEventKind, HarnessHealth, HarnessInstance, HarnessInstanceRef,
+    HarnessInstanceStatus, SessionRequest,
 };
 use orbit_domain::{
-    ExecutionMode, ExecutionStatus, ImplementationStatus, LogLevel, RuntimeKind, Usage,
+    ExecutionMode, ExecutionStatus, ImplementationStatus, LogLevel, HarnessKind, Usage,
     ValidationReport,
 };
 
-/// OpenCode runtime adapter.
+/// OpenCode harness adapter.
 ///
 /// Executes `opencode run --standalone --format json` in a per-execution workspace and
-/// maps OpenCode's NDJSON event stream to ORBIT runtime events. Tested against
+/// maps OpenCode's NDJSON event stream to ORBIT harness events. Tested against
 /// OpenCode **v2.2.5** (see `tests/opencode_e2e.rs`).
 ///
-/// Authentication is runtime-managed: the worker image/container must provide an
+/// Authentication is harness-managed: the worker image/container must provide an
 /// OpenCode auth store (mounted Secret in Kubernetes) or provider credentials in its
 /// environment. ORBIT never forwards raw provider secrets in prompts or CLI arguments.
 #[derive(Debug, Clone, Default)]
-pub struct OpenCodeRuntimeAdapter;
+pub struct OpenCodeHarnessAdapter;
 
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
@@ -38,7 +38,7 @@ pub struct OpenCodeSettings {
     pub binary: Option<String>,
     /// Working directory (relative to the execution workspace).
     pub workspace_subdir: Option<String>,
-    /// Runtime-managed provider name (e.g. `opencode-go`). Not validated against a
+    /// Harness-managed provider name (e.g. `opencode-go`). Not validated against a
     /// hardcoded inventory.
     pub provider: Option<String>,
     pub model: Option<String>,
@@ -66,20 +66,20 @@ pub struct OrbitMcpBridge {
 }
 
 impl OpenCodeSettings {
-    pub fn from_config(config: &RuntimeConfig) -> Result<Self, RuntimeError> {
-        if config.kind != RuntimeKind::OpenCode {
-            return Err(RuntimeError::new(
-                RuntimeErrorKind::InvalidConfig,
-                "OpenCode adapter received a non-opencode runtime configuration",
+    pub fn from_config(config: &HarnessConfig) -> Result<Self, HarnessError> {
+        if config.kind != HarnessKind::OpenCode {
+            return Err(HarnessError::new(
+                HarnessErrorKind::InvalidConfig,
+                "OpenCode adapter received a non-opencode harness configuration",
             ));
         }
         if config.settings.is_null() {
             return Ok(Self::default());
         }
         serde_json::from_value(config.settings.clone()).map_err(|e| {
-            RuntimeError::new(
-                RuntimeErrorKind::InvalidConfig,
-                format!("invalid OpenCode runtime config: {e}"),
+            HarnessError::new(
+                HarnessErrorKind::InvalidConfig,
+                format!("invalid OpenCode harness config: {e}"),
             )
         })
     }
@@ -96,7 +96,7 @@ impl OpenCodeSettings {
         self.standalone.unwrap_or(true)
     }
 
-    /// Model selector in `provider/model` form. Runtime config wins over agent config.
+    /// Model selector in `provider/model` form. Harness config wins over agent config.
     pub fn model_selector(
         &self,
         request: Option<&orbit_contracts::ResolvedModel>,
@@ -111,7 +111,7 @@ impl OpenCodeSettings {
         }
         let selection = request?.selection.clone();
         match selection {
-            orbit_contracts::ModelSelection::Runtime { provider, model } => match (provider, model)
+            orbit_contracts::ModelSelection::Harness { provider, model } => match (provider, model)
             {
                 (Some(provider), Some(model)) if !model.contains('/') => {
                     Some(format!("{provider}/{model}"))
@@ -161,15 +161,15 @@ impl OpenCodeSettings {
     }
 }
 
-impl OpenCodeRuntimeAdapter {
-    pub fn descriptor() -> RuntimeDescriptor {
-        RuntimeDescriptor {
-            kind: RuntimeKind::OpenCode,
+impl OpenCodeHarnessAdapter {
+    pub fn descriptor() -> HarnessDescriptor {
+        HarnessDescriptor {
+            kind: HarnessKind::OpenCode,
             name: "OpenCode".into(),
             description:
-                "OpenCode CLI runtime with sessions, streaming NDJSON events, tool calls and runtime-managed providers. Tested against OpenCode v2.2.5."
+                "OpenCode CLI harness with sessions, streaming NDJSON events, tool calls and harness-managed providers. Tested against OpenCode v2.2.5."
                     .into(),
-            capabilities: RuntimeCapabilities {
+            capabilities: HarnessCapabilities {
                 supports_sessions: true,
                 supports_resume: true,
                 supports_streaming: true,
@@ -177,7 +177,7 @@ impl OpenCodeRuntimeAdapter {
                 supports_instances: false,
                 supports_tool_events: true,
                 supports_usage_reporting: true,
-                runtime_managed_providers: true,
+                harness_managed_providers: true,
                 supports_platform_providers: false,
                 execution_modes: vec![ExecutionMode::OnDemand],
                 max_timeout_seconds: 86_400,
@@ -190,7 +190,7 @@ impl OpenCodeRuntimeAdapter {
                 "properties": {
                     "binary": { "type": "string", "description": "opencode binary (default: opencode)" },
                     "workspaceSubdir": { "type": "string" },
-                    "provider": { "type": "string", "description": "runtime-managed provider, e.g. opencode-go" },
+                    "provider": { "type": "string", "description": "harness-managed provider, e.g. opencode-go" },
                     "model": { "type": "string", "description": "model id; provider/model derived when needed" },
                     "agent": { "type": "string" },
                     "extraArgs": { "type": "array", "items": { "type": "string" }, "maxItems": 32 },
@@ -204,7 +204,7 @@ impl OpenCodeRuntimeAdapter {
     }
 
     /// Resolve the installed CLI and return its version string.
-    pub async fn probe(&self, settings: &OpenCodeSettings) -> Result<String, RuntimeError> {
+    pub async fn probe(&self, settings: &OpenCodeSettings) -> Result<String, HarnessError> {
         let candidate = settings.binary();
         let mut command = Command::new(candidate);
         command.arg("--version");
@@ -212,16 +212,16 @@ impl OpenCodeRuntimeAdapter {
         command.stderr(Stdio::piped());
         let output = tokio::time::timeout(Duration::from_secs(8), command.output())
             .await
-            .map_err(|_| RuntimeError::unavailable("opencode --version timed out"))?
+            .map_err(|_| HarnessError::unavailable("opencode --version timed out"))?
             .map_err(|e| {
-                RuntimeError::new(
-                    RuntimeErrorKind::Unavailable,
+                HarnessError::new(
+                    HarnessErrorKind::Unavailable,
                     format!("opencode binary '{candidate}' is not available: {e}"),
                 )
             })?;
         if !output.status.success() {
-            return Err(RuntimeError::new(
-                RuntimeErrorKind::Unavailable,
+            return Err(HarnessError::new(
+                HarnessErrorKind::Unavailable,
                 format!(
                     "opencode --version exited with {}: {}",
                     output.status,
@@ -325,7 +325,7 @@ fn map_open_code_event(
     value: &Value,
     usage: &mut Usage,
     text: &mut String,
-) -> Option<RuntimeEvent> {
+) -> Option<HarnessEvent> {
     let kind = value.get("type")?.as_str()?;
     let part = value.get("part").cloned().unwrap_or(Value::Null);
     match kind {
@@ -348,8 +348,8 @@ fn map_open_code_event(
             }
             // Intermediate assistant text is verbose by default; the final output is
             // shown in the Output panel and persisted in the result.
-            Some(RuntimeEvent::new(
-                RuntimeEventKind::OutputDelta,
+            Some(HarnessEvent::new(
+                HarnessEventKind::OutputDelta,
                 LogLevel::Debug,
                 truncate(&body, 8_000),
             ))
@@ -366,8 +366,8 @@ fn map_open_code_event(
                 || tool.contains("github")
                 || tool.contains("orbit")
                 || title.to_ascii_lowercase().contains("github");
-            let mut event = RuntimeEvent::new(
-                RuntimeEventKind::ToolCall,
+            let mut event = HarnessEvent::new(
+                HarnessEventKind::ToolCall,
                 if status == "error" {
                     LogLevel::Error
                 } else if interesting {
@@ -409,8 +409,8 @@ fn map_open_code_event(
                 .and_then(|e| e.get("message"))
                 .and_then(Value::as_str)
                 .unwrap_or("opencode reported an error");
-            Some(RuntimeEvent::new(
-                RuntimeEventKind::Error,
+            Some(HarnessEvent::new(
+                HarnessEventKind::Error,
                 LogLevel::Error,
                 message,
             ))
@@ -419,7 +419,7 @@ fn map_open_code_event(
     }
 }
 
-async fn emit(sender: &Option<tokio::sync::mpsc::Sender<RuntimeEvent>>, event: RuntimeEvent) {
+async fn emit(sender: &Option<tokio::sync::mpsc::Sender<HarnessEvent>>, event: HarnessEvent) {
     if let Some(sender) = sender {
         let _ = sender.send(event).await;
     }
@@ -447,35 +447,35 @@ async fn wait_or_kill(child: &mut tokio::process::Child, grace: Duration) {
     }
 }
 
-impl OpenCodeRuntimeAdapter {
+impl OpenCodeHarnessAdapter {
     async fn run_open_code(
         &self,
         request: ExecutionRequest,
         settings: OpenCodeSettings,
         session_ref: Option<String>,
-    ) -> Result<(ExecutionOutcome, Option<String>, Usage), RuntimeError> {
+    ) -> Result<(ExecutionOutcome, Option<String>, Usage), HarnessError> {
         let workspace = PathBuf::from(&request.workspace.root);
         let workspace = match &settings.workspace_subdir {
             Some(sub) if !sub.trim().is_empty() => workspace.join(sub),
             _ => workspace,
         };
         tokio::fs::create_dir_all(&workspace).await.map_err(|e| {
-            RuntimeError::new(
-                RuntimeErrorKind::Internal,
+            HarnessError::new(
+                HarnessErrorKind::Internal,
                 format!("could not create workspace {}: {e}", workspace.display()),
             )
         })?;
         if let Err(err) = write_agent_instructions(&workspace, &request) {
-            return Err(RuntimeError::new(
-                RuntimeErrorKind::Internal,
+            return Err(HarnessError::new(
+                HarnessErrorKind::Internal,
                 format!("could not write AGENTS.md: {err}"),
             ));
         }
 
         if let Some(bridge) = &settings.orbit_mcp {
             write_open_code_mcp_config(&workspace, bridge).map_err(|error| {
-                RuntimeError::new(
-                    RuntimeErrorKind::Internal,
+                HarnessError::new(
+                    HarnessErrorKind::Internal,
                     format!("could not write opencode.json: {error}"),
                 )
             })?;
@@ -502,8 +502,8 @@ impl OpenCodeRuntimeAdapter {
         }
 
         let mut child = command.spawn().map_err(|e| {
-            RuntimeError::new(
-                RuntimeErrorKind::Unavailable,
+            HarnessError::new(
+                HarnessErrorKind::Unavailable,
                 format!(
                     "could not start OpenCode binary '{}': {e}. The worker image must include the OpenCode CLI.",
                     settings.binary()
@@ -511,10 +511,10 @@ impl OpenCodeRuntimeAdapter {
             )
         })?;
         let stdout = child.stdout.take().ok_or_else(|| {
-            RuntimeError::new(RuntimeErrorKind::Internal, "opencode stdout unavailable")
+            HarnessError::new(HarnessErrorKind::Internal, "opencode stdout unavailable")
         })?;
         let stderr = child.stderr.take().ok_or_else(|| {
-            RuntimeError::new(RuntimeErrorKind::Internal, "opencode stderr unavailable")
+            HarnessError::new(HarnessErrorKind::Internal, "opencode stderr unavailable")
         })?;
 
         let debug_logs = settings.debug_logs.unwrap_or(false);
@@ -536,7 +536,7 @@ impl OpenCodeRuntimeAdapter {
                     if debug_logs && (lower.contains("mcp") || lower.contains("error")) {
                         if let Some(sender) = &stderr_events {
                             let _ = sender
-                                .send(RuntimeEvent::log(
+                                .send(HarnessEvent::log(
                                     LogLevel::Warn,
                                     format!("opencode: {}", truncate(&line, 1500)),
                                 ))
@@ -580,7 +580,7 @@ impl OpenCodeRuntimeAdapter {
                         Ok(Some(line)) => {
                             if line.trim().is_empty() { continue; }
                             let Ok(value) = serde_json::from_str::<Value>(&line) else {
-                                emit(&sender, RuntimeEvent::log(LogLevel::Debug, format!("opencode: {line}"))).await;
+                                emit(&sender, HarnessEvent::log(LogLevel::Debug, format!("opencode: {line}"))).await;
                                 continue;
                             };
                             if let Some(found) = value.get("sessionID").and_then(Value::as_str) {
@@ -592,7 +592,7 @@ impl OpenCodeRuntimeAdapter {
                         }
                         Ok(None) => break,
                         Err(err) => {
-                            emit(&sender, RuntimeEvent::new(RuntimeEventKind::Error, LogLevel::Error, format!("failed to read opencode output: {err}"))).await;
+                            emit(&sender, HarnessEvent::new(HarnessEventKind::Error, LogLevel::Error, format!("failed to read opencode output: {err}"))).await;
                             break;
                         }
                     }
@@ -605,8 +605,8 @@ impl OpenCodeRuntimeAdapter {
             None
         } else {
             Some(child.wait().await.map_err(|e| {
-                RuntimeError::new(
-                    RuntimeErrorKind::Internal,
+                HarnessError::new(
+                    HarnessErrorKind::Internal,
                     format!("opencode wait failed: {e}"),
                 )
             })?)
@@ -617,14 +617,14 @@ impl OpenCodeRuntimeAdapter {
         usage.cpu_millis = usage.wall_time_ms;
 
         if cancelled {
-            let mut outcome = ExecutionOutcome::failed(RuntimeError::cancelled());
+            let mut outcome = ExecutionOutcome::failed(HarnessError::cancelled());
             outcome.status = ExecutionStatus::Cancelled;
             outcome.session_ref = session.clone();
             outcome.usage = usage.clone();
             return Ok((outcome, session, usage));
         }
         if timed_out {
-            let mut outcome = ExecutionOutcome::failed(RuntimeError::timeout(timeout.as_secs()));
+            let mut outcome = ExecutionOutcome::failed(HarnessError::timeout(timeout.as_secs()));
             outcome.status = ExecutionStatus::TimedOut;
             outcome.session_ref = session.clone();
             outcome.usage = usage.clone();
@@ -634,8 +634,8 @@ impl OpenCodeRuntimeAdapter {
         let exit = status.expect("status present unless cancelled/timed out");
         if !exit.success() {
             let stderr = stderr_buffer.lock().expect("stderr lock").clone();
-            let error = RuntimeError::new(
-                RuntimeErrorKind::ExecutionFailed,
+            let error = HarnessError::new(
+                HarnessErrorKind::ExecutionFailed,
                 format!(
                     "opencode exited with {}: {}",
                     exit.code()
@@ -654,7 +654,7 @@ impl OpenCodeRuntimeAdapter {
         let output = json!({
             "text": text.trim(),
             "sessionRef": session,
-            "runtime": "opencode",
+            "harness": "opencode",
             "wallTimeMs": usage.wall_time_ms,
         });
         let mut outcome = ExecutionOutcome::succeeded(output, session.clone());
@@ -664,16 +664,16 @@ impl OpenCodeRuntimeAdapter {
 }
 
 #[async_trait]
-impl RuntimeAdapter for OpenCodeRuntimeAdapter {
-    fn kind(&self) -> RuntimeKind {
-        RuntimeKind::OpenCode
+impl HarnessAdapter for OpenCodeHarnessAdapter {
+    fn kind(&self) -> HarnessKind {
+        HarnessKind::OpenCode
     }
 
-    fn descriptor(&self) -> RuntimeDescriptor {
+    fn descriptor(&self) -> HarnessDescriptor {
         Self::descriptor()
     }
 
-    async fn validate_config(&self, config: &RuntimeConfig) -> ValidationReport {
+    async fn validate_config(&self, config: &HarnessConfig) -> ValidationReport {
         let mut report = ValidationReport::default();
         match OpenCodeSettings::from_config(config) {
             Ok(settings) => {
@@ -706,11 +706,11 @@ impl RuntimeAdapter for OpenCodeRuntimeAdapter {
         report
     }
 
-    async fn health(&self, config: &RuntimeConfig) -> Result<RuntimeHealth, RuntimeError> {
+    async fn health(&self, config: &HarnessConfig) -> Result<HarnessHealth, HarnessError> {
         let settings = OpenCodeSettings::from_config(config)?;
         match self.probe(&settings).await {
             Ok(version) => {
-                let mut health = RuntimeHealth::healthy();
+                let mut health = HarnessHealth::healthy();
                 health
                     .details
                     .insert("version".into(), version.trim().to_string());
@@ -719,42 +719,42 @@ impl RuntimeAdapter for OpenCodeRuntimeAdapter {
                     .insert("binary".into(), settings.binary().to_string());
                 Ok(health)
             }
-            Err(err) => Ok(RuntimeHealth::degraded(err.message)),
+            Err(err) => Ok(HarnessHealth::degraded(err.message)),
         }
     }
 
     async fn create_instance(
         &self,
         _request: CreateInstanceRequest,
-    ) -> Result<RuntimeInstance, RuntimeError> {
-        Err(RuntimeError::unsupported(
+    ) -> Result<HarnessInstance, HarnessError> {
+        Err(HarnessError::unsupported(
             "long-running instances (Phase 3). Use executionMode=on_demand.",
         ))
     }
 
-    async fn start_instance(&self, _instance: &RuntimeInstanceRef) -> Result<(), RuntimeError> {
-        Err(RuntimeError::unsupported("long-running instances"))
+    async fn start_instance(&self, _instance: &HarnessInstanceRef) -> Result<(), HarnessError> {
+        Err(HarnessError::unsupported("long-running instances"))
     }
 
-    async fn stop_instance(&self, _instance: &RuntimeInstanceRef) -> Result<(), RuntimeError> {
-        Err(RuntimeError::unsupported("long-running instances"))
+    async fn stop_instance(&self, _instance: &HarnessInstanceRef) -> Result<(), HarnessError> {
+        Err(HarnessError::unsupported("long-running instances"))
     }
 
-    async fn delete_instance(&self, _instance: &RuntimeInstanceRef) -> Result<(), RuntimeError> {
-        Err(RuntimeError::unsupported("long-running instances"))
+    async fn delete_instance(&self, _instance: &HarnessInstanceRef) -> Result<(), HarnessError> {
+        Err(HarnessError::unsupported("long-running instances"))
     }
 
     async fn instance_status(
         &self,
-        _instance: &RuntimeInstanceRef,
-    ) -> Result<RuntimeInstanceStatus, RuntimeError> {
-        Err(RuntimeError::unsupported("long-running instances"))
+        _instance: &HarnessInstanceRef,
+    ) -> Result<HarnessInstanceStatus, HarnessError> {
+        Err(HarnessError::unsupported("long-running instances"))
     }
 
-    async fn execute(&self, request: ExecutionRequest) -> Result<ExecutionOutcome, RuntimeError> {
-        let settings = OpenCodeSettings::from_config(&RuntimeConfig {
-            kind: RuntimeKind::OpenCode,
-            settings: request.runtime_config.clone(),
+    async fn execute(&self, request: ExecutionRequest) -> Result<ExecutionOutcome, HarnessError> {
+        let settings = OpenCodeSettings::from_config(&HarnessConfig {
+            kind: HarnessKind::OpenCode,
+            settings: request.harness_config.clone(),
         })?;
         // Fail fast with an actionable message if the CLI is missing.
         self.probe(&settings).await?;
@@ -766,10 +766,10 @@ impl RuntimeAdapter for OpenCodeRuntimeAdapter {
     async fn resume(
         &self,
         request: orbit_contracts::ResumeRequest,
-    ) -> Result<ExecutionOutcome, RuntimeError> {
-        let settings = OpenCodeSettings::from_config(&RuntimeConfig {
-            kind: RuntimeKind::OpenCode,
-            settings: request.runtime_config.clone(),
+    ) -> Result<ExecutionOutcome, HarnessError> {
+        let settings = OpenCodeSettings::from_config(&HarnessConfig {
+            kind: HarnessKind::OpenCode,
+            settings: request.harness_config.clone(),
         })?;
         self.probe(&settings).await?;
         let execution_request = ExecutionRequest {
@@ -786,7 +786,7 @@ impl RuntimeAdapter for OpenCodeRuntimeAdapter {
             grants: vec![],
             autonomy: orbit_domain::AutonomyLevel::OBSERVE,
             resources: request.resources,
-            runtime_config: request.runtime_config,
+            harness_config: request.harness_config,
             session: SessionRequest {
                 session_ref: Some(request.session_ref.clone()),
                 mode: ExecutionMode::OnDemand,
@@ -831,11 +831,11 @@ mod tests {
 
     #[test]
     fn validation_rejects_bad_url() {
-        let config = RuntimeConfig {
-            kind: RuntimeKind::OpenCode,
+        let config = HarnessConfig {
+            kind: HarnessKind::OpenCode,
             settings: serde_json::json!({ "serverUrl": "not-a-url" }),
         };
-        let report = futures::executor::block_on(OpenCodeRuntimeAdapter.validate_config(&config));
+        let report = futures::executor::block_on(OpenCodeHarnessAdapter.validate_config(&config));
         assert!(!report.is_valid());
     }
 
@@ -846,7 +846,7 @@ mod tests {
         let text_event: Value =
             serde_json::from_str(r#"{"type":"text","part":{"text":"hello world"}}"#).unwrap();
         let event = map_open_code_event(&text_event, &mut usage, &mut text).unwrap();
-        assert_eq!(event.kind, RuntimeEventKind::OutputDelta);
+        assert_eq!(event.kind, HarnessEventKind::OutputDelta);
         assert!(text.contains("hello world"));
 
         let tool_event: Value = serde_json::from_str(
@@ -854,7 +854,7 @@ mod tests {
         )
         .unwrap();
         let event = map_open_code_event(&tool_event, &mut usage, &mut text).unwrap();
-        assert_eq!(event.kind, RuntimeEventKind::ToolCall);
+        assert_eq!(event.kind, HarnessEventKind::ToolCall);
         assert_eq!(event.data["tool"], "read");
 
         let usage_event: Value = serde_json::from_str(
@@ -887,7 +887,7 @@ mod tests {
             grants: vec![],
             autonomy: orbit_domain::AutonomyLevel::OBSERVE,
             resources: orbit_domain::ResourceLimits::default(),
-            runtime_config: Value::Null,
+            harness_config: Value::Null,
             session: SessionRequest::default(),
             workspace: Default::default(),
             events: None,

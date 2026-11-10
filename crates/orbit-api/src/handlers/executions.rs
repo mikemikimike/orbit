@@ -202,9 +202,9 @@ pub async fn execute_agent(
             agent_id: agent.id,
             agent_version_id: version.id,
             agent_name: &agent.name,
-            runtime_kind: spec.runtime.kind,
+            harness_kind: spec.harness.kind,
             trigger_source: TriggerSource::Manual,
-            placement: spec.runtime.placement.as_str(),
+            placement: spec.harness.placement.as_str(),
             trigger_id: None,
             input,
             timeout_seconds: spec.resources.timeout_seconds,
@@ -222,7 +222,7 @@ pub async fn execute_agent(
             serde_json::json!({
                 "executionId": execution.id,
                 "agentId": agent.id,
-                "runtime": spec.runtime.kind.as_str(),
+                "harness": spec.harness.kind.as_str(),
             }),
         )
         .with_org(auth.org_id)
@@ -242,12 +242,12 @@ pub async fn execute_agent(
             orbit_domain::LogLevel::Info,
             &format!(
                 "execution queued; waiting for a {} worker (placement: {})",
-                spec.runtime.kind,
-                spec.runtime.placement.as_str()
+                spec.harness.kind,
+                spec.harness.placement.as_str()
             ),
             &serde_json::json!({
-                "runtime": spec.runtime.kind.as_str(),
-                "placement": spec.runtime.placement.as_str(),
+                "harness": spec.harness.kind.as_str(),
+                "placement": spec.harness.placement.as_str(),
             }),
         )
         .await;

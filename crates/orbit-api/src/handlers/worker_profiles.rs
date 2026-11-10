@@ -5,7 +5,7 @@ use axum::Json;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use orbit_domain::{RuntimeKind, ValidationIssue};
+use orbit_domain::{HarnessKind, ValidationIssue};
 use orbit_security::{AuthContext, Permission};
 use orbit_store::WorkerProfile;
 
@@ -17,7 +17,7 @@ use crate::state::AppState;
 #[serde(rename_all = "camelCase")]
 pub struct CreateWorkerProfileRequest {
     pub name: String,
-    pub runtime_kind: String,
+    pub harness_kind: String,
     #[serde(default = "default_target")]
     pub target: String,
     #[serde(default = "default_driver")]
@@ -66,7 +66,7 @@ pub async fn list_profiles(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Json<Vec<WorkerProfile>>, ApiError> {
-    auth.require(Permission::RuntimesRead)?;
+    auth.require(Permission::HarnessesRead)?;
     Ok(Json(state.store.list_worker_profiles(auth.org_id).await?))
 }
 
@@ -77,7 +77,7 @@ pub async fn create_profile(
     crate::extract::ApiJson(body): crate::extract::ApiJson<CreateWorkerProfileRequest>,
 ) -> Result<(StatusCode, Json<WorkerProfile>), ApiError> {
     auth.require(Permission::SettingsWrite)?;
-    let runtime = RuntimeKind::from_str_compat(&body.runtime_kind)?;
+    let harness = HarnessKind::from_str_compat(&body.harness_kind)?;
     if !matches!(body.target.as_str(), "local" | "docker" | "kubernetes") {
         return Err(ApiError::validation(vec![ValidationIssue::new(
             "target",
@@ -115,7 +115,7 @@ pub async fn create_profile(
         return Err(ApiError::validation(issues));
     }
     let image = if body.image.trim().is_empty() {
-        default_image(runtime)
+        default_image(harness)
     } else {
         body.image.trim().to_string()
     };
@@ -124,7 +124,7 @@ pub async fn create_profile(
         .create_worker_profile(
             auth.org_id,
             body.name.trim(),
-            runtime.as_str(),
+            harness.as_str(),
             &body.target,
             &body.execution_driver,
             &image,
@@ -144,7 +144,7 @@ pub async fn create_profile(
         "worker_profile.created",
         Some("worker_profile"),
         Some(profile.id),
-        serde_json::json!({ "runtime": profile.runtime_kind, "target": profile.target }),
+        serde_json::json!({ "harness": profile.harness_kind, "target": profile.target }),
     )
     .await;
     Ok((StatusCode::CREATED, Json(profile)))
@@ -156,7 +156,7 @@ pub async fn get_profile(
     Extension(auth): Extension<AuthContext>,
     Path(profile_id): Path<Uuid>,
 ) -> Result<Json<WorkerProfile>, ApiError> {
-    auth.require(Permission::RuntimesRead)?;
+    auth.require(Permission::HarnessesRead)?;
     Ok(Json(
         state
             .store
@@ -224,14 +224,14 @@ pub async fn bootstrap(
     Extension(auth): Extension<AuthContext>,
     Path(profile_id): Path<Uuid>,
 ) -> Result<Json<WorkerBootstrap>, ApiError> {
-    auth.require(Permission::RuntimesRead)?;
+    auth.require(Permission::HarnessesRead)?;
     let profile = state
         .store
         .get_worker_profile(auth.org_id, profile_id)
         .await?;
     let name = format!(
         "orbit-worker-{}-{}",
-        profile.runtime_kind.replace('_', "-"),
+        profile.harness_kind.replace('_', "-"),
         &profile.id.to_string()[..8]
     );
     let image = format!("{}:{}", profile.image, profile.image_tag);
@@ -240,7 +240,7 @@ pub async fn bootstrap(
     let mut docker_lines = vec![
         format!("docker run --rm --name {name}"),
         format!("  -e ORBIT_WORKER_PROFILE_ID={}", profile.id),
-        format!("  -e ORBIT_WORKER_RUNTIMES={}", profile.runtime_kind),
+        format!("  -e ORBIT_WORKER_HARNESSS={}", profile.harness_kind),
         format!("  -e ORBIT_WORKER_TARGET={}", profile.target),
         format!("  -e ORBIT_EXECUTION_DRIVER={}", profile.execution_driver),
         "  -e ORBIT_DATABASE_URL='postgres://orbit:CHANGE_ME@host.docker.internal:5432/orbit'"
@@ -250,7 +250,7 @@ pub async fn bootstrap(
     ];
     let mut compose_volumes = String::new();
     let mut compose_command = String::new();
-    match profile.runtime_kind.as_str() {
+    match profile.harness_kind.as_str() {
         "opencode" if has_auth => {
             docker_lines.push("  -v ./auth-export.json:/seed/auth-export.json:ro".into());
             docker_lines.push("  --entrypoint /bin/sh".into());
@@ -273,11 +273,11 @@ pub async fn bootstrap(
     let docker = docker_lines.join(" \\\n");
 
     let compose = format!(
-        "services:\n  {name}:\n    image: {image}\n    restart: unless-stopped\n    environment:\n      ORBIT_WORKER_PROFILE_ID: {id}\n      ORBIT_WORKER_RUNTIMES: {runtime}\n      ORBIT_WORKER_TARGET: {target}\n      ORBIT_EXECUTION_DRIVER: {driver}\n      ORBIT_DATABASE_URL: ${{ORBIT_DATABASE_URL}}\n      ORBIT_NATS_URL: ${{ORBIT_NATS_URL}}\n      ORBIT_MASTER_KEY: ${{ORBIT_MASTER_KEY}}\n{volumes}{command}",
+        "services:\n  {name}:\n    image: {image}\n    restart: unless-stopped\n    environment:\n      ORBIT_WORKER_PROFILE_ID: {id}\n      ORBIT_WORKER_HARNESSS: {harness}\n      ORBIT_WORKER_TARGET: {target}\n      ORBIT_EXECUTION_DRIVER: {driver}\n      ORBIT_DATABASE_URL: ${{ORBIT_DATABASE_URL}}\n      ORBIT_NATS_URL: ${{ORBIT_NATS_URL}}\n      ORBIT_MASTER_KEY: ${{ORBIT_MASTER_KEY}}\n{volumes}{command}",
         name = name,
         image = image,
         id = profile.id,
-        runtime = profile.runtime_kind,
+        harness = profile.harness_kind,
         target = profile.target,
         driver = profile.execution_driver,
         volumes = compose_volumes,
@@ -311,8 +311,8 @@ spec:
           env:
             - name: ORBIT_WORKER_PROFILE_ID
               value: "{id}"
-            - name: ORBIT_WORKER_RUNTIMES
-              value: "{runtime}"
+            - name: ORBIT_WORKER_HARNESSS
+              value: "{harness}"
             - name: ORBIT_WORKER_TARGET
               value: "{target}"
             - name: ORBIT_EXECUTION_DRIVER
@@ -328,21 +328,21 @@ spec:
           resources:
             requests: {{ cpu: 100m, memory: 256Mi }}
             limits: {{ cpu: "2", memory: 1Gi }}
-          # Mount the runtime auth Secret at the adapter's expected path:
+          # Mount the harness auth Secret at the adapter's expected path:
           #   OpenCode: /seed/auth-export.json (init import)
           #   Pi:       /home/orbit/.pi/agent
 "#,
         name = name,
         image = image,
         id = profile.id,
-        runtime = profile.runtime_kind,
+        harness = profile.harness_kind,
         target = profile.target,
         driver = profile.execution_driver
     );
 
     let mut notes = vec![
         "The worker loads its agent allowlist and skills from the profile at startup.".into(),
-        "Credentials are never included here; mount the runtime auth Secret/volume.".into(),
+        "Credentials are never included here; mount the harness auth Secret/volume.".into(),
         "Pin the image tag to a release and use the generated manifest as a starting point.".into(),
     ];
     if has_auth {
@@ -359,21 +359,21 @@ spec:
     }))
 }
 
-fn default_image(runtime: RuntimeKind) -> String {
-    match runtime {
-        RuntimeKind::Pi => "192.168.1.201:5000/orbit-worker-pi".into(),
-        RuntimeKind::OpenCode => "192.168.1.201:5000/orbit-worker-opencode".into(),
+fn default_image(harness: HarnessKind) -> String {
+    match harness {
+        HarnessKind::Pi => "192.168.1.201:5000/orbit-worker-pi".into(),
+        HarnessKind::OpenCode => "192.168.1.201:5000/orbit-worker-opencode".into(),
         _ => "192.168.1.201:5000/orbit-worker".into(),
     }
 }
 
-trait RuntimeKindExt {
-    fn from_str_compat(value: &str) -> Result<RuntimeKind, ApiError>;
+trait HarnessKindExt {
+    fn from_str_compat(value: &str) -> Result<HarnessKind, ApiError>;
 }
-impl RuntimeKindExt for RuntimeKind {
-    fn from_str_compat(value: &str) -> Result<RuntimeKind, ApiError> {
+impl HarnessKindExt for HarnessKind {
+    fn from_str_compat(value: &str) -> Result<HarnessKind, ApiError> {
         value
             .parse()
-            .map_err(|_| ApiError::bad_request(format!("unknown runtime kind '{value}'")))
+            .map_err(|_| ApiError::bad_request(format!("unknown harness kind '{value}'")))
     }
 }

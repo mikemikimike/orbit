@@ -62,7 +62,7 @@ pub async fn meta(State(state): State<AppState>) -> Json<MetaResponse> {
         auth: oidc_public_config(&state),
         events_driver: state.events_driver.clone(),
         features: MetaFeatures {
-            runtime_execution: true,
+            harness_execution: true,
             connectors_invocation: false,
             approvals: false,
             scheduled_triggers: false,

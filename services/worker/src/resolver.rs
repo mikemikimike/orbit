@@ -4,7 +4,7 @@ use orbit_contracts::{
 use orbit_domain::{AgentSpec, ModelManagement};
 use orbit_store::Store;
 
-/// Resolve the agent's model selection into what a runtime adapter needs.
+/// Resolve the agent's model selection into what a harness adapter needs.
 ///
 /// Credentials are decrypted only here, held in memory for the execution and never
 /// serialized or logged. A missing credential yields a clear, non-retryable error.
@@ -16,8 +16,8 @@ pub async fn resolve_model(
     let provider_name = spec.model.provider.clone();
     let model = spec.model.model.clone();
 
-    if spec.model.management == ModelManagement::Runtime {
-        let mut resolved = ResolvedModel::runtime_managed(provider_name.clone(), model);
+    if spec.model.management == ModelManagement::Harness {
+        let mut resolved = ResolvedModel::harness_managed(provider_name.clone(), model);
         if let Some(name) = &provider_name {
             if let Some(provider) = store
                 .get_provider_by_name(org_id, name)
@@ -53,7 +53,7 @@ pub async fn resolve_model(
         .ok_or_else(|| format!("provider '{name}' has an unknown kind '{}'", provider.kind))?;
     if kind != ProviderKind::OpenAiCompatible {
         return Err(format!(
-            "provider '{name}' is runtime-managed and cannot be used with platform model management"
+            "provider '{name}' is harness-managed and cannot be used with platform model management"
         ));
     }
     if !provider.enabled {

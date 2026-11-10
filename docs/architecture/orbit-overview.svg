@@ -32,7 +32,7 @@
 
   <rect width="1200" height="880" fill="#f7f7fb"/>
   <text x="40" y="42" class="title">ORBIT — control plane for persistent AI agents</text>
-  <text x="40" y="64" class="subtitle">Self-hosted · runtime-agnostic · model-agnostic · policy-enforced actions · API-first</text>
+  <text x="40" y="64" class="subtitle">Self-hosted · harness-agnostic · model-agnostic · policy-enforced actions · API-first</text>
 
   <!-- Agent experience -->
   <rect x="40" y="86" width="1120" height="92" rx="14" class="layer"/>
@@ -79,7 +79,7 @@
   <text x="658" y="218" class="layer-label">EXECUTION PLANE</text>
   <rect x="664" y="228" width="226" height="86" rx="10" class="card"/>
   <text x="682" y="248" class="box-title">orbit-worker</text>
-  <text x="682" y="265" class="box-line">mock runtime · scheduler</text>
+  <text x="682" y="265" class="box-line">mock harness · scheduler</text>
   <text x="682" y="281" class="box-line">durable queue polling</text>
   <text x="682" y="297" class="box-muted">claims only ORBIT_WORKER_RUNTIMES</text>
 
@@ -93,11 +93,11 @@
   <text x="682" y="354" class="box-title">Policy-enforcing tool broker</text>
   <text x="682" y="371" class="box-line">execution token · capability allowlist · autonomy L1–L4</text>
   <text x="682" y="387" class="box-line">approvals · credential lease · rate limits · audit</text>
-  <text x="682" y="407" class="box-muted">Runtime calls MCP tools; provider credentials never leave the broker</text>
+  <text x="682" y="407" class="box-muted">Harness calls MCP tools; provider credentials never leave the broker</text>
 
-  <text x="664" y="450" class="box-line">Runtime adapters:</text>
+  <text x="664" y="450" class="box-line">Harness adapters:</text>
   <text x="664" y="466" class="box-muted">OpenCode (available) · Claude Code · Pi · generic (planned)</text>
-  <text x="664" y="482" class="box-muted">mock runtime for local development and contract tests</text>
+  <text x="664" y="482" class="box-muted">mock harness for local development and contract tests</text>
 
   <!-- External -->
   <rect x="40" y="556" width="1120" height="176" rx="14" class="layer"/>
@@ -125,7 +125,7 @@
   <rect x="964" y="592" width="172" height="82" rx="9" class="card"/>
   <text x="982" y="614" class="box-title">Model providers</text>
   <text x="982" y="632" class="box-line">OpenAI-compatible</text>
-  <text x="982" y="649" class="box-muted">or runtime-managed</text>
+  <text x="982" y="649" class="box-muted">or harness-managed</text>
 
   <text x="68" y="704" class="note">Credentials are injected by the broker only at action time. External content is untrusted and never mixed with trusted system instructions.</text>
 

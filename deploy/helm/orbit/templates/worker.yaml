@@ -52,8 +52,8 @@ spec:
               value: "nats"
             - name: ORBIT_NATS_URL
               value: {{ include "orbit.natsUrl" . | quote }}
-            - name: ORBIT_WORKER_RUNTIMES
-              value: {{ .Values.worker.runtimes | quote }}
+            - name: ORBIT_WORKER_HARNESSS
+              value: {{ .Values.worker.harnesses | quote }}
             - name: ORBIT_WORKER_TARGET
               value: "kubernetes"
             - name: ORBIT_WORKER_CONCURRENCY

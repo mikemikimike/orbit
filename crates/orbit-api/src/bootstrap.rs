@@ -5,11 +5,11 @@ use uuid::Uuid;
 
 use orbit_domain::{
     AgentDefinition, AgentMetadata, AgentSpec, AgentStatus, AutonomySpec, ConnectorBinding,
-    Instructions, MemorySpec, ModelManagement, ModelSpec, ResourceLimits, RuntimeKind, RuntimeSpec,
+    Instructions, MemorySpec, ModelManagement, ModelSpec, ResourceLimits, HarnessKind, HarnessSpec,
     TriggerSource, TriggerSpec,
 };
 use orbit_events::EventBus;
-use orbit_runtime::RuntimeRegistry;
+use orbit_harness::HarnessRegistry;
 use orbit_security::{AuthContext, AuthMethod, AuthMode};
 use orbit_store::Store;
 
@@ -21,10 +21,10 @@ pub struct Initialized {
     pub dev_identity: Option<DevIdentity>,
 }
 
-/// Migrate, seed identity, runtime catalog, connectors and (optionally) demo content.
+/// Migrate, seed identity, harness catalog, connectors and (optionally) demo content.
 pub async fn initialize(
     store: &Store,
-    registry: &RuntimeRegistry,
+    registry: &HarnessRegistry,
     config: &ApiConfig,
     bus: &dyn EventBus,
 ) -> anyhow::Result<Initialized> {
@@ -68,11 +68,11 @@ pub async fn initialize(
         AuthMode::Oidc => None,
     };
 
-    // Runtime catalog is derived from the adapter registry; the DB stores enablement,
+    // Harness catalog is derived from the adapter registry; the DB stores enablement,
     // capabilities and per-org overrides.
     for descriptor in registry.descriptors() {
-        if let Err(err) = store.upsert_runtime_descriptor(&descriptor).await {
-            tracing::warn!(error = %err, runtime = %descriptor.kind, "failed to seed runtime descriptor");
+        if let Err(err) = store.upsert_harness_descriptor(&descriptor).await {
+            tracing::warn!(error = %err, harness = %descriptor.kind, "failed to seed harness descriptor");
         }
     }
     for manifest in crate::connectors::builtin_manifests() {
@@ -145,7 +145,7 @@ async fn seed_demo(store: &Store, org_id: Uuid, config: &ApiConfig) -> anyhow::R
         ),
         demo_definition(
             "Research Assistant",
-            "Gathers and summarizes information on request. Uses the mock runtime in development.",
+            "Gathers and summarizes information on request. Uses the mock harness in development.",
             "You are a careful research assistant. Summarize sources, separate facts from \
              assumptions, and clearly mark uncertainty.",
             vec![],
@@ -180,7 +180,7 @@ async fn seed_demo(store: &Store, org_id: Uuid, config: &ApiConfig) -> anyhow::R
                     agent_id: agent.id,
                     agent_version_id: version.id,
                     agent_name: &agent.name,
-                    runtime_kind: RuntimeKind::Mock,
+                    harness_kind: HarnessKind::Mock,
                     trigger_source: TriggerSource::Schedule,
                     placement: "auto",
                     trigger_id: None,
@@ -248,14 +248,14 @@ fn demo_definition(
             labels: Default::default(),
         },
         spec: AgentSpec {
-            runtime: RuntimeSpec {
-                kind: RuntimeKind::Mock,
+            harness: HarnessSpec {
+                kind: HarnessKind::Mock,
                 execution_mode: orbit_domain::ExecutionMode::OnDemand,
                 placement: orbit_domain::PlacementTarget::Auto,
                 config: json!({ "stepDelayMs": 120 }),
             },
             model: ModelSpec {
-                management: ModelManagement::Runtime,
+                management: ModelManagement::Harness,
                 provider: Some("mock".into()),
                 model: None,
                 params: Default::default(),

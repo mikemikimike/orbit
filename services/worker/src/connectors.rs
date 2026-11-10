@@ -1,14 +1,14 @@
 //! Connector context hydration for the execution plane.
 //!
 //! MVP scope: read-only X/Twitter recent-search hydration. Before an execution starts,
-//! configured X connector bindings fetch recent posts and add them to the runtime input
-//! as explicitly **untrusted** external context. The runtime (OpenCode) then summarises
+//! configured X connector bindings fetch recent posts and add them to the harness input
+//! as explicitly **untrusted** external context. The harness (OpenCode) then summarises
 //! or analyses the posts. Writes/posting and general capability invocation are Phase 2.
 
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use orbit_contracts::{RuntimeError, RuntimeErrorKind};
+use orbit_contracts::{HarnessError, HarnessErrorKind};
 use orbit_domain::AgentSpec;
 use orbit_store::Store;
 
@@ -30,7 +30,7 @@ pub async fn hydrate(
     spec: &AgentSpec,
     task: &str,
     payload: &Value,
-) -> Result<HydratedContext, RuntimeError> {
+) -> Result<HydratedContext, HarnessError> {
     let mut payload = payload.clone();
     if !payload.is_object() {
         payload = json!({});
@@ -56,14 +56,14 @@ pub async fn hydrate(
             .get_connection_with_connector(org_id, connection_id)
             .await
             .map_err(|err| {
-                RuntimeError::new(
-                    RuntimeErrorKind::InvalidConfig,
+                HarnessError::new(
+                    HarnessErrorKind::InvalidConfig,
                     format!("X connection not found: {err}"),
                 )
             })?;
         if connection.connector_slug != "x" {
-            return Err(RuntimeError::new(
-                RuntimeErrorKind::InvalidConfig,
+            return Err(HarnessError::new(
+                HarnessErrorKind::InvalidConfig,
                 format!(
                     "connection '{}' belongs to connector '{}', not X",
                     connection.connection.name, connection.connector_slug
@@ -71,8 +71,8 @@ pub async fn hydrate(
             ));
         }
         if connection.connection.status != "active" {
-            return Err(RuntimeError::new(
-                RuntimeErrorKind::InvalidConfig,
+            return Err(HarnessError::new(
+                HarnessErrorKind::InvalidConfig,
                 format!(
                     "X connection '{}' is not active",
                     connection.connection.name
@@ -84,8 +84,8 @@ pub async fn hydrate(
             .credential_ref
             .as_ref()
             .ok_or_else(|| {
-                RuntimeError::new(
-                    RuntimeErrorKind::InvalidConfig,
+                HarnessError::new(
+                    HarnessErrorKind::InvalidConfig,
                     "X connection has no credential; add a bearer token in Connections",
                 )
             })?;
@@ -93,14 +93,14 @@ pub async fn hydrate(
             .get_secret_value(reference)
             .await
             .map_err(|err| {
-                RuntimeError::new(
-                    RuntimeErrorKind::Unavailable,
+                HarnessError::new(
+                    HarnessErrorKind::Unavailable,
                     format!("could not read X credential: {err}"),
                 )
             })?
             .ok_or_else(|| {
-                RuntimeError::new(
-                    RuntimeErrorKind::InvalidConfig,
+                HarnessError::new(
+                    HarnessErrorKind::InvalidConfig,
                     "X credential is missing from the secret store",
                 )
             })?;
@@ -120,8 +120,8 @@ pub async fn hydrate(
             .filter(|q| !q.trim().is_empty())
             .unwrap_or_else(|| task.trim().to_string());
         if query.is_empty() {
-            return Err(RuntimeError::new(
-                RuntimeErrorKind::InvalidConfig,
+            return Err(HarnessError::new(
+                HarnessErrorKind::InvalidConfig,
                 "X search requires a query: pass {\"query\":\"...\"} in the execution payload \
                  or set config.query on the connection",
             ));
@@ -141,7 +141,7 @@ pub async fn hydrate(
             .timeout(std::time::Duration::from_secs(20))
             .build()
             .map_err(|e| {
-                RuntimeError::new(RuntimeErrorKind::Internal, format!("http client: {e}"))
+                HarnessError::new(HarnessErrorKind::Internal, format!("http client: {e}"))
             })?;
         let response = client
             .get(&url)
@@ -154,8 +154,8 @@ pub async fn hydrate(
             .send()
             .await
             .map_err(|e| {
-                RuntimeError::new(
-                    RuntimeErrorKind::Unavailable,
+                HarnessError::new(
+                    HarnessErrorKind::Unavailable,
                     format!("X API request failed: {e}"),
                 )
             })?;
@@ -173,8 +173,8 @@ pub async fn hydrate(
             } else {
                 ""
             };
-            return Err(RuntimeError::new(
-                RuntimeErrorKind::Unavailable,
+            return Err(HarnessError::new(
+                HarnessErrorKind::Unavailable,
                 format!("X API returned {status}: {detail}.{hint}"),
             ));
         }

@@ -4,41 +4,41 @@ use axum::Extension;
 use axum::Json;
 use uuid::Uuid;
 
-use orbit_contracts::{validate_provider_config, ProviderKind, RuntimeDescriptor};
-use orbit_domain::RuntimeKind;
+use orbit_contracts::{validate_provider_config, ProviderKind, HarnessDescriptor};
+use orbit_domain::HarnessKind;
 use orbit_security::{new_secret_ref, AuthContext, Permission, SecretValue};
 
 use crate::audit;
 use crate::dto::{
     parse_provider_kind, ConnectionView, ConnectorView, CreateConnectionRequest,
-    CreateProviderRequest, ProviderProbeResponse, ProviderView, RuntimeHealthView, RuntimeView,
+    CreateProviderRequest, ProviderProbeResponse, ProviderView, HarnessHealthView, HarnessView,
     UpdateProviderRequest,
 };
 use crate::error::ApiError;
 use crate::state::AppState;
 
-// ------------------------------------------------------------------- runtimes
+// ------------------------------------------------------------------- harnesses
 
-#[utoipa::path(get, path = "/api/v1/runtimes", tag = "runtimes", responses((status = 200, body = [RuntimeView])))]
-pub async fn list_runtimes(
+#[utoipa::path(get, path = "/api/v1/harnesses", tag = "harnesses", responses((status = 200, body = [HarnessView])))]
+pub async fn list_harnesses(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
-) -> Result<Json<Vec<RuntimeView>>, ApiError> {
-    auth.require(Permission::RuntimesRead)?;
-    let rows = state.store.list_runtimes(auth.org_id).await?;
+) -> Result<Json<Vec<HarnessView>>, ApiError> {
+    auth.require(Permission::HarnessesRead)?;
+    let rows = state.store.list_harnesses(auth.org_id).await?;
     let items = rows
         .into_iter()
         .map(|row| {
             let kind = row
                 .kind
-                .parse::<RuntimeKind>()
-                .unwrap_or(RuntimeKind::Generic);
+                .parse::<HarnessKind>()
+                .unwrap_or(HarnessKind::Generic);
             let descriptor = state
                 .registry
                 .get(kind)
                 .map(|adapter| adapter.descriptor())
                 .unwrap_or_else(|| fallback_descriptor(kind, &row.name, &row.description));
-            RuntimeView {
+            HarnessView {
                 id: row.id,
                 kind,
                 name: row.name,
@@ -48,10 +48,10 @@ pub async fn list_runtimes(
                 capabilities: row.capabilities,
                 descriptor,
                 config: row.config,
-                health: RuntimeHealthView {
+                health: HarnessHealthView {
                     status: "unknown".into(),
                     message: Some(
-                        "Runtime health is reported by workers (Phase 1). Run `orbit-worker` and \
+                        "Harness health is reported by workers (Phase 1). Run `orbit-worker` and \
                          check /readyz."
                             .into(),
                     ),
@@ -64,8 +64,8 @@ pub async fn list_runtimes(
     Ok(Json(items))
 }
 
-fn fallback_descriptor(kind: RuntimeKind, name: &str, description: &str) -> RuntimeDescriptor {
-    RuntimeDescriptor {
+fn fallback_descriptor(kind: HarnessKind, name: &str, description: &str) -> HarnessDescriptor {
+    HarnessDescriptor {
         kind,
         name: name.to_string(),
         description: description.to_string(),
@@ -280,9 +280,9 @@ pub async fn probe_provider(
     let provider = state.store.get_provider(auth.org_id, provider_id).await?;
     let kind = ProviderKind::parse(&provider.kind)
         .ok_or_else(|| ApiError::internal("provider has an unknown kind"))?;
-    if kind == ProviderKind::RuntimeManaged {
+    if kind == ProviderKind::HarnessManaged {
         return Err(ApiError::unsupported(
-            "runtime-managed providers are authenticated and probed by their runtime",
+            "harness-managed providers are authenticated and probed by their harness",
         ));
     }
 
@@ -537,7 +537,7 @@ pub async fn delete_connection(
 #[serde(rename_all = "camelCase")]
 pub struct WorkerView {
     pub worker_id: String,
-    pub runtimes: Vec<String>,
+    pub harnesses: Vec<String>,
     pub target: String,
     pub hostname: Option<String>,
     pub started_at: chrono::DateTime<chrono::Utc>,
@@ -545,12 +545,12 @@ pub struct WorkerView {
     pub live: bool,
 }
 
-#[utoipa::path(get, path = "/api/v1/workers", tag = "runtimes", responses((status = 200, body = [WorkerView])))]
+#[utoipa::path(get, path = "/api/v1/workers", tag = "harnesses", responses((status = 200, body = [WorkerView])))]
 pub async fn list_workers(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Json<Vec<WorkerView>>, ApiError> {
-    auth.require(Permission::RuntimesRead)?;
+    auth.require(Permission::HarnessesRead)?;
     let now = chrono::Utc::now();
     let mut workers = state.store.list_worker_heartbeats().await?;
     workers.sort_by_key(|worker| std::cmp::Reverse(worker.last_heartbeat_at));
@@ -560,7 +560,7 @@ pub async fn list_workers(
             .map(|worker| WorkerView {
                 live: (now - worker.last_heartbeat_at).num_seconds() < 60,
                 worker_id: worker.worker_id,
-                runtimes: worker.runtimes,
+                harnesses: worker.harnesses,
                 target: worker.target,
                 hostname: worker.hostname,
                 started_at: worker.started_at,

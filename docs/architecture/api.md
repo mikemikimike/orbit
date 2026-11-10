@@ -51,8 +51,8 @@ Codes: `bad_request`, `validation_error`, `unauthorized`, `forbidden`, `not_foun
 | `GET /api/v1/executions/{id}/events` | stored events (paginated, `after_seq`) |
 | `GET /api/v1/executions/{id}/events/stream` | SSE stream (replay + tail) |
 | `POST /api/v1/executions/{id}/cancel` | request cancellation |
-| `GET /api/v1/runtimes` | runtime registry + capabilities + health |
-| `GET /api/v1/runtimes/{kind}` | runtime detail, adapter status |
+| `GET /api/v1/harnesses` | harness registry + capabilities + health |
+| `GET /api/v1/harnesses/{kind}` | harness detail, adapter status |
 | `GET/POST /api/v1/providers` | list / create model provider |
 | `PATCH/DELETE /api/v1/providers/{id}` | update / delete (redacted secrets) |
 | `POST /api/v1/providers/{id}/test` | connectivity probe (OpenAI-compatible) |

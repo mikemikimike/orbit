@@ -98,7 +98,7 @@ export default function SkillsPage() {
   return (
     <div className="space-y-5 animate-fade-in">
       <PageHeader
-        eyebrow="Runtime assets"
+        eyebrow="Harness assets"
         title="Skills"
         description="Reusable SKILL.md packages materialized into the execution workspace. Attach them in Agent Studio."
         actions={

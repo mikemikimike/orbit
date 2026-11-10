@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use orbit_events::{connect as connect_bus, EventBusConfig};
-use orbit_runtime::RuntimeRegistry;
+use orbit_harness::HarnessRegistry;
 use orbit_security::SecretCipher;
 use orbit_store::Store;
 use tokio::sync::Semaphore;
@@ -27,8 +27,8 @@ pub struct WorkerConfig {
     pub scheduler_enabled: bool,
     pub concurrency: usize,
     pub workspace_root: String,
-    /// Runtime kinds this worker may claim. Enables separate runtime images/workers.
-    pub runtimes: Vec<String>,
+    /// Harness kinds this worker may claim. Enables separate harness images/workers.
+    pub harnesses: Vec<String>,
     pub heartbeat_interval: Duration,
     pub stale_after: Duration,
     pub execution_driver: String,
@@ -66,7 +66,7 @@ impl WorkerConfig {
                 .max(1),
             workspace_root: std::env::var("ORBIT_WORKSPACE_ROOT")
                 .unwrap_or_else(|_| "/tmp/orbit-workspaces".into()),
-            runtimes: std::env::var("ORBIT_WORKER_RUNTIMES")
+            harnesses: std::env::var("ORBIT_WORKER_HARNESSS")
                 .unwrap_or_else(|_| "mock,opencode,claude_code,pi,generic".into())
                 .split(',')
                 .map(|value| value.trim().to_string())
@@ -138,7 +138,7 @@ async fn main() -> anyhow::Result<()> {
     let bus = connect_bus(&bus_config)
         .await
         .context("could not connect to the event bus")?;
-    let registry = Arc::new(RuntimeRegistry::builtin());
+    let registry = Arc::new(HarnessRegistry::builtin());
 
     // On a fresh Helm install the worker may start before the API has migrated and
     // seeded the default organization. Wait instead of crash-looping; the container then
@@ -170,7 +170,7 @@ async fn main() -> anyhow::Result<()> {
         .map(|org| org.id)
         .context("organization disappeared during startup")?;
 
-    let mut runtimes = config.runtimes.clone();
+    let mut harnesses = config.harnesses.clone();
     let mut target = config.target.clone();
     let mut execution_driver = config.execution_driver.clone();
     let mut profile_agent_ids = Vec::new();
@@ -181,7 +181,7 @@ async fn main() -> anyhow::Result<()> {
         if !profile.enabled {
             anyhow::bail!("worker profile '{}' is disabled", profile.name);
         }
-        runtimes = vec![profile.runtime_kind.clone()];
+        harnesses = vec![profile.harness_kind.clone()];
         target = profile.target.clone();
         execution_driver = profile.execution_driver.clone();
         profile_agent_ids = profile.agent_ids.clone();
@@ -189,7 +189,7 @@ async fn main() -> anyhow::Result<()> {
         profile_org_id = profile.org_id;
         tracing::info!(
             profile = %profile.name,
-            runtime = %profile.runtime_kind,
+            harness = %profile.harness_kind,
             target = %profile.target,
             agents = profile.agent_ids.len(),
             skills = profile.skill_slugs.len(),
@@ -203,7 +203,7 @@ async fn main() -> anyhow::Result<()> {
         bus: bus.clone(),
         registry: registry.clone(),
         workspace_root: std::path::PathBuf::from(&config.workspace_root),
-        runtimes,
+        harnesses,
         execution_driver,
         target,
         profile_org_id,
@@ -216,7 +216,7 @@ async fn main() -> anyhow::Result<()> {
         worker_id = %config.worker_id,
         concurrency = config.concurrency,
         scheduler = config.scheduler_enabled,
-        runtimes = ?state.runtimes,
+        harnesses = ?state.harnesses,
         events_driver = %bus_config.driver,
         "ORBIT worker started"
     );
@@ -230,7 +230,7 @@ async fn main() -> anyhow::Result<()> {
             .store
             .upsert_worker_heartbeat(
                 &state.worker_id,
-                &state.runtimes,
+                &state.harnesses,
                 &state.target,
                 std::env::var("HOSTNAME").ok().as_deref(),
             )

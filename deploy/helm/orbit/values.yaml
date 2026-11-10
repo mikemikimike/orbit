@@ -27,13 +27,13 @@ api:
 
 worker:
   image: orbit-worker
-  tag: 0.3.0
+  tag: 0.4.0
   replicas: 1
   concurrency: 4
   pollIntervalMs: 500
   schedulerEnabled: true
-  # Runtime kinds this base worker may claim. OpenCode runs in its own worker image.
-  runtimes: mock
+  # Harness kinds this base worker may claim. OpenCode runs in its own worker image.
+  harnesses: mock
   resources:
     requests:
       cpu: 100m
@@ -49,10 +49,10 @@ worker:
 opencodeWorker:
   enabled: false
   image: orbit-worker-opencode
-  tag: 0.3.0
+  tag: 0.4.0
   replicas: 1
   concurrency: 2
-  runtimes: opencode
+  harnesses: opencode
   resources:
     requests:
       cpu: 200m
@@ -76,7 +76,7 @@ opencodeWorker:
 
 web:
   image: orbit-web
-  tag: 0.3.0
+  tag: 0.4.0
   replicas: 1
   port: 3000
   resources:
@@ -211,7 +211,7 @@ podSecurityContext:
   runAsGroup: 10001
   fsGroup: 10001
   seccompProfile:
-    type: RuntimeDefault
+    type: HarnessDefault
 
 containerSecurityContext:
   allowPrivilegeEscalation: false

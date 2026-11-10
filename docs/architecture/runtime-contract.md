@@ -1,7 +1,7 @@
-# Runtime Adapter Contract
+# Harness Adapter Contract
 
-Rust source of truth: `crates/orbit-contracts/src/runtime.rs`.
-Adapters: `crates/orbit-runtime/src/adapters/*`.
+Rust source of truth: `crates/orbit-contracts/src/harness.rs`.
+Adapters: `crates/orbit-harness/src/adapters/*`.
 
 ## Boundaries
 
@@ -15,23 +15,23 @@ Adapters: `crates/orbit-runtime/src/adapters/*`.
 
 ```rust
 #[async_trait]
-pub trait RuntimeAdapter: Send + Sync {
-    fn kind(&self) -> RuntimeKind;
-    fn capabilities(&self) -> RuntimeCapabilities;
+pub trait HarnessAdapter: Send + Sync {
+    fn kind(&self) -> HarnessKind;
+    fn capabilities(&self) -> HarnessCapabilities;
 
-    async fn validate_config(&self, cfg: &RuntimeConfig) -> Result<ValidationReport, RuntimeError>;
-    async fn health(&self, cfg: &RuntimeConfig) -> Result<RuntimeHealth, RuntimeError>;
+    async fn validate_config(&self, cfg: &HarnessConfig) -> Result<ValidationReport, HarnessError>;
+    async fn health(&self, cfg: &HarnessConfig) -> Result<HarnessHealth, HarnessError>;
 
-    // Long-running / instance-based runtimes. On-demand runtimes may return
+    // Long-running / instance-based harnesses. On-demand harnesses may return
     // `Unsupported`; the control plane then skips instance management.
-    async fn create_instance(&self, req: CreateInstanceRequest) -> Result<RuntimeInstance, RuntimeError>;
-    async fn start_instance(&self, inst: &RuntimeInstanceRef) -> Result<(), RuntimeError>;
-    async fn stop_instance(&self, inst: &RuntimeInstanceRef) -> Result<(), RuntimeError>;
-    async fn delete_instance(&self, inst: &RuntimeInstanceRef) -> Result<(), RuntimeError>;
-    async fn instance_status(&self, inst: &RuntimeInstanceRef) -> Result<RuntimeInstanceStatus, RuntimeError>;
+    async fn create_instance(&self, req: CreateInstanceRequest) -> Result<HarnessInstance, HarnessError>;
+    async fn start_instance(&self, inst: &HarnessInstanceRef) -> Result<(), HarnessError>;
+    async fn stop_instance(&self, inst: &HarnessInstanceRef) -> Result<(), HarnessError>;
+    async fn delete_instance(&self, inst: &HarnessInstanceRef) -> Result<(), HarnessError>;
+    async fn instance_status(&self, inst: &HarnessInstanceRef) -> Result<HarnessInstanceStatus, HarnessError>;
 
-    async fn execute(&self, req: ExecutionRequest) -> Result<ExecutionOutcome, RuntimeError>;
-    async fn resume(&self, req: ResumeRequest) -> Result<ExecutionOutcome, RuntimeError>;
+    async fn execute(&self, req: ExecutionRequest) -> Result<ExecutionOutcome, HarnessError>;
+    async fn resume(&self, req: ResumeRequest) -> Result<ExecutionOutcome, HarnessError>;
 }
 ```
 
@@ -41,11 +41,11 @@ adapters must terminate child processes/containers on cancellation.
 
 ## Capabilities
 
-Advertised per adapter and surfaced to the UI (`GET /api/v1/runtimes`):
+Advertised per adapter and surfaced to the UI (`GET /api/v1/harnesses`):
 
 | Capability | Meaning |
 |---|---|
-| `supports_sessions` | runtime can hold conversation/session state |
+| `supports_sessions` | harness can hold conversation/session state |
 | `supports_resume` | a prior session can be continued |
 | `supports_streaming` | incremental log/tool events are emitted |
 | `supports_cancel` | an in-flight execution can be cancelled |
@@ -54,11 +54,11 @@ Advertised per adapter and surfaced to the UI (`GET /api/v1/runtimes`):
 | `supports_usage_reporting` | token/CPU usage is reported |
 | `execution_modes` | `[on_demand]`, `[long_running]` or both |
 | `max_timeout_seconds` | upper bound on requested timeouts |
-| `runtime_managed_providers` | runtime owns provider inventory/auth |
+| `harness_managed_providers` | harness owns provider inventory/auth |
 
 ## Streaming events
 
-`RuntimeEvent` variants: `Started { session_ref }`, `Log { level, message }`,
+`HarnessEvent` variants: `Started { session_ref }`, `Log { level, message }`,
 `Status { phase }`, `ToolCall { name, input, output }`, `OutputDelta { text }`,
 `Usage { tokens_in, tokens_out }`, `Error { message, retryable }`.
 
@@ -73,37 +73,37 @@ not only at completion.
 - `execution_id`, `agent_id`, `agent_version`, `agent_name`
 - trusted `instructions` (system prompt) — kept separate from untrusted user/event content
 - `input`: task text, structured payload, and provenance (`source`, `trusted: false`)
-- `model`: either `RuntimeManaged { provider, model }` or `Endpoint { … }` with a
+- `model`: either `HarnessManaged { provider, model }` or `Endpoint { … }` with a
   resolved credential (never serialized into logs)
 - `grants`: platform-approved connector capabilities (`connection_id`, `capability`,
   `effect`)
 - `autonomy`: 1–4 with platform-enforced semantics
 - `resources`: timeout, memory, CPU, max output tokens, max concurrent executions
-- `runtime_config`: free-form, adapter-owned JSON (validated by `validate_config`)
+- `harness_config`: free-form, adapter-owned JSON (validated by `validate_config`)
 - `workspace`: per-execution scratch directory contract
 - `events`, `cancel`
 
 ## Error model
 
-`RuntimeError { kind, message, retryable, details }` where `kind ∈ {invalid_config,
+`HarnessError { kind, message, retryable, details }` where `kind ∈ {invalid_config,
 unauthorized, unavailable, unsupported, timeout, cancelled, execution_failed, protocol,
 internal}`. Workers map `retryable` errors to bounded retries with exponential backoff;
 non-retryable errors move the execution to `failed` immediately.
 
 ## Placement and worker targets
 
-Agents may set `spec.runtime.placement`:
+Agents may set `spec.harness.placement`:
 
 | Value | Claimed by |
 |---|---|
-| `auto` | any worker supporting the runtime |
+| `auto` | any worker supporting the harness |
 | `local` | a worker running natively on the host (`ORBIT_WORKER_TARGET=local`) |
 | `docker` | a Docker/Compose worker or the local container dispatcher (`docker`) |
 | `kubernetes` | workers deployed by the Helm chart (`kubernetes`) |
 
 Placement is a routing constraint, not an isolation guarantee. Isolation depends on the
 worker's execution driver (process vs per-execution container/Job). Workers report target
-and runtimes in `worker_heartbeats`; `GET /api/v1/workers` exposes them.
+and harnesses in `worker_heartbeats`; `GET /api/v1/workers` exposes them.
 
 ## Isolation requirements
 
@@ -118,15 +118,15 @@ files, and forced teardown on timeout/cancel.
 - `opencode` — **available**, tested against OpenCode **v2.2.5**:
   - `opencode run --standalone --format json` in a per-execution workspace
   - trusted instructions written to `AGENTS.md`; untrusted input passed in the prompt
-  - NDJSON text/tool/usage/error events mapped to ORBIT runtime events
+  - NDJSON text/tool/usage/error events mapped to ORBIT harness events
   - session IDs captured; `--session` used for resume; cancellation kills the process group
-  - credentials are runtime-managed via `opencode auth export` imported by an init
+  - credentials are harness-managed via `opencode auth export` imported by an init
     container; ORBIT never passes raw provider keys in CLI arguments
   - `PWD` and the process working directory are pinned to the per-execution workspace
     (prevents inheriting the worker's repository directory)
   - GitHub read (`issues.list`) verified through the MCP tool broker against a public
     repository; write actions are approval-gated and pending the approvals UI
-  - contract + real-runtime test: `crates/orbit-runtime/tests/opencode_e2e.rs`
+  - contract + real-harness test: `crates/orbit-harness/tests/opencode_e2e.rs`
     (`ORBIT_OPENCODE_E2E=1`, ignored by default to avoid model spend)
   - limitation: ORBIT platform providers are not yet mapped into OpenCode's provider
     config (`supports_platform_providers=false`); use OpenCode-managed auth for now.

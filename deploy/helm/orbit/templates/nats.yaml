@@ -40,7 +40,7 @@ spec:
       securityContext:
         fsGroup: 10001
         seccompProfile:
-          type: RuntimeDefault
+          type: HarnessDefault
       containers:
         - name: nats
           image: {{ .Values.nats.image | quote }}

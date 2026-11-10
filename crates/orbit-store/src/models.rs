@@ -121,7 +121,7 @@ pub struct AgentVersion {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeRecord {
+pub struct HarnessRecord {
     pub id: Uuid,
     pub org_id: Option<Uuid>,
     pub kind: String,
@@ -209,7 +209,7 @@ pub struct ExecutionRecord {
     pub agent_id: Uuid,
     pub agent_version_id: Uuid,
     pub agent_name: String,
-    pub runtime_kind: String,
+    pub harness_kind: String,
     pub trigger_id: Option<Uuid>,
     pub trigger_source: String,
     pub placement: String,
@@ -281,10 +281,10 @@ pub struct AgentInstance {
     pub org_id: Uuid,
     pub agent_id: Uuid,
     pub agent_version_id: Uuid,
-    pub runtime_id: Uuid,
+    pub harness_id: Uuid,
     pub name: String,
     pub deployment_target: String,
-    pub runtime_ref: Option<String>,
+    pub harness_ref: Option<String>,
     pub state: String,
     pub health: serde_json::Value,
     pub config: serde_json::Value,
@@ -365,7 +365,7 @@ pub struct WorkerProfile {
     pub id: Uuid,
     pub org_id: Uuid,
     pub name: String,
-    pub runtime_kind: String,
+    pub harness_kind: String,
     pub target: String,
     pub execution_driver: String,
     pub image: String,
