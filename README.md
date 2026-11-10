@@ -21,6 +21,13 @@ Browser / future mobile app
 └─────────────────────────────────────────────────────────┘
 ```
 
+## Architecture
+
+![ORBIT architecture overview](docs/architecture/orbit-overview.svg)
+
+Detailed diagrams (system context, execution sequence, broker policy path, domain model,
+deployment topology): [`docs/architecture/diagram.md`](docs/architecture/diagram.md).
+
 ## Status
 
 Phase 0 foundation is implemented and validated:

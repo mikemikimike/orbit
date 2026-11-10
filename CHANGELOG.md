@@ -6,6 +6,11 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.1.4] — Secure-context fix for plain HTTP deployments
 
+### Added
+- Architecture drawings: `docs/architecture/orbit-overview.svg` / `.png` and detailed
+  Mermaid diagrams for context, execution sequence, broker policy path, domain model and
+  deployment topology (`docs/architecture/diagram.md`).
+
 ### Fixed
 - Agent pages crashed with `crypto.randomUUID is not a function` when ORBIT is served over
   plain HTTP on a LAN hostname (Web Crypto UUIDs and the async clipboard API require a

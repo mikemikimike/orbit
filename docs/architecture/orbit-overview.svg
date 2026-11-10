@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="880" viewBox="0 0 1200 880" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a4a5a"/>
+    </marker>
+    <marker id="arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6d4aff"/>
+    </marker>
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2aa7b8"/>
+    </marker>
+    <style>
+      .title { font-size: 22px; font-weight: 700; fill: #17171f; }
+      .subtitle { font-size: 12.5px; fill: #6b6b7a; }
+      .layer-label { font-size: 10.5px; font-weight: 700; letter-spacing: 1.4px; fill: #6d4aff; }
+      .box-title { font-size: 13px; font-weight: 650; fill: #17171f; }
+      .box-line { font-size: 11px; fill: #4d4d5c; }
+      .box-muted { font-size: 10.5px; fill: #77778a; }
+      .note { font-size: 10.5px; fill: #6b6b7a; }
+      .arrow-label { font-size: 10px; fill: #5b5b6b; }
+      .layer { fill: #ffffff; stroke: #e1e1ea; stroke-width: 1.2; }
+      .card { fill: #fafaff; stroke: #d9d9e6; stroke-width: 1.1; }
+      .card-accent { fill: #f3f0ff; stroke: #b9a8ff; stroke-width: 1.2; }
+      .card-teal { fill: #eefafb; stroke: #9fdbe3; stroke-width: 1.2; }
+      .card-warm { fill: #fff8ec; stroke: #f0cf98; stroke-width: 1.2; }
+      .dashed { stroke-dasharray: 5 4; }
+      .arrow { stroke: #4a4a5a; stroke-width: 1.4; fill: none; }
+      .arrow-accent { stroke: #6d4aff; stroke-width: 1.6; fill: none; }
+      .arrow-teal { stroke: #2aa7b8; stroke-width: 1.5; fill: none; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="880" fill="#f7f7fb"/>
+  <text x="40" y="42" class="title">ORBIT — control plane for persistent AI agents</text>
+  <text x="40" y="64" class="subtitle">Self-hosted · runtime-agnostic · model-agnostic · policy-enforced actions · API-first</text>
+
+  <!-- Agent experience -->
+  <rect x="40" y="86" width="1120" height="92" rx="14" class="layer"/>
+  <text x="58" y="108" class="layer-label">AGENT EXPERIENCE</text>
+  <rect x="68" y="118" width="452" height="44" rx="9" class="card-accent"/>
+  <text x="86" y="138" class="box-title">Web app — Next.js</text>
+  <text x="86" y="153" class="box-line">Dashboard · Agent Studio · Executions · Approvals · Settings</text>
+  <rect x="538" y="118" width="246" height="44" rx="9" class="card dashed"/>
+  <text x="556" y="138" class="box-title">Native mobile — future</text>
+  <text x="556" y="153" class="box-line">Expo / React Native · shared client</text>
+  <text x="812" y="134" class="box-line">Same versioned API for every client:</text>
+  <text x="812" y="149" class="box-muted">REST /api/v1 · OpenAPI · SSE streams</text>
+
+  <!-- Control plane -->
+  <rect x="40" y="196" width="574" height="330" rx="14" class="layer"/>
+  <text x="58" y="218" class="layer-label">CONTROL PLANE</text>
+  <rect x="64" y="228" width="526" height="106" rx="10" class="card-accent"/>
+  <text x="82" y="248" class="box-title">orbit-api (Axum)</text>
+  <text x="82" y="265" class="box-line">Auth (OIDC / API tokens) · agents &amp; immutable versions</text>
+  <text x="82" y="281" class="box-line">Providers · connections · capability allowlists · policies</text>
+  <text x="82" y="297" class="box-line">Executions · approvals · audit · usage · SSE</text>
+  <text x="82" y="318" class="box-muted">Never executes agent tasks</text>
+
+  <g>
+    <path d="M 78 356 h 244 v 102 a 20 12 0 0 1 -20 12 h -204 a 20 12 0 0 1 -20 -12 z" fill="#f7fbff" stroke="#b7d6ea" stroke-width="1.2"/>
+    <ellipse cx="200" cy="356" rx="122" ry="12" fill="#eaf4fc" stroke="#b7d6ea" stroke-width="1.2"/>
+    <text x="200" y="383" text-anchor="middle" class="box-title">PostgreSQL</text>
+    <text x="200" y="400" text-anchor="middle" class="box-line">durable source of truth</text>
+    <text x="200" y="417" text-anchor="middle" class="box-muted">agents · versions · executions</text>
+    <text x="200" y="432" text-anchor="middle" class="box-muted">events · approvals · audit</text>
+    <text x="200" y="447" text-anchor="middle" class="box-muted">AES-GCM encrypted secrets</text>
+  </g>
+
+  <rect x="346" y="344" width="244" height="130" rx="10" class="card"/>
+  <text x="364" y="366" class="box-title">NATS JetStream</text>
+  <text x="364" y="384" class="box-line">execution &amp; trigger events</text>
+  <text x="364" y="400" class="box-line">execution.requested / updated</text>
+  <text x="364" y="416" class="box-line">trigger.fired / connector.event</text>
+  <text x="364" y="438" class="box-muted">at-least-once; DB polling</text>
+  <text x="364" y="453" class="box-muted">is the crash-recovery path</text>
+
+  <!-- Execution plane -->
+  <rect x="640" y="196" width="520" height="330" rx="14" class="layer"/>
+  <text x="658" y="218" class="layer-label">EXECUTION PLANE</text>
+  <rect x="664" y="228" width="226" height="86" rx="10" class="card"/>
+  <text x="682" y="248" class="box-title">orbit-worker</text>
+  <text x="682" y="265" class="box-line">mock runtime · scheduler</text>
+  <text x="682" y="281" class="box-line">durable queue polling</text>
+  <text x="682" y="297" class="box-muted">claims only ORBIT_WORKER_RUNTIMES</text>
+
+  <rect x="910" y="228" width="226" height="86" rx="10" class="card-teal"/>
+  <text x="928" y="248" class="box-title">orbit-worker-opencode</text>
+  <text x="928" y="265" class="box-line">OpenCode CLI v2.2.5</text>
+  <text x="928" y="281" class="box-line">per-execution workspace</text>
+  <text x="928" y="297" class="box-muted">AGENTS.md · NDJSON events · cancel</text>
+
+  <rect x="664" y="334" width="472" height="86" rx="10" class="card-warm"/>
+  <text x="682" y="354" class="box-title">Policy-enforcing tool broker</text>
+  <text x="682" y="371" class="box-line">execution token · capability allowlist · autonomy L1–L4</text>
+  <text x="682" y="387" class="box-line">approvals · credential lease · rate limits · audit</text>
+  <text x="682" y="407" class="box-muted">Runtime calls MCP tools; provider credentials never leave the broker</text>
+
+  <text x="664" y="450" class="box-line">Runtime adapters:</text>
+  <text x="664" y="466" class="box-muted">OpenCode (available) · Claude Code · Pi · generic (planned)</text>
+  <text x="664" y="482" class="box-muted">mock runtime for local development and contract tests</text>
+
+  <!-- External -->
+  <rect x="40" y="556" width="1120" height="176" rx="14" class="layer"/>
+  <text x="58" y="578" class="layer-label">EXTERNAL SYSTEMS &amp; PROVIDERS</text>
+  <rect x="68" y="592" width="236" height="82" rx="9" class="card"/>
+  <text x="86" y="614" class="box-title">GitHub</text>
+  <text x="86" y="632" class="box-line">issues.list / get / comment / create</text>
+  <text x="86" y="649" class="box-muted">read · approval-gated writes</text>
+
+  <rect x="324" y="592" width="210" height="82" rx="9" class="card"/>
+  <text x="342" y="614" class="box-title">X</text>
+  <text x="342" y="632" class="box-line">posts.search (implemented)</text>
+  <text x="342" y="649" class="box-muted">posting / writes: planned</text>
+
+  <rect x="554" y="592" width="210" height="82" rx="9" class="card"/>
+  <text x="572" y="614" class="box-title">GitLab</text>
+  <text x="572" y="632" class="box-line">issues · pipelines · merge requests</text>
+  <text x="572" y="649" class="box-muted">manifest ready; invocation planned</text>
+
+  <rect x="784" y="592" width="160" height="82" rx="9" class="card"/>
+  <text x="802" y="614" class="box-title">Webhooks</text>
+  <text x="802" y="632" class="box-line">inbound triggers</text>
+  <text x="802" y="649" class="box-muted">HMAC · planned</text>
+
+  <rect x="964" y="592" width="172" height="82" rx="9" class="card"/>
+  <text x="982" y="614" class="box-title">Model providers</text>
+  <text x="982" y="632" class="box-line">OpenAI-compatible</text>
+  <text x="982" y="649" class="box-muted">or runtime-managed</text>
+
+  <text x="68" y="704" class="note">Credentials are injected by the broker only at action time. External content is untrusted and never mixed with trusted system instructions.</text>
+
+  <!-- Arrows -->
+  <line x1="294" y1="162" x2="294" y2="228" class="arrow" marker-end="url(#arrow)"/>
+  <text x="304" y="192" class="arrow-label">REST + SSE</text>
+
+  <line x1="150" y1="334" x2="150" y2="344" class="arrow" marker-end="url(#arrow)"/>
+  <line x1="470" y1="334" x2="470" y2="344" class="arrow" marker-end="url(#arrow)"/>
+  <text x="480" y="342" class="arrow-label">publish / subscribe</text>
+
+  <!-- events to execution plane -->
+  <path d="M 590 372 C 616 372 620 300 664 300" class="arrow-accent" marker-end="url(#arrow-accent)"/>
+  <text x="600" y="352" class="arrow-label">events</text>
+
+  <!-- durable DB to execution plane -->
+  <path d="M 200 470 L 200 508 L 640 508 L 640 500" class="arrow dashed" marker-end="url(#arrow)"/>
+  <text x="300" y="500" class="arrow-label">durable queue · approvals · audit · usage (SQL)</text>
+
+  <!-- worker to broker -->
+  <line x1="1010" y1="314" x2="1010" y2="334" class="arrow-teal" marker-end="url(#arrow-teal)"/>
+  <text x="1018" y="329" class="arrow-label">MCP</text>
+
+  <!-- broker to external -->
+  <path d="M 820 420 C 820 480 900 500 900 556" class="arrow-teal" marker-end="url(#arrow-teal)"/>
+  <text x="812" y="524" class="arrow-label">HTTPS · least privilege</text>
+
+  <!-- legend -->
+  <line x1="820" y1="760" x2="860" y2="760" class="arrow" marker-end="url(#arrow)"/>
+  <text x="868" y="764" class="note">request / data flow</text>
+  <line x1="820" y1="782" x2="860" y2="782" class="arrow-accent" marker-end="url(#arrow-accent)"/>
+  <text x="868" y="786" class="note">event / control flow</text>
+  <line x1="820" y1="804" x2="860" y2="804" class="arrow dashed" marker-end="url(#arrow)"/>
+  <text x="868" y="808" class="note">durable state / policy</text>
+
+  <text x="40" y="764" class="note">Public interfaces: /api/v1 (versioned) · MCP tools (execution-scoped) · SSE execution events</text>
+  <text x="40" y="784" class="note">Territory of enforcement: autonomy, capability allowlists, approvals, credentials, isolation</text>
+  <text x="40" y="804" class="note">OpenCode is executed in a separate worker image; the control plane never runs agent code.</text>
+  <text x="40" y="844" class="note">ORBIT v0.1.x · docs/architecture/diagram.md for detailed Mermaid diagrams</text>
+</svg>
