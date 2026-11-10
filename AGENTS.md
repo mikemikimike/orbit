@@ -142,3 +142,13 @@ helm template orbit deploy/helm/orbit -f deploy/helm/orbit/values.yaml
 - Node >= 20 and pnpm 10+ (`corepack enable`)
 - Docker + Compose v2
 - Helm 3 and (for cluster validation) kubectl + kind/k3d
+
+## Communication style (default)
+
+- Be concise. Lead with the answer; skip chain-of-thought, reasoning narration and
+  “let me think” preambles.
+- Do not narrate routine tool calls. Report outcomes and only the commands/results that
+  matter.
+- Prefer short bullets or a small table; expand only when asked for depth.
+- No filler, no restating the request, no repeating the plan after executing it.
+- When something fails, give the error, the cause and the fix — not a story.
