@@ -33,6 +33,7 @@ export function RunAgentDialog({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [task, setTask] = useState("Summarize the current state and report anything important.");
+  const [payloadText, setPayloadText] = useState("{}");
   const [idempotencyKey, setIdempotencyKey] = useState(() =>
     typeof crypto !== "undefined" ? crypto.randomUUID() : String(Date.now()),
   );
@@ -43,12 +44,19 @@ export function RunAgentDialog({
       toast.error("Provide a task for the agent");
       return;
     }
+    let payload: unknown = null;
+    try {
+      payload = payloadText.trim() ? JSON.parse(payloadText) : null;
+    } catch {
+      toast.error("Payload must be valid JSON");
+      return;
+    }
     setSubmitting(true);
     try {
       const execution = unwrap(
         await api.POST("/api/v1/agents/{agent_id}/executions", {
           params: { path: { agent_id: agentId } },
-          body: { task, idempotencyKey },
+          body: { task, payload: payload as never, idempotencyKey },
           headers: { "idempotency-key": idempotencyKey },
         }),
       );
@@ -95,6 +103,21 @@ export function RunAgentDialog({
             value={task}
             onChange={(event) => setTask(event.target.value)}
           />
+          <details>
+            <summary className="cursor-pointer text-xs text-muted-foreground">
+              Payload / connector query (JSON, optional)
+            </summary>
+            <Textarea
+              className="mt-2 min-h-[70px] font-mono text-xs"
+              value={payloadText}
+              onChange={(event) => setPayloadText(event.target.value)}
+              placeholder='{"query":"#ORBIT"}'
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              X reads use <code className="font-mono">payload.query</code>, then the connection&apos;s
+              <code className="font-mono"> config.query</code>, then the task text.
+            </p>
+          </details>
           <p className="text-[11px] text-muted-foreground">
             Idempotency key <span className="font-mono">{idempotencyKey.slice(0, 8)}…</span> prevents
             duplicate runs on retries.

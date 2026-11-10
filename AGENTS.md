@@ -96,8 +96,8 @@ helm template orbit deploy/helm/orbit -f deploy/helm/orbit/values.yaml
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Foundation, contracts, DB, API, worker, docs, containers, Helm | Complete (deployed and smoke-tested on microk8s at http://orbit.mdk.local) |
-| 1 | Agent CRUD/Studio, OpenCode adapter verified, executions | Partially: CRUD + mock execution done; OpenCode adapter scaffolded |
-| 2 | Connectors invocation, Telegram/GitLab, webhooks, approvals, Claude Code | Not started |
+| 1 | Agent CRUD/Studio, OpenCode adapter verified, executions | OpenCode execution verified against v2.2.5; platform-provider mapping still open |
+| 2 | Connectors invocation, Telegram/GitLab, webhooks, approvals, Claude Code | X read hydration done; general invocation/approvals/writes pending |
 | 3 | Long-running agents, Pi, memory, scheduling hardening | Not started |
 | 4 | Enterprise RBAC, shared connections, quotas, marketplace | Not started |
 

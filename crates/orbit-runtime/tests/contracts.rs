@@ -40,8 +40,8 @@ async fn registry_exposes_all_runtime_families() {
     assert!(opencode.capabilities.runtime_managed_providers);
     assert_eq!(
         opencode.implementation_status.as_str(),
-        "scaffolded",
-        "do not claim OpenCode works until Phase 1 integration tests pass"
+        "available",
+        "OpenCode execution is covered by tests/opencode_e2e.rs against v2.2.5"
     );
 }
 

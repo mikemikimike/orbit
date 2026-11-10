@@ -1,0 +1,166 @@
+{{- if .Values.opencodeWorker.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "orbit.fullname" . }}-worker-opencode
+  labels:
+    {{- include "orbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker-opencode
+spec:
+  replicas: {{ .Values.opencodeWorker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "orbit.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker-opencode
+  template:
+    metadata:
+      labels:
+        {{- include "orbit.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker-opencode
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "orbit.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if and .Values.opencodeWorker.auth .Values.opencodeWorker.auth.existingSecret }}
+      initContainers:
+        - name: import-opencode-auth
+          image: {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.opencodeWorker.image "tag" .Values.opencodeWorker.tag) | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              mkdir -p "$HOME/.local/share/opencode" "$XDG_CACHE_HOME"
+              if [ -f "/opencode-auth/{{ .Values.opencodeWorker.auth.key | default "auth-export.json" }}" ]; then
+                opencode auth import --standalone "/opencode-auth/{{ .Values.opencodeWorker.auth.key | default "auth-export.json" }}"
+                echo "OpenCode credentials imported"
+              else
+                echo "OpenCode auth secret exists but the export file is missing"
+              fi
+          env:
+            - name: HOME
+              value: "/home/orbit"
+            - name: XDG_DATA_HOME
+              value: "/home/orbit/.local/share"
+            - name: XDG_CONFIG_HOME
+              value: "/home/orbit/.config"
+            - name: XDG_CACHE_HOME
+              value: "/tmp/.cache"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: opencode-local
+              mountPath: /home/orbit/.local
+            - name: opencode-auth
+              mountPath: /opencode-auth
+              readOnly: true
+      {{- end }}
+      containers:
+        - name: worker-opencode
+          image: {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.opencodeWorker.image "tag" .Values.opencodeWorker.tag) | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          env:
+            - name: ORBIT_ENV
+              value: {{ .Values.platform.environment | quote }}
+            - name: ORBIT_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orbit.secretName" . }}
+                  key: database-url
+            - name: ORBIT_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orbit.secretName" . }}
+                  key: master-key
+            - name: ORBIT_EVENTS_DRIVER
+              value: "nats"
+            - name: ORBIT_NATS_URL
+              value: {{ include "orbit.natsUrl" . | quote }}
+            - name: ORBIT_WORKER_RUNTIMES
+              value: {{ .Values.opencodeWorker.runtimes | default "opencode" | quote }}
+            - name: ORBIT_WORKER_CONCURRENCY
+              value: {{ .Values.opencodeWorker.concurrency | quote }}
+            - name: ORBIT_WORKER_POLL_MS
+              value: {{ .Values.worker.pollIntervalMs | quote }}
+            - name: ORBIT_SCHEDULER_ENABLED
+              value: "false"
+            - name: ORBIT_WORKSPACE_ROOT
+              value: "/tmp/orbit-workspaces"
+            - name: ORBIT_LOG_FORMAT
+              value: {{ .Values.platform.logFormat | quote }}
+            - name: HOME
+              value: "/home/orbit"
+            - name: XDG_DATA_HOME
+              value: "/home/orbit/.local/share"
+            - name: XDG_CONFIG_HOME
+              value: "/home/orbit/.config"
+            - name: XDG_CACHE_HOME
+              value: "/tmp/.cache"
+            {{- if .Values.extraEnv }}
+            {{- toYaml .Values.extraEnv | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: opencode-local
+              mountPath: /home/orbit/.local
+            - name: opencode-config-dir
+              mountPath: /home/orbit/.config
+            {{- if and .Values.opencodeWorker.config .Values.opencodeWorker.config.existingConfigMap }}
+            - name: opencode-config
+              mountPath: /home/orbit/.config/opencode/opencode.json
+              subPath: {{ .Values.opencodeWorker.config.key | default "opencode.json" }}
+              readOnly: true
+            {{- end }}
+          {{- with .Values.opencodeWorker.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: {{ dig "workspace" "sizeLimit" "2Gi" .Values.opencodeWorker }}
+        - name: opencode-local
+          emptyDir:
+            sizeLimit: 512Mi
+        - name: opencode-config-dir
+          emptyDir:
+            sizeLimit: 16Mi
+        {{- if and .Values.opencodeWorker.auth .Values.opencodeWorker.auth.existingSecret }}
+        - name: opencode-auth
+          secret:
+            secretName: {{ .Values.opencodeWorker.auth.existingSecret }}
+            optional: true
+        {{- end }}
+        {{- if and .Values.opencodeWorker.config .Values.opencodeWorker.config.existingConfigMap }}
+        - name: opencode-config
+          configMap:
+            name: {{ .Values.opencodeWorker.config.existingConfigMap }}
+            optional: true
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

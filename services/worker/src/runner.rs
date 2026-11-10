@@ -21,6 +21,8 @@ pub struct WorkerState {
     pub bus: Arc<dyn orbit_events::EventBus>,
     pub registry: Arc<orbit_runtime::RuntimeRegistry>,
     pub workspace_root: std::path::PathBuf,
+    /// Runtime kinds this worker is allowed to claim.
+    pub runtimes: Vec<String>,
     pub active: Arc<
         tokio::sync::Mutex<std::collections::BTreeMap<Uuid, tokio_util::sync::CancellationToken>>,
     >,
@@ -38,7 +40,11 @@ pub async fn claim_and_dispatch(
             Ok(permit) => permit,
             Err(_) => break,
         };
-        let claimed = match state.store.claim_next_queued(&state.worker_id).await {
+        let claimed = match state
+            .store
+            .claim_next_queued(&state.worker_id, &state.runtimes)
+            .await
+        {
             Ok(Some(execution)) => execution,
             Ok(None) => break,
             Err(err) => {
@@ -112,7 +118,7 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
         }
     };
 
-    let input: orbit_contracts::ExecutionInput =
+    let mut input: orbit_contracts::ExecutionInput =
         match serde_json::from_value(execution.input.clone()) {
             Ok(input) => input,
             Err(err) => {
@@ -127,6 +133,27 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
                 .await
             }
         };
+
+    // Read-only connector hydration (MVP: X recent search). External content is added
+    // as untrusted payload; trusted instructions remain separate.
+    match crate::connectors::hydrate(&state.store, org_id, &spec, &input.task, &input.payload).await
+    {
+        Ok(hydrated) => {
+            input.payload = hydrated.payload;
+            for note in hydrated.notes {
+                append_event(
+                    &state,
+                    &execution,
+                    ExecutionEventKind::Log,
+                    LogLevel::Info,
+                    &note,
+                    serde_json::json!({ "connector": "x" }),
+                )
+                .await;
+            }
+        }
+        Err(error) => return fail_execution(&state, &execution, error).await,
+    }
 
     let grants = resolve_grants(&state.store, org_id, &spec).await;
     let workspace = state.workspace_root.join(execution_id.to_string());

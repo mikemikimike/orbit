@@ -106,7 +106,22 @@ export default function AgentDetailPage() {
   }
 
   const data = agent.data;
-  const spec = agentSpecSchema.parse(data.spec);
+  const parsedSpec = agentSpecSchema.safeParse(data.spec);
+  if (!parsedSpec.success) {
+    return (
+      <div className="space-y-3">
+        <Button asChild variant="ghost" size="sm" className="-ml-2">
+          <Link href="/agents"><ArrowLeft /> Agents</Link>
+        </Button>
+        <EmptyState
+          title="This agent's configuration cannot be rendered"
+          description={parsedSpec.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join(" · ")}
+          action={<Button asChild><Link href={`/agents/${data.id}/edit`}>Open Agent Studio</Link></Button>}
+        />
+      </div>
+    );
+  }
+  const spec = parsedSpec.data;
   const canRun = data.status !== "archived";
   const autonomy = spec.autonomy;
 

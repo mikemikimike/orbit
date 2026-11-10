@@ -81,6 +81,30 @@ Key values:
 
 The chart requires no cluster-admin permissions and creates a namespaced ServiceAccount.
 
+## OpenCode runtime worker
+
+OpenCode runs in a separate execution-plane image (`deploy/docker/worker-opencode.Dockerfile`)
+so the control plane and base worker do not bundle runtime frameworks. The worker claims
+only `runtime_kind=opencode` executions (`ORBIT_WORKER_RUNTIMES=opencode`).
+
+```bash
+# 1. export credentials from a logged-in OpenCode install (contains secrets)
+opencode auth export > /tmp/auth-export.json
+kubectl -n orbit create secret generic orbit-opencode-auth \
+  --from-file=auth-export.json=/tmp/auth-export.json
+
+# 2. enable the worker
+helm upgrade orbit deploy/helm/orbit -n orbit --reuse-values \
+  --set opencodeWorker.enabled=true \
+  --set opencodeWorker.auth.existingSecret=orbit-opencode-auth
+```
+
+An init container imports the credentials into a writable emptyDir; the main container
+runs as non-root and executes `opencode run --standalone --format json`. Tested with
+OpenCode v2.2.5. Rotate credentials by recreating the Secret and restarting the
+Deployment. For local Docker/OrbStack, mount the exported auth file similarly or run the
+worker with `ORBIT_WORKER_RUNTIMES=opencode` and a writable `HOME`.
+
 ## Bundled vs external dependencies
 
 `values.yaml` bundles PostgreSQL and NATS for test clusters (single replica, PVC-backed).

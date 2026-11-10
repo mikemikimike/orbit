@@ -28,5 +28,10 @@ Check readiness:
   kubectl -n {{ .Release.Namespace }} get pods
   kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "orbit.apiHost" . }}
 
-Note: the OpenCode adapter is scaffolded in this release; task execution uses the mock
-runtime until Phase 1 integration tests certify a pinned OpenCode version.
+Runtimes:
+  base worker     -> mock runtime (ORBIT_WORKER_RUNTIMES=mock)
+  opencode worker -> OpenCode CLI, tested with v2.2.5 (enabled when auth is configured)
+
+OpenCode credentials are imported from an `opencode auth export` Secret by an init
+container (see opencodeWorker.auth in values.yaml). The CLI is never bundled into the
+control-plane image.

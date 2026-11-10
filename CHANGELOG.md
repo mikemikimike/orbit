@@ -4,6 +4,41 @@ All notable changes to ORBIT are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] — Real OpenCode runtime + X read connector
+
+### Added
+- **OpenCode runtime execution** (`opencode run --standalone --format json`): NDJSON
+  event mapping (text, tool calls, usage, errors), session capture/resume, cancellation
+  via process-group termination, timeouts, per-execution workspace, and trusted
+  instructions written to `AGENTS.md`. Tested against OpenCode v2.2.5 with a real
+  integration test (`ORBIT_OPENCODE_E2E=1`).
+- Separate `orbit-worker-opencode` image and Helm Deployment; workers now claim only the
+  runtimes in `ORBIT_WORKER_RUNTIMES` (`mock` for the base worker, `opencode` for this
+  one). OpenCode credentials are imported from an `opencode auth export` Secret by an
+  init container.
+- **X (Twitter) read connector**: `posts.search` hydration before execution using the
+  encrypted connection bearer token; posts are injected as untrusted `externalContext`
+  and a query can come from payload/connection config. API failures fail the execution
+  with an actionable message.
+- Agent Studio connection picker per connector binding and an execution payload/query
+  field in the Run dialog.
+
+### Fixed
+- Agent detail page crashed when an agent had connector bindings because the API
+  serialized `connectionId: null` and the shared Zod schema rejected null. The API now
+  omits null IDs, the schema accepts nullish values, and the page renders a validation
+  fallback instead of crashing.
+- OpenCode worker needs writable XDG data/state/config directories; the chart mounts
+  writable emptyDirs and imports auth before start.
+- Worker startup message no longer claims OpenCode is only scaffolded.
+
+### Verified on microk8s (`http://orbit.mdk.local`)
+- Real OpenCode execution in-cluster: `succeeded`, session captured, 6.1k input / 10
+  output tokens, streamed events.
+- Cancellation of a long OpenCode execution: `cancelled`, process terminated.
+- X connector call returns a clear 401 with an invalid token (real API request path).
+- Existing mock-runtime smoke test and SSE through ingress continue to pass.
+
 ## [Unreleased]
 
 ### Added

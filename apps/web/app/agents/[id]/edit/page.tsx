@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { queryKeys, unwrap, useAgent } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
-import type { AgentDefinition } from "@orbit/contracts";
+import { agentSpecSchema, type AgentDefinition } from "@orbit/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 
 export default function EditAgentPage() {
@@ -48,6 +48,16 @@ export default function EditAgentPage() {
     );
   }
 
+  const parsedSpec = agentSpecSchema.safeParse(agent.data.spec);
+  if (!parsedSpec.success) {
+    return (
+      <EmptyState
+        title="Configuration cannot be loaded"
+        description={parsedSpec.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join(" · ")}
+        action={<Button asChild><Link href={`/agents/${agentId}`}>Back to agent</Link></Button>}
+      />
+    );
+  }
   const initial: AgentDefinition = {
     apiVersion: "orbit.io/v1",
     kind: "Agent",
@@ -56,7 +66,7 @@ export default function EditAgentPage() {
       description: agent.data.description,
       labels: (agent.data.labels as Record<string, string>) ?? {},
     },
-    spec: agent.data.spec as unknown as AgentDefinition["spec"],
+    spec: parsedSpec.data,
   };
 
   async function handleSubmit(definition: AgentDefinition) {

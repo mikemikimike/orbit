@@ -97,9 +97,18 @@ filesystem where possible, CPU/memory limits, `no_new_privileges`, a per-executi
 writable workspace, allowlisted outbound network, secret injection via env or tmpfs
 files, and forced teardown on timeout/cancel.
 
-## Implementation status (Phase 0)
+## Implementation status
 
 - `mock` — implemented, used for local development and contract tests.
-- `opencode` — scaffolded adapter (`validate_config`, capability document, CLI
-  preflight); real execution lands in Phase 1 against a tested OpenCode version.
+- `opencode` — **available**, tested against OpenCode **v2.2.5**:
+  - `opencode run --standalone --format json` in a per-execution workspace
+  - trusted instructions written to `AGENTS.md`; untrusted input passed in the prompt
+  - NDJSON text/tool/usage/error events mapped to ORBIT runtime events
+  - session IDs captured; `--session` used for resume; cancellation kills the process group
+  - credentials are runtime-managed via `opencode auth export` imported by an init
+    container; ORBIT never passes raw provider keys in CLI arguments
+  - contract + real-runtime test: `crates/orbit-runtime/tests/opencode_e2e.rs`
+    (`ORBIT_OPENCODE_E2E=1`, ignored by default to avoid model spend)
+  - limitation: ORBIT platform providers are not yet mapped into OpenCode's provider
+    config (`supports_platform_providers=false`); use OpenCode-managed auth for now.
 - `claude_code`, `pi` — registered as capability descriptors only (Phase 2/3).

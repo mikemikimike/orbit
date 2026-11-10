@@ -1,3 +1,4 @@
+mod connectors;
 mod resolver;
 mod runner;
 mod scheduler;
@@ -21,6 +22,8 @@ pub struct WorkerConfig {
     pub scheduler_enabled: bool,
     pub concurrency: usize,
     pub workspace_root: String,
+    /// Runtime kinds this worker may claim. Enables separate runtime images/workers.
+    pub runtimes: Vec<String>,
 }
 
 impl WorkerConfig {
@@ -53,6 +56,12 @@ impl WorkerConfig {
                 .max(1),
             workspace_root: std::env::var("ORBIT_WORKSPACE_ROOT")
                 .unwrap_or_else(|_| "/tmp/orbit-workspaces".into()),
+            runtimes: std::env::var("ORBIT_WORKER_RUNTIMES")
+                .unwrap_or_else(|_| "mock,opencode,claude_code,pi,generic".into())
+                .split(',')
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .collect(),
         })
     }
 }
@@ -131,6 +140,7 @@ async fn main() -> anyhow::Result<()> {
         bus: bus.clone(),
         registry: registry.clone(),
         workspace_root: std::path::PathBuf::from(&config.workspace_root),
+        runtimes: config.runtimes.clone(),
         active: Arc::new(tokio::sync::Mutex::new(std::collections::BTreeMap::new())),
     };
 
@@ -138,8 +148,9 @@ async fn main() -> anyhow::Result<()> {
         worker_id = %config.worker_id,
         concurrency = config.concurrency,
         scheduler = config.scheduler_enabled,
+        runtimes = ?config.runtimes,
         events_driver = %bus_config.driver,
-        "ORBIT worker started (mock runtime available; OpenCode adapter scaffolded)"
+        "ORBIT worker started"
     );
 
     let semaphore = Arc::new(Semaphore::new(config.concurrency));

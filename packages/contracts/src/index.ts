@@ -36,7 +36,7 @@ export const connectorBindingSchema = z.object({
     .string()
     .min(1, "connector is required")
     .regex(/^[a-z0-9][a-z0-9_-]{0,62}$/, "invalid connector slug"),
-  connectionId: z.string().uuid().optional(),
+  connectionId: z.string().uuid().nullish(),
   capabilities: z.array(z.string()).default([]),
 });
 

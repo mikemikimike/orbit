@@ -23,7 +23,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ImplementationBadge } from "@/components/ui/status-badge";
-import { useConnectors, useProviders, useRuntimes } from "@/lib/queries";
+import { useConnections, useConnectors, useProviders, useRuntimes } from "@/lib/queries";
 import type { AgentDefinition } from "@orbit/contracts";
 import {
   AUTONOMY_LEVELS,
@@ -51,6 +51,7 @@ export function AgentForm({
   const runtimes = useRuntimes();
   const providers = useProviders();
   const connectors = useConnectors();
+  const connections = useConnections();
 
   const [definition, setDefinition] = useState<AgentDefinition>(() =>
     initial ? structuredClone(initial) : emptyAgentDefinition(),
@@ -526,7 +527,45 @@ export function AgentForm({
                       />
                     </div>
                     {binding ? (
-                      <div className="mt-3 flex flex-wrap gap-1.5">
+                      <div className="mt-3 space-y-2">
+                        <div className="space-y-1">
+                          <Label className="text-[11px] text-muted-foreground">
+                            Connection (required for live reads)
+                          </Label>
+                          <select
+                            className="flex h-8 w-full rounded-md border border-input bg-card px-2 text-xs"
+                            value={binding.connectionId ?? ""}
+                            onChange={(event) =>
+                              updateSpec({
+                                connectors: definition.spec.connectors.map((item) =>
+                                  item.connector === connector.slug
+                                    ? {
+                                        ...item,
+                                        connectionId: event.target.value || null,
+                                      }
+                                    : item,
+                                ),
+                              })
+                            }
+                          >
+                            <option value="">No connection (configured reads are skipped)</option>
+                            {(connections.data ?? [])
+                              .filter((connection) => connection.connectorSlug === connector.slug)
+                              .map((connection) => (
+                                <option key={connection.id} value={connection.id}>
+                                  {connection.name} ({connection.status})
+                                </option>
+                              ))}
+                          </select>
+                          {(connections.data ?? []).filter(
+                            (connection) => connection.connectorSlug === connector.slug,
+                          ).length === 0 ? (
+                            <p className="text-[11px] text-[hsl(var(--warning))]">
+                              No {connector.name} connection yet. Add one under Connections.
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
                         {capabilities.map((capability) => {
                           const selected = binding.capabilities.includes(capability.id);
                           return (
@@ -549,6 +588,7 @@ export function AgentForm({
                             </button>
                           );
                         })}
+                        </div>
                       </div>
                     ) : null}
                   </div>

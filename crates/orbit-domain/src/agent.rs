@@ -128,7 +128,11 @@ enum ConnectorBindingRepr {
     Shorthand(String),
     Full {
         connector: String,
-        #[serde(default, rename = "connectionId")]
+        #[serde(
+            default,
+            rename = "connectionId",
+            skip_serializing_if = "Option::is_none"
+        )]
         connection_id: Option<Uuid>,
         #[serde(default)]
         capabilities: Vec<String>,

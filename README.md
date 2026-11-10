@@ -32,6 +32,11 @@ Phase 0 foundation is implemented and validated:
 - Manual executions with idempotency, concurrency/rate limits, persisted events and live
   SSE streaming with replay.
 - Mock runtime executed **in the worker**, with cancellation and timeouts.
+- **OpenCode runtime executes real tasks** in a separate worker image, tested against
+  OpenCode v2.2.5: NDJSON event streaming, tool events, session capture, cancellation,
+  usage tokens and `AGENTS.md` instruction isolation.
+- **X read connector**: X recent-search posts are hydrated into the runtime input as
+  untrusted context (bearer token from an encrypted connection).
 - Providers (custom OpenAI-compatible endpoints, runtime-managed), connectors,
   connections, triggers, dashboard, API tokens, health/readiness/metrics, OpenAPI 3.1 +
   Swagger UI.
@@ -42,7 +47,8 @@ Phase 0 foundation is implemented and validated:
 
 Not yet implemented — do not assume otherwise:
 
-- **OpenCode task execution** (adapter scaffolded; CLI preflight only). Phase 1.
+- X **posting/writes**, general connector capability invocation, OAuth/webhooks (Phase 2).
+- ORBIT platform provider → OpenCode provider mapping (use OpenCode-managed auth today).
 - Claude Code / Pi / generic adapters (registered descriptors only, fail closed).
 - Connector capability invocation, OAuth flows, webhook verification, approvals (Phase 2).
 - Container/Job-per-execution runtime isolation (Phase 1/3 hardening).
@@ -64,6 +70,20 @@ docker compose -f deploy/compose/compose.yaml up --build
 
 The stack seeds demo agents (mock runtime). Open an agent → **Run agent** → watch the
 live execution timeline.
+
+## OpenCode + X quick start
+
+1. In **Connections**, add an X connection with a bearer token and optional
+   `config.query` (for example `{"query":"#ORBIT"}`), selecting `posts.search`.
+2. Create an agent with runtime **OpenCode**, a runtime-managed model
+   (`opencode-go/<model>`), and the X connector bound to that connection with
+   `posts.search`.
+3. Run it with a task such as "Summarize recent X posts" and optionally
+   `{"query":"#ORBIT"}` as payload.
+
+OpenCode credentials are provided to the execution plane via an `opencode auth export`
+Secret (see `docs/development/deployment.md`); credentials never pass through prompts or
+the browser.
 
 ## Kubernetes (Helm)
 

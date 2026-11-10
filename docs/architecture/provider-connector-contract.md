@@ -102,8 +102,16 @@ pub trait Connector: Send + Sync {
 that `call.capability` is in the grant list before executing. MCP servers are one
 transport option (`mcp` capability provider), not the only connector mechanism.
 
-### Phase 0 scope
+### Implemented MVP scope
 
-- Connector registry with seeded manifests (mock, generic-webhook, telegram, gitlab).
-- Connections stored with encrypted credentials; create/list/delete only.
-- Real invocation, webhooks, OAuth flows and MCP: Phase 2.
+- Connector registry with seeded manifests (mock, generic-webhook, telegram, gitlab, x).
+- Connections stored with encrypted credentials; create/list/delete.
+- **X read hydration**: before an execution, the worker resolves `x` bindings with the
+  `posts.search` capability, loads the selected connection's bearer token, calls
+  `GET https://api.x.com/2/tweets/search/recent`, and injects up to 10 posts into the
+  runtime input as `externalContext` with `provenance.trusted=false`. The query comes from
+  `payload.query`, then `connection.config.query`, then the task text.
+- Failures (missing credential/query, API 401/403, network) fail the execution with an
+  actionable message; bindings without a connection are skipped with a recorded event.
+- Writes/posting, OAuth flows, webhook verification, general capability invocation, MCP
+  and the connector SDK remain Phase 2.

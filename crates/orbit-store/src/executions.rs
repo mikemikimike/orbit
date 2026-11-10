@@ -455,7 +455,11 @@ impl Store {
 
 impl Store {
     /// Claim the oldest queued execution atomically.
-    pub async fn claim_next_queued(&self, worker_id: &str) -> StoreResult<Option<ExecutionRecord>> {
+    pub async fn claim_next_queued(
+        &self,
+        worker_id: &str,
+        runtimes: &[String],
+    ) -> StoreResult<Option<ExecutionRecord>> {
         Ok(sqlx::query_as::<_, ExecutionRecord>(
             r#"
             UPDATE executions
@@ -464,6 +468,7 @@ impl Store {
             WHERE id = (
                 SELECT id FROM executions
                 WHERE status = 'queued'
+                  AND runtime_kind = ANY($2)
                 ORDER BY created_at ASC
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED
@@ -472,6 +477,7 @@ impl Store {
             "#,
         )
         .bind(worker_id)
+        .bind(runtimes)
         .fetch_optional(&self.pool)
         .await?)
     }

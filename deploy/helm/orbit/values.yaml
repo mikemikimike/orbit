@@ -27,11 +27,13 @@ api:
 
 worker:
   image: orbit-worker
-  tag: 0.1.1
+  tag: 0.1.3
   replicas: 1
   concurrency: 4
   pollIntervalMs: 500
   schedulerEnabled: true
+  # Runtime kinds this base worker may claim. OpenCode runs in its own worker image.
+  runtimes: mock
   resources:
     requests:
       cpu: 100m
@@ -42,9 +44,39 @@ worker:
   workspace:
     sizeLimit: 1Gi
 
+# OpenCode worker: separate image because it bundles the OpenCode CLI. Enable after
+# providing an OpenCode auth Secret (auth.json from a logged-in OpenCode install).
+opencodeWorker:
+  enabled: false
+  image: orbit-worker-opencode
+  tag: 0.1.3
+  replicas: 1
+  concurrency: 2
+  runtimes: opencode
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+  workspace:
+    sizeLimit: 2Gi
+  auth:
+    # Existing Secret containing `opencode auth export` output.
+    #   opencode auth export > auth-export.json
+    #   kubectl -n orbit create secret generic orbit-opencode-auth \
+    #     --from-file=auth-export.json=./auth-export.json
+    existingSecret: ""
+    key: auth-export.json
+  config:
+    # Optional ConfigMap containing opencode.json (key: opencode.json).
+    existingConfigMap: ""
+    key: opencode.json
+
 web:
   image: orbit-web
-  tag: 0.1.1
+  tag: 0.1.3
   replicas: 1
   port: 3000
   resources:

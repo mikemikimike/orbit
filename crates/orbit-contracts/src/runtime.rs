@@ -297,6 +297,14 @@ pub struct ResumeRequest {
     pub execution_id: Uuid,
     pub session_ref: String,
     pub input: ExecutionInput,
+    #[serde(default)]
+    pub model: Option<crate::provider::ResolvedModel>,
+    #[serde(default)]
+    pub runtime_config: serde_json::Value,
+    #[serde(default)]
+    pub resources: orbit_domain::ResourceLimits,
+    #[serde(default)]
+    pub workspace: WorkspaceSpec,
     #[serde(skip)]
     pub events: Option<tokio::sync::mpsc::Sender<RuntimeEvent>>,
     #[serde(skip, default = "default_cancellation")]
