@@ -26,6 +26,8 @@ pub struct WorkerState {
     pub runtimes: Vec<String>,
     /// `process` or `docker` (per-execution container).
     pub execution_driver: String,
+    /// Worker target class (`local`, `docker`, `kubernetes`).
+    pub target: String,
     pub active: Arc<
         tokio::sync::Mutex<std::collections::BTreeMap<Uuid, tokio_util::sync::CancellationToken>>,
     >,
@@ -45,7 +47,7 @@ pub async fn claim_and_dispatch(
         };
         let claimed = match state
             .store
-            .claim_next_queued(&state.worker_id, &state.runtimes)
+            .claim_next_queued(&state.worker_id, &state.runtimes, &state.target)
             .await
         {
             Ok(Some(execution)) => execution,

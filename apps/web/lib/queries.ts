@@ -20,6 +20,7 @@ import type {
   ApiTokenView,
   AgentInstanceView,
   ApprovalWithExecution,
+  WorkerView,
 } from "./types";
 
 export function unwrap<T>(result: {
@@ -52,6 +53,7 @@ export const queryKeys = {
   tokens: ["api-tokens"] as const,
   instances: ["agent-instances"] as const,
   approvals: (status?: string) => ["approvals", status ?? "all"] as const,
+  workers: ["workers"] as const,
 };
 
 export function useMeta() {
@@ -222,6 +224,14 @@ export function useAgentInstances() {
   return useQuery<{ items: AgentInstanceView[]; total: number }>({
     queryKey: queryKeys.instances,
     queryFn: async () => unwrap(await api.GET("/api/v1/agent-instances")),
+  });
+}
+
+export function useWorkers() {
+  return useQuery<WorkerView[]>({
+    queryKey: queryKeys.workers,
+    queryFn: async () => unwrap(await api.GET("/api/v1/workers")),
+    refetchInterval: 10_000,
   });
 }
 

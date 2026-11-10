@@ -30,6 +30,7 @@ import {
   unwrap,
   useExecution,
   useExecutionEvents,
+  useWorkers,
 } from "@/lib/queries";
 import { useExecutionStream } from "@/lib/use-execution-stream";
 import { errorMessage } from "@orbit/api-client";
@@ -50,6 +51,7 @@ export default function ExecutionDetailPage() {
   const executionQuery = useExecution(executionId);
   const eventsQuery = useExecutionEvents(executionId);
   const live = useExecutionStream(executionId);
+  const workers = useWorkers();
   const [autoScroll, setAutoScroll] = useState(true);
   const [showVerbose, setShowVerbose] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
@@ -171,6 +173,41 @@ export default function ExecutionDetailPage() {
           </div>
         </div>
       </div>
+
+      {execution.status === "queued" ? (
+        <Card className="border-[hsl(var(--warning))]/40 bg-[hsl(var(--warning))]/10">
+          <CardContent className="space-y-2 p-4 text-sm">
+            <p className="font-medium">Waiting for a worker to claim this execution</p>
+            <p className="text-muted-foreground">
+              Runtime <span className="font-mono">{execution.runtimeKind}</span> · placement{" "}
+              <span className="font-mono">{execution.placement ?? "auto"}</span>.
+              {(() => {
+                const liveWorkers = (workers.data ?? []).filter((worker) => worker.live);
+                const matching = liveWorkers.filter(
+                  (worker) =>
+                    worker.runtimes.includes(execution.runtimeKind) &&
+                    (execution.placement === "auto" ||
+                      worker.target === execution.placement),
+                );
+                if (workers.isLoading) return " Checking workers…";
+                if (matching.length > 0)
+                  return ` ${matching.length} matching worker(s) online; waiting for a free slot.`;
+                if (liveWorkers.length === 0)
+                  return " No live workers found. Start a worker for this runtime.";
+                return ` No live worker matches this runtime/placement. Online: ${liveWorkers
+                  .map((worker) => `${worker.target}:${worker.runtimes.join("+")}`)
+                  .join(", ")}.`;
+              })()}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Local Compose only runs a mock worker. Start OpenCode with{" "}
+              <code className="font-mono">make worker-opencode</code> or{" "}
+              <code className="font-mono">make worker-docker</code>, or deploy the
+              Kubernetes OpenCode worker.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <InfoTile label="Trigger" value={titleCase(execution.triggerSource)} icon={<Cpu className="h-3.5 w-3.5" />} />

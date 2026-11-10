@@ -76,7 +76,12 @@ async fn beat(state: &WorkerState) {
     let hostname = std::env::var("HOSTNAME").ok();
     if let Err(error) = state
         .store
-        .upsert_worker_heartbeat(&state.worker_id, &state.runtimes, hostname.as_deref())
+        .upsert_worker_heartbeat(
+            &state.worker_id,
+            &state.runtimes,
+            &state.target,
+            hostname.as_deref(),
+        )
         .await
     {
         tracing::warn!(%error, "failed to write worker heartbeat");

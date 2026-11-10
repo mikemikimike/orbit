@@ -4,7 +4,7 @@
 # The base worker image is extended with the OpenCode CLI (not bundled into the control
 # plane). In Kubernetes this runs as a separate Deployment with
 # ORBIT_WORKER_RUNTIMES=opencode so only this image claims OpenCode executions.
-ARG WORKER_BASE=192.168.1.201:5000/orbit-worker:0.2.0
+ARG WORKER_BASE=192.168.1.201:5000/orbit-worker:0.2.1
 FROM ${WORKER_BASE}
 
 USER root

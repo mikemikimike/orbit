@@ -8,13 +8,14 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { ImplementationBadge } from "@/components/ui/status-badge";
-import { useMeta, useRuntimes } from "@/lib/queries";
+import { useMeta, useRuntimes, useWorkers } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 import { titleCase } from "@/lib/utils";
 
 export default function RuntimesPage() {
   const runtimes = useRuntimes();
   const meta = useMeta();
+  const workers = useWorkers();
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -135,6 +136,34 @@ export default function RuntimesPage() {
           })}
         </div>
       )}
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Active workers
+        </h2>
+        {workers.data?.length ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {workers.data.map((worker) => (
+              <Card key={worker.workerId}>
+                <CardContent className="flex flex-wrap items-center justify-between gap-2 p-3 text-xs">
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-[11px]">{worker.workerId}</p>
+                    <p className="text-muted-foreground">
+                      {worker.runtimes.join(", ")} · target {worker.target}
+                      {worker.hostname ? ` · ${worker.hostname}` : ""}
+                    </p>
+                  </div>
+                  <Badge variant={worker.live ? "success" : "destructive"}>
+                    {worker.live ? "live" : "stale"}
+                  </Badge>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No workers have reported a heartbeat yet.</p>
+        )}
+      </section>
 
       {meta.data ? (
         <p className="text-center text-[11px] text-muted-foreground">

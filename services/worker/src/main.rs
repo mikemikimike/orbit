@@ -31,6 +31,7 @@ pub struct WorkerConfig {
     pub heartbeat_interval: Duration,
     pub stale_after: Duration,
     pub execution_driver: String,
+    pub target: String,
 }
 
 impl WorkerConfig {
@@ -85,6 +86,7 @@ impl WorkerConfig {
             ),
             execution_driver: std::env::var("ORBIT_EXECUTION_DRIVER")
                 .unwrap_or_else(|_| "process".into()),
+            target: std::env::var("ORBIT_WORKER_TARGET").unwrap_or_else(|_| "local".into()),
         })
     }
 }
@@ -165,6 +167,7 @@ async fn main() -> anyhow::Result<()> {
         workspace_root: std::path::PathBuf::from(&config.workspace_root),
         runtimes: config.runtimes.clone(),
         execution_driver: config.execution_driver.clone(),
+        target: config.target.clone(),
         active: Arc::new(tokio::sync::Mutex::new(std::collections::BTreeMap::new())),
     };
 
@@ -187,6 +190,7 @@ async fn main() -> anyhow::Result<()> {
             .upsert_worker_heartbeat(
                 &state.worker_id,
                 &state.runtimes,
+                &state.target,
                 std::env::var("HOSTNAME").ok().as_deref(),
             )
             .await?;

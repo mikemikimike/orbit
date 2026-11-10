@@ -94,6 +94,7 @@ pub fn build_router(state: AppState) -> Router {
             post(handlers::executions::cancel_execution),
         )
         .route("/api/v1/runtimes", get(handlers::catalog::list_runtimes))
+        .route("/api/v1/workers", get(handlers::catalog::list_workers))
         .route(
             "/api/v1/providers",
             get(handlers::catalog::list_providers).post(handlers::catalog::create_provider),

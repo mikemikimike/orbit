@@ -9,6 +9,7 @@ export const runtimeKindSchema = z.enum(["mock", "opencode", "claude_code", "pi"
 export type RuntimeKind = z.infer<typeof runtimeKindSchema>;
 
 export const executionModeSchema = z.enum(["on_demand", "long_running"]);
+export const placementTargetSchema = z.enum(["auto", "local", "docker", "kubernetes"]);
 export const agentStatusSchema = z.enum(["draft", "active", "paused", "archived"]);
 export const executionStatusSchema = z.enum([
   "queued",
@@ -65,6 +66,7 @@ export const agentSpecSchema = z.object({
   runtime: z.object({
     type: runtimeKindSchema,
     executionMode: executionModeSchema.default("on_demand"),
+    placement: placementTargetSchema.default("auto"),
     config: z.record(z.string(), z.unknown()).default({}),
   }),
   model: z
@@ -160,7 +162,7 @@ export function emptyAgentDefinition(): AgentDefinition {
     kind: "Agent",
     metadata: { name: "", description: "", labels: {} },
     spec: {
-      runtime: { type: "mock", executionMode: "on_demand", config: {} },
+      runtime: { type: "mock", executionMode: "on_demand", placement: "auto", config: {} },
       model: { management: "runtime", params: {} },
       instructions: { system: "", constraints: [] },
       connectors: [],

@@ -182,6 +182,7 @@ async fn seed_demo(store: &Store, org_id: Uuid, config: &ApiConfig) -> anyhow::R
                     agent_name: &agent.name,
                     runtime_kind: RuntimeKind::Mock,
                     trigger_source: TriggerSource::Schedule,
+                    placement: "auto",
                     trigger_id: None,
                     input: json!({
                         "task": "Summarize open release blockers.",
@@ -250,6 +251,7 @@ fn demo_definition(
             runtime: RuntimeSpec {
                 kind: RuntimeKind::Mock,
                 execution_mode: orbit_domain::ExecutionMode::OnDemand,
+                placement: orbit_domain::PlacementTarget::Auto,
                 config: json!({ "stepDelayMs": 120 }),
             },
             model: ModelSpec {

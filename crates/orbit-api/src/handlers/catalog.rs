@@ -532,3 +532,40 @@ pub async fn delete_connection(
     .await;
     Ok(StatusCode::NO_CONTENT)
 }
+
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkerView {
+    pub worker_id: String,
+    pub runtimes: Vec<String>,
+    pub target: String,
+    pub hostname: Option<String>,
+    pub started_at: chrono::DateTime<chrono::Utc>,
+    pub last_heartbeat_at: chrono::DateTime<chrono::Utc>,
+    pub live: bool,
+}
+
+#[utoipa::path(get, path = "/api/v1/workers", tag = "runtimes", responses((status = 200, body = [WorkerView])))]
+pub async fn list_workers(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> Result<Json<Vec<WorkerView>>, ApiError> {
+    auth.require(Permission::RuntimesRead)?;
+    let now = chrono::Utc::now();
+    let mut workers = state.store.list_worker_heartbeats().await?;
+    workers.sort_by_key(|worker| std::cmp::Reverse(worker.last_heartbeat_at));
+    Ok(Json(
+        workers
+            .into_iter()
+            .map(|worker| WorkerView {
+                live: (now - worker.last_heartbeat_at).num_seconds() < 60,
+                worker_id: worker.worker_id,
+                runtimes: worker.runtimes,
+                target: worker.target,
+                hostname: worker.hostname,
+                started_at: worker.started_at,
+                last_heartbeat_at: worker.last_heartbeat_at,
+            })
+            .collect(),
+    ))
+}

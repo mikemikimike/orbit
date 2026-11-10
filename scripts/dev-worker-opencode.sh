@@ -16,6 +16,7 @@ export ORBIT_WORKER_POLL_MS="${ORBIT_WORKER_POLL_MS:-300}"
 export ORBIT_WORKER_CONCURRENCY="${ORBIT_WORKER_CONCURRENCY:-2}"
 export ORBIT_SCHEDULER_ENABLED=false
 export ORBIT_WORKSPACE_ROOT="${ORBIT_WORKSPACE_ROOT:-/tmp/orbit-workspaces}"
+export ORBIT_WORKER_TARGET="${ORBIT_WORKER_TARGET:-local}"
 export ORBIT_MCP_BROKER_BIN="${ORBIT_MCP_BROKER_BIN:-$PWD/target/debug/orbit-mcp-broker}"
 
 cargo build -p orbit-worker -p orbit-mcp-broker

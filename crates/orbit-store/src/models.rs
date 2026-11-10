@@ -212,6 +212,7 @@ pub struct ExecutionRecord {
     pub runtime_kind: String,
     pub trigger_id: Option<Uuid>,
     pub trigger_source: String,
+    pub placement: String,
     pub status: String,
     pub session_ref: Option<String>,
     pub input: serde_json::Value,

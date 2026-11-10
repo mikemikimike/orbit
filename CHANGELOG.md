@@ -53,6 +53,24 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - X connector call returns a clear 401 with an invalid token (real API request path).
 - Existing mock-runtime smoke test and SSE through ingress continue to pass.
 
+## [0.2.1] — explicit placement and queued-execution diagnostics
+
+### Added
+- `runtime.placement` on agents (`auto`, `local`, `docker`, `kubernetes`), editable in
+  Agent Studio and shown on the agent/execution detail. Workers advertise a target in
+  their heartbeat; the claim query only takes `auto` or matching-target executions.
+- `GET /api/v1/workers` and an “Active workers” section on Runtimes showing runtimes,
+  target, hostname and liveness.
+- Queued executions now get a timeline event and an in-UI diagnostic that checks for a
+  matching live worker, with instructions for starting one.
+- Worker target env defaults: host native `local`, Compose/Docker dispatcher `docker`,
+  Kubernetes workers `kubernetes`.
+
+### Fixed
+- Reaper grace now uses claim time (`started_at`) instead of creation time, so retrying an
+  older queued execution cannot be reaped before its worker writes the first heartbeat.
+- `/api/v1/workers` route was missing from the router.
+
 ## [0.2.0] — approvals, worker recovery, per-execution containers
 
 ### Added

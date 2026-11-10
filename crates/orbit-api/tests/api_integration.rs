@@ -325,7 +325,11 @@ async fn execution_creation_is_idempotent_and_streams_events() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["items"][0]["message"], "hello from test");
+    assert!(body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|event| event["message"] == "hello from test"));
 
     // SSE replay includes snapshot, the stored event and a done marker.
     let response = app

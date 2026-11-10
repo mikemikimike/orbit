@@ -9,6 +9,7 @@ use crate::{Store, StoreResult};
 pub struct WorkerHeartbeat {
     pub worker_id: String,
     pub runtimes: Vec<String>,
+    pub target: String,
     pub hostname: Option<String>,
     pub started_at: DateTime<Utc>,
     pub last_heartbeat_at: DateTime<Utc>,
@@ -19,20 +20,23 @@ impl Store {
         &self,
         worker_id: &str,
         runtimes: &[String],
+        target: &str,
         hostname: Option<&str>,
     ) -> StoreResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO worker_heartbeats (worker_id, runtimes, hostname, last_heartbeat_at)
-            VALUES ($1, $2, $3, now())
+            INSERT INTO worker_heartbeats (worker_id, runtimes, target, hostname, last_heartbeat_at)
+            VALUES ($1, $2, $3, $4, now())
             ON CONFLICT (worker_id) DO UPDATE SET
                 runtimes = EXCLUDED.runtimes,
+                target = EXCLUDED.target,
                 hostname = COALESCE(EXCLUDED.hostname, worker_heartbeats.hostname),
                 last_heartbeat_at = now()
             "#,
         )
         .bind(worker_id)
         .bind(runtimes)
+        .bind(target)
         .bind(hostname)
         .execute(&self.pool)
         .await?;
@@ -65,7 +69,8 @@ impl Store {
         &self,
         stale_after_seconds: i64,
     ) -> StoreResult<Vec<ExecutionRecord>> {
-        self.reap_orphaned_executions_scoped(None, stale_after_seconds).await
+        self.reap_orphaned_executions_scoped(None, stale_after_seconds)
+            .await
     }
 
     /// Org-scoped reaper used by tests and future per-tenant maintenance jobs.
@@ -99,7 +104,7 @@ impl Store {
               AND e.worker_id IS NOT NULL
               -- Grace period: do not reap work that was just claimed while a worker is
               -- still starting up and has not written its first heartbeat yet.
-              AND e.created_at < now() - interval '15 seconds'
+              AND COALESCE(e.started_at, e.created_at) < now() - interval '15 seconds'
               AND ($2::uuid IS NULL OR e.org_id = $2)
               AND NOT EXISTS (
                   SELECT 1 FROM worker_heartbeats h

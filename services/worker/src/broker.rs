@@ -638,6 +638,7 @@ mod tests {
             runtime_kind: "opencode".into(),
             trigger_id: None,
             trigger_source: "manual".into(),
+            placement: "auto".into(),
             status: "running".into(),
             session_ref: None,
             input: Value::Null,

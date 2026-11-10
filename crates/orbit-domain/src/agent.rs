@@ -6,8 +6,8 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
-    canonical_checksum, is_valid_slug, AutonomyLevel, ExecutionMode, ResourceLimits, RuntimeKind,
-    AGENT_API_VERSION, AGENT_KIND,
+    canonical_checksum, is_valid_slug, AutonomyLevel, ExecutionMode, PlacementTarget,
+    ResourceLimits, RuntimeKind, AGENT_API_VERSION, AGENT_KIND,
 };
 
 /// Portable, versioned agent definition (`orbit.io/v1`).
@@ -59,6 +59,9 @@ pub struct RuntimeSpec {
     pub kind: RuntimeKind,
     #[serde(default)]
     pub execution_mode: ExecutionMode,
+    /// Where the agent may execute. `auto` lets any matching worker claim it.
+    #[serde(default)]
+    pub placement: PlacementTarget,
     /// Runtime-specific configuration. Validated by the adapter, opaque to the core.
     #[serde(default)]
     pub config: Value,
@@ -69,6 +72,7 @@ impl RuntimeSpec {
         Self {
             kind,
             execution_mode: ExecutionMode::OnDemand,
+            placement: PlacementTarget::Auto,
             config: Value::Object(Default::default()),
         }
     }

@@ -204,6 +204,7 @@ pub async fn execute_agent(
             agent_name: &agent.name,
             runtime_kind: spec.runtime.kind,
             trigger_source: TriggerSource::Manual,
+            placement: spec.runtime.placement.as_str(),
             trigger_id: None,
             input,
             timeout_seconds: spec.resources.timeout_seconds,
@@ -230,6 +231,26 @@ pub async fn execute_agent(
             tracing::warn!(error = %err, execution_id = %execution.id, "event publish failed; worker polling will pick up the execution");
         }
     }
+
+    // Make the queued state observable even before a worker claims the execution.
+    let _ = state
+        .store
+        .append_execution_event(
+            auth.org_id,
+            execution.id,
+            "status",
+            orbit_domain::LogLevel::Info,
+            &format!(
+                "execution queued; waiting for a {} worker (placement: {})",
+                spec.runtime.kind,
+                spec.runtime.placement.as_str()
+            ),
+            &serde_json::json!({
+                "runtime": spec.runtime.kind.as_str(),
+                "placement": spec.runtime.placement.as_str(),
+            }),
+        )
+        .await;
 
     state.metrics.inc_executions();
     audit::record(

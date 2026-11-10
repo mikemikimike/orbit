@@ -224,6 +224,7 @@ export default function AgentDetailPage() {
                 <CardContent className="space-y-2 text-sm">
                   <Row label="Type" value={titleCase(spec.runtime.type)} />
                   <Row label="Mode" value={titleCase(spec.runtime.executionMode)} />
+                  <Row label="Placement" value={titleCase(spec.runtime.placement)} />
                   <Row
                     label="Model management"
                     value={titleCase(spec.model.management)}

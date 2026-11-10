@@ -281,7 +281,31 @@ export function AgentForm({
                 ) : null}
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className={fieldClass}>
+                  <Label>Placement</Label>
+                  <select
+                    className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+                    value={definition.spec.runtime.placement}
+                    onChange={(event) =>
+                      updateSpec({
+                        runtime: {
+                          ...definition.spec.runtime,
+                          placement: event.target
+                            .value as AgentDefinition["spec"]["runtime"]["placement"],
+                        },
+                      })
+                    }
+                  >
+                    <option value="auto">Auto (any matching worker)</option>
+                    <option value="local">Local host worker</option>
+                    <option value="docker">Docker worker</option>
+                    <option value="kubernetes">Kubernetes worker</option>
+                  </select>
+                  <p className={helpClass}>
+                    Routing constraint: only workers of this class claim the execution.
+                  </p>
+                </div>
                 <div className={fieldClass}>
                   <Label>Execution mode</Label>
                   <select

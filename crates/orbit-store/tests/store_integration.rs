@@ -48,6 +48,7 @@ fn definition(name: &str) -> AgentDefinition {
             runtime: RuntimeSpec {
                 kind: RuntimeKind::Mock,
                 execution_mode: ExecutionMode::OnDemand,
+                placement: orbit_domain::PlacementTarget::Auto,
                 config: serde_json::json!({}),
             },
             model: ModelSpec::default(),
@@ -169,6 +170,7 @@ async fn execution_lifecycle_and_events() {
             agent_name: &agent.name,
             runtime_kind: RuntimeKind::Mock,
             trigger_source: TriggerSource::Manual,
+            placement: "auto",
             trigger_id: None,
             input: input.clone(),
             timeout_seconds: 30,
@@ -188,6 +190,7 @@ async fn execution_lifecycle_and_events() {
             agent_name: &agent.name,
             runtime_kind: RuntimeKind::Mock,
             trigger_source: TriggerSource::Manual,
+            placement: "auto",
             trigger_id: None,
             input,
             timeout_seconds: 30,
@@ -437,6 +440,7 @@ async fn orphaned_executions_are_failed_and_approvals_expired() {
                     agent_name: &agent.name,
                     runtime_kind: RuntimeKind::Mock,
                     trigger_source: TriggerSource::Manual,
+                    placement: "auto",
                     trigger_id: None,
                     input: serde_json::json!({ "task": "x", "payload": {}, "provenance": { "source": "test", "trusted": true, "receivedAt": chrono::Utc::now() } }),
                     timeout_seconds: 30,
@@ -466,7 +470,7 @@ async fn orphaned_executions_are_failed_and_approvals_expired() {
         )
         .await
         .unwrap();
-    sqlx::query("UPDATE executions SET created_at = now() - interval '1 hour' WHERE id = $1")
+    sqlx::query("UPDATE executions SET created_at = now() - interval '1 hour', started_at = now() - interval '1 hour' WHERE id = $1")
         .bind(orphan.id)
         .execute(store.pool())
         .await
@@ -483,11 +487,14 @@ async fn orphaned_executions_are_failed_and_approvals_expired() {
         .await
         .unwrap();
     store
-        .upsert_worker_heartbeat("worker-alive", &["mock".into()], Some("test"))
+        .upsert_worker_heartbeat("worker-alive", &["mock".into()], "local", Some("test"))
         .await
         .unwrap();
 
-    let reaped = store.reap_orphaned_executions_for_org(org, 60).await.unwrap();
+    let reaped = store
+        .reap_orphaned_executions_for_org(org, 60)
+        .await
+        .unwrap();
     assert_eq!(reaped.len(), 1, "only the orphan should be reaped");
     assert_eq!(reaped[0].id, orphan.id);
     assert_eq!(reaped[0].status, "failed");
@@ -522,6 +529,7 @@ async fn single_execution_mode_can_take_a_dispatched_execution() {
             agent_name: &agent.name,
             runtime_kind: RuntimeKind::Mock,
             trigger_source: TriggerSource::Manual,
+            placement: "auto",
             trigger_id: None,
             input: serde_json::json!({ "task": "x", "payload": {}, "provenance": { "source": "test", "trusted": true, "receivedAt": chrono::Utc::now() } }),
             timeout_seconds: 30,

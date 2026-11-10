@@ -551,6 +551,22 @@ export interface paths {
         patch: operations["update_user_role"];
         trace?: never;
     };
+    "/api/v1/workers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_workers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -1048,6 +1064,7 @@ export interface components {
             /** Format: uuid */
             orgId: string;
             output?: unknown;
+            placement: string;
             /** Format: uuid */
             requestedBy?: string | null;
             runtimeKind: string;
@@ -1138,6 +1155,12 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        /**
+         * @description Where an agent is allowed to execute. This is a routing constraint, not a guarantee
+         *     of process isolation; isolation depends on the worker's execution driver.
+         * @enum {string}
+         */
+        PlacementTarget: "auto" | "local" | "docker" | "kubernetes";
         Provider: {
             config: unknown;
             /** Format: date-time */
@@ -1256,6 +1279,8 @@ export interface components {
             /** @description Runtime-specific configuration. Validated by the adapter, opaque to the core. */
             config?: unknown;
             executionMode?: components["schemas"]["ExecutionMode"];
+            /** @description Where the agent may execute. `auto` lets any matching worker claim it. */
+            placement?: components["schemas"]["PlacementTarget"];
             type: components["schemas"]["RuntimeKind"];
         };
         RuntimeView: {
@@ -1349,6 +1374,17 @@ export interface components {
         ValidationIssue: {
             message: string;
             path: string;
+        };
+        WorkerView: {
+            hostname?: string | null;
+            /** Format: date-time */
+            lastHeartbeatAt: string;
+            live: boolean;
+            runtimes: string[];
+            /** Format: date-time */
+            startedAt: string;
+            target: string;
+            workerId: string;
         };
     };
     responses: never;
@@ -2318,6 +2354,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["User"];
+                };
+            };
+        };
+    };
+    list_workers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerView"][];
                 };
             };
         };

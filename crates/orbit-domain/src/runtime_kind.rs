@@ -143,3 +143,44 @@ impl FromStr for ExecutionMode {
         }
     }
 }
+
+/// Where an agent is allowed to execute. This is a routing constraint, not a guarantee
+/// of process isolation; isolation depends on the worker's execution driver.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PlacementTarget {
+    /// Any worker that supports the selected runtime.
+    #[default]
+    Auto,
+    /// A worker running natively on the host.
+    Local,
+    /// A Docker-based worker (Compose or host container dispatcher).
+    Docker,
+    /// A Kubernetes worker.
+    Kubernetes,
+}
+
+impl PlacementTarget {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Local => "local",
+            Self::Docker => "docker",
+            Self::Kubernetes => "kubernetes",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "auto" => Self::Auto,
+            "local" => Self::Local,
+            "docker" => Self::Docker,
+            "kubernetes" => Self::Kubernetes,
+            _ => return None,
+        })
+    }
+
+    pub fn matches_worker(&self, worker_target: &str) -> bool {
+        *self == Self::Auto || self.as_str() == worker_target
+    }
+}

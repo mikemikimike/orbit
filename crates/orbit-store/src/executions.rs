@@ -14,6 +14,7 @@ pub struct NewExecution<'a> {
     pub agent_name: &'a str,
     pub runtime_kind: RuntimeKind,
     pub trigger_source: TriggerSource,
+    pub placement: &'a str,
     pub trigger_id: Option<Uuid>,
     pub input: Value,
     pub timeout_seconds: u64,
@@ -38,9 +39,9 @@ impl Store {
         let inserted = sqlx::query_as::<_, ExecutionRecord>(
             r#"
             INSERT INTO executions (id, org_id, agent_id, agent_version_id, agent_name, runtime_kind,
-                                    trigger_id, trigger_source, status, input, timeout_seconds,
+                                    trigger_id, trigger_source, placement, status, input, timeout_seconds,
                                     idempotency_key, requested_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'queued', $9, $10, $11, $12)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $10, $11, $12, $13)
             ON CONFLICT (org_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
             RETURNING *
             "#,
@@ -53,6 +54,7 @@ impl Store {
         .bind(new.runtime_kind.as_str())
         .bind(new.trigger_id)
         .bind(new.trigger_source.as_str())
+        .bind(new.placement)
         .bind(&new.input)
         .bind(new.timeout_seconds as i32)
         .bind(new.idempotency_key)
@@ -459,6 +461,7 @@ impl Store {
         &self,
         worker_id: &str,
         runtimes: &[String],
+        worker_target: &str,
     ) -> StoreResult<Option<ExecutionRecord>> {
         Ok(sqlx::query_as::<_, ExecutionRecord>(
             r#"
@@ -469,6 +472,7 @@ impl Store {
                 SELECT id FROM executions
                 WHERE status = 'queued'
                   AND runtime_kind = ANY($2)
+                  AND (placement = 'auto' OR placement = $3)
                 ORDER BY created_at ASC
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED
@@ -478,6 +482,7 @@ impl Store {
         )
         .bind(worker_id)
         .bind(runtimes)
+        .bind(worker_target)
         .fetch_optional(&self.pool)
         .await?)
     }

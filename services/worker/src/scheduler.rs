@@ -86,6 +86,7 @@ async fn fire_trigger(state: &WorkerState, trigger: Trigger) -> anyhow::Result<(
             agent_name: &agent.name,
             runtime_kind: spec.runtime.kind,
             trigger_source: TriggerSource::Schedule,
+            placement: spec.runtime.placement.as_str(),
             trigger_id: Some(trigger.id),
             input,
             timeout_seconds: spec.resources.timeout_seconds,

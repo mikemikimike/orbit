@@ -90,6 +90,21 @@ unauthorized, unavailable, unsupported, timeout, cancelled, execution_failed, pr
 internal}`. Workers map `retryable` errors to bounded retries with exponential backoff;
 non-retryable errors move the execution to `failed` immediately.
 
+## Placement and worker targets
+
+Agents may set `spec.runtime.placement`:
+
+| Value | Claimed by |
+|---|---|
+| `auto` | any worker supporting the runtime |
+| `local` | a worker running natively on the host (`ORBIT_WORKER_TARGET=local`) |
+| `docker` | a Docker/Compose worker or the local container dispatcher (`docker`) |
+| `kubernetes` | workers deployed by the Helm chart (`kubernetes`) |
+
+Placement is a routing constraint, not an isolation guarantee. Isolation depends on the
+worker's execution driver (process vs per-execution container/Job). Workers report target
+and runtimes in `worker_heartbeats`; `GET /api/v1/workers` exposes them.
+
 ## Isolation requirements
 
 Production adapters must run in a container/Job with: non-root user, read-only root
