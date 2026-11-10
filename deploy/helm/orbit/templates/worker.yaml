@@ -52,7 +52,7 @@ spec:
               value: "nats"
             - name: ORBIT_NATS_URL
               value: {{ include "orbit.natsUrl" . | quote }}
-            - name: ORBIT_WORKER_HARNESSS
+            - name: ORBIT_WORKER_HARNESSES
               value: {{ .Values.worker.harnesses | quote }}
             - name: ORBIT_WORKER_TARGET
               value: "kubernetes"

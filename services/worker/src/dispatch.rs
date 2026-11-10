@@ -112,7 +112,7 @@ pub async fn run(state: &WorkerState, execution: &ExecutionRecord) -> anyhow::Re
         ),
         ("ORBIT_SINGLE_EXECUTION_ID", execution.id.to_string()),
         ("ORBIT_WORKER_ID", worker_id.clone()),
-        ("ORBIT_WORKER_HARNESSS", execution.harness_kind.clone()),
+        ("ORBIT_WORKER_HARNESSES", execution.harness_kind.clone()),
         ("ORBIT_WORKER_TARGET", "docker".into()),
         ("ORBIT_SCHEDULER_ENABLED", "false".into()),
         ("ORBIT_EXECUTION_DRIVER", "process".into()),

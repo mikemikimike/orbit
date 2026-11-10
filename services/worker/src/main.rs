@@ -66,7 +66,7 @@ impl WorkerConfig {
                 .max(1),
             workspace_root: std::env::var("ORBIT_WORKSPACE_ROOT")
                 .unwrap_or_else(|_| "/tmp/orbit-workspaces".into()),
-            harnesses: std::env::var("ORBIT_WORKER_HARNESSS")
+            harnesses: std::env::var("ORBIT_WORKER_HARNESSES")
                 .unwrap_or_else(|_| "mock,opencode,claude_code,pi,generic".into())
                 .split(',')
                 .map(|value| value.trim().to_string())

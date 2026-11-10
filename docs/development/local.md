@@ -20,7 +20,7 @@ docker compose -f deploy/compose/compose.yaml logs -f --tail=100 api worker web
 | API | http://localhost:8080/api/v1 · /docs · /readyz | OpenAPI + Swagger UI |
 | PostgreSQL | `localhost:5432` | `orbit`/`orbit`, database `orbit` |
 | NATS | `localhost:4222`, monitoring `:8222` | JetStream enabled |
-| worker | — | `ORBIT_WORKER_HARNESSS=mock` (scheduler + mock) |
+| worker | — | `ORBIT_WORKER_HARNESSES=mock` (scheduler + mock) |
 
 The first `--build` takes a few minutes (Rust release build); later restarts are seconds.
 Migrations and demo seeding are automatic. `localhost` is a secure context, so the web

@@ -13,7 +13,7 @@ PUSH_REGISTRY="${PUSH_REGISTRY:-${REGISTRY}}"
 cd "$(dirname "$0")/.."
 
 echo "==> Pushing ORBIT images via ${PUSH_REGISTRY} (cluster pulls ${REGISTRY})"
-for component in api worker web; do
+for component in api worker web worker-opencode worker-pi; do
   source_image="${REGISTRY}/orbit-${component}:${TAG}"
   push_image="${PUSH_REGISTRY}/orbit-${component}:${TAG}"
   push_latest="${PUSH_REGISTRY}/orbit-${component}:latest"

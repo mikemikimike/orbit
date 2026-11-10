@@ -214,8 +214,8 @@ flowchart TB
     Ing -->|"/api, /docs, /healthz"| SvcApi["Service: api"]
     WebD["Deployment: web"] --> SvcWeb
     ApiD["Deployment: api"] --> SvcApi
-    WorkerD["Deployment: worker<br/>ORBIT_WORKER_HARNESSS=mock"]
-    OpencodeD["Deployment: worker-opencode<br/>ORBIT_WORKER_HARNESSS=opencode"]
+    WorkerD["Deployment: worker<br/>ORBIT_WORKER_HARNESSES=mock"]
+    OpencodeD["Deployment: worker-opencode<br/>ORBIT_WORKER_HARNESSES=opencode"]
     Pg[("PostgreSQL<br/>bundled or external")]
     Nats[("NATS<br/>bundled or external")]
     Secret["Secrets: DB URL, master key,<br/>OIDC, OpenCode auth export"]

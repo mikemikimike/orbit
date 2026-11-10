@@ -240,7 +240,7 @@ pub async fn bootstrap(
     let mut docker_lines = vec![
         format!("docker run --rm --name {name}"),
         format!("  -e ORBIT_WORKER_PROFILE_ID={}", profile.id),
-        format!("  -e ORBIT_WORKER_HARNESSS={}", profile.harness_kind),
+        format!("  -e ORBIT_WORKER_HARNESSES={}", profile.harness_kind),
         format!("  -e ORBIT_WORKER_TARGET={}", profile.target),
         format!("  -e ORBIT_EXECUTION_DRIVER={}", profile.execution_driver),
         "  -e ORBIT_DATABASE_URL='postgres://orbit:CHANGE_ME@host.docker.internal:5432/orbit'"
@@ -273,7 +273,7 @@ pub async fn bootstrap(
     let docker = docker_lines.join(" \\\n");
 
     let compose = format!(
-        "services:\n  {name}:\n    image: {image}\n    restart: unless-stopped\n    environment:\n      ORBIT_WORKER_PROFILE_ID: {id}\n      ORBIT_WORKER_HARNESSS: {harness}\n      ORBIT_WORKER_TARGET: {target}\n      ORBIT_EXECUTION_DRIVER: {driver}\n      ORBIT_DATABASE_URL: ${{ORBIT_DATABASE_URL}}\n      ORBIT_NATS_URL: ${{ORBIT_NATS_URL}}\n      ORBIT_MASTER_KEY: ${{ORBIT_MASTER_KEY}}\n{volumes}{command}",
+        "services:\n  {name}:\n    image: {image}\n    restart: unless-stopped\n    environment:\n      ORBIT_WORKER_PROFILE_ID: {id}\n      ORBIT_WORKER_HARNESSES: {harness}\n      ORBIT_WORKER_TARGET: {target}\n      ORBIT_EXECUTION_DRIVER: {driver}\n      ORBIT_DATABASE_URL: ${{ORBIT_DATABASE_URL}}\n      ORBIT_NATS_URL: ${{ORBIT_NATS_URL}}\n      ORBIT_MASTER_KEY: ${{ORBIT_MASTER_KEY}}\n{volumes}{command}",
         name = name,
         image = image,
         id = profile.id,
@@ -311,7 +311,7 @@ spec:
           env:
             - name: ORBIT_WORKER_PROFILE_ID
               value: "{id}"
-            - name: ORBIT_WORKER_HARNESSS
+            - name: ORBIT_WORKER_HARNESSES
               value: "{harness}"
             - name: ORBIT_WORKER_TARGET
               value: "{target}"

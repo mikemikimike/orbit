@@ -65,7 +65,7 @@ services:
     image: orbit-worker:dev
     environment:
       ORBIT_ENV: ${ORBIT_ENV:-development}
-      ORBIT_WORKER_HARNESSS: mock
+      ORBIT_WORKER_HARNESSES: mock
       ORBIT_WORKER_TARGET: docker
       ORBIT_DATABASE_URL: postgres://orbit:orbit@db:5432/orbit
       ORBIT_MASTER_KEY: ${ORBIT_MASTER_KEY:-b3JiaXQtZGV2LW1hc3Rlci1rZXktMzItYnl0ZXMhISE=}

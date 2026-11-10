@@ -85,7 +85,7 @@ The chart requires no cluster-admin permissions and creates a namespaced Service
 
 OpenCode runs in a separate execution-plane image (`deploy/docker/worker-opencode.Dockerfile`)
 so the control plane and base worker do not bundle harness frameworks. The worker claims
-only `harness_kind=opencode` executions (`ORBIT_WORKER_HARNESSS=opencode`).
+only `harness_kind=opencode` executions (`ORBIT_WORKER_HARNESSES=opencode`).
 
 ```bash
 # 1. export credentials from a logged-in OpenCode install (contains secrets)
@@ -103,7 +103,7 @@ An init container imports the credentials into a writable emptyDir; the main con
 runs as non-root and executes `opencode run --standalone --format json`. Tested with
 OpenCode v2.2.5. Rotate credentials by recreating the Secret and restarting the
 Deployment. For local Docker/OrbStack, mount the exported auth file similarly or run the
-worker with `ORBIT_WORKER_HARNESSS=opencode` and a writable `HOME`.
+worker with `ORBIT_WORKER_HARNESSES=opencode` and a writable `HOME`.
 
 ## Bundled vs external dependencies
 
