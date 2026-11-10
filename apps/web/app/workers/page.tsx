@@ -52,11 +52,11 @@ export default function WorkersPage() {
   const [open, setOpen] = useState(false);
   const [bootstrapProfile, setBootstrapProfile] = useState<WorkerProfile | null>(null);
 
-  const [name, setName] = useState("Pi production");
-  const [harness, setHarness] = useState("pi");
+  const [name, setName] = useState("OpenCode production");
+  const [harness, setHarness] = useState("opencode");
   const [target, setTarget] = useState("docker");
   const [driver, setDriver] = useState("process");
-  const [image, setImage] = useState(DEFAULT_IMAGES.pi);
+  const [image, setImage] = useState(DEFAULT_IMAGES.opencode);
   const [tag, setTag] = useState("0.4.0");
   const [provider, setProvider] = useState("opencode-go");
   const [model, setModel] = useState("deepseek-v4-pro");
@@ -64,10 +64,9 @@ export default function WorkersPage() {
   const [agentIds, setAgentIds] = useState<string[]>([]);
   const [skillSlugs, setSkillSlugs] = useState<string[]>([]);
 
-  const harnessProviders = (providers.data ?? []).filter((candidate) => {
-    const config = (candidate.config ?? {}) as Record<string, unknown>;
-    return candidate.kind === "harness_managed" && String(config.harness ?? "") === harness;
-  });
+  const harnessProviders = (providers.data ?? []).filter(
+    (candidate) => candidate.kind === "harness_managed",
+  );
   const selectedProvider = harnessProviders.find((candidate) => {
     const config = (candidate.config ?? {}) as Record<string, unknown>;
     return String(config.provider ?? "") === provider;
@@ -247,8 +246,14 @@ export default function WorkersPage() {
                 className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
                 value={harness}
                 onChange={(event) => {
-                  setHarness(event.target.value);
-                  setImage(DEFAULT_IMAGES[event.target.value] ?? "");
+                  const nextHarness = event.target.value;
+                  setHarness(nextHarness);
+                  setImage(DEFAULT_IMAGES[nextHarness] ?? "");
+                  const currentConfig = (selectedProvider?.config ?? {}) as Record<string, unknown>;
+                  if (selectedProvider && String(currentConfig.harness ?? "") !== nextHarness) {
+                    setProvider("");
+                    setModel("");
+                  }
                 }}
               >
                 <option value="pi">Pi</option>
@@ -305,6 +310,11 @@ export default function WorkersPage() {
                         return String(config.provider ?? "") === event.target.value;
                       });
                       const config = (next?.config ?? {}) as Record<string, unknown>;
+                      const providerHarness = String(config.harness ?? "");
+                      if (providerHarness) {
+                        setHarness(providerHarness);
+                        setImage(DEFAULT_IMAGES[providerHarness] ?? image);
+                      }
                       setProvider(event.target.value);
                       setModel(String(config.model ?? ""));
                     }}
@@ -313,9 +323,11 @@ export default function WorkersPage() {
                     {harnessProviders.map((candidate) => {
                       const config = (candidate.config ?? {}) as Record<string, unknown>;
                       const name = String(config.provider ?? candidate.name);
+                      const providerHarness = String(config.harness ?? "");
                       return (
                         <option key={candidate.id} value={name}>
                           {candidate.name} · {name}
+                          {providerHarness ? ` (${providerHarness})` : ""}
                         </option>
                       );
                     })}
