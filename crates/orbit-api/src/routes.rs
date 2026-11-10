@@ -128,6 +128,19 @@ pub fn build_router(state: AppState) -> Router {
             get(handlers::worker_profiles::bootstrap),
         )
         .route(
+            "/api/v1/worker-profiles/{profile_id}/token",
+            post(handlers::worker_profiles::rotate_token),
+        )
+        .route(
+            "/api/v1/worker-tokens",
+            get(handlers::worker_profiles::list_tokens)
+                .post(handlers::worker_profiles::create_token),
+        )
+        .route(
+            "/api/v1/worker-tokens/{token_id}",
+            delete(handlers::worker_profiles::revoke_token),
+        )
+        .route(
             "/api/v1/providers",
             get(handlers::catalog::list_providers).post(handlers::catalog::create_provider),
         )
@@ -180,6 +193,51 @@ pub fn build_router(state: AppState) -> Router {
             crate::auth::require_auth,
         ));
 
+    let worker = Router::new()
+        .route("/api/v1/worker/session", get(handlers::worker_api::session))
+        .route(
+            "/api/v1/worker/heartbeat",
+            post(handlers::worker_api::heartbeat),
+        )
+        .route(
+            "/api/v1/worker/heartbeat/{worker_id}",
+            delete(handlers::worker_api::offline),
+        )
+        .route("/api/v1/worker/claim", post(handlers::worker_api::claim))
+        .route(
+            "/api/v1/worker/executions/{execution_id}/context",
+            get(handlers::worker_api::context),
+        )
+        .route(
+            "/api/v1/worker/executions/{execution_id}/running",
+            post(handlers::worker_api::running),
+        )
+        .route(
+            "/api/v1/worker/executions/{execution_id}/events",
+            post(handlers::worker_api::event),
+        )
+        .route(
+            "/api/v1/worker/executions/{execution_id}/complete",
+            post(handlers::worker_api::complete),
+        )
+        .route(
+            "/api/v1/worker/executions/{execution_id}/cancel",
+            get(handlers::worker_api::cancel_requested),
+        )
+        .route(
+            "/api/v1/worker/approvals",
+            post(handlers::worker_api::create_approval),
+        )
+        .route(
+            "/api/v1/worker/approvals/{approval_id}/wait",
+            get(handlers::worker_api::await_approval),
+        )
+        .route("/api/v1/worker/audit", post(handlers::worker_api::audit))
+        .route(
+            "/api/v1/worker/connections/{connection_id}",
+            get(handlers::worker_api::connection),
+        );
+
     let public = Router::new()
         .route("/healthz", get(handlers::health::healthz))
         .route("/readyz", get(handlers::health::readyz))
@@ -189,6 +247,7 @@ pub fn build_router(state: AppState) -> Router {
 
     Router::new()
         .merge(public)
+        .merge(worker)
         .merge(protected)
         .layer(middleware::from_fn_with_state(
             state.clone(),

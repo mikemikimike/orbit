@@ -53,6 +53,35 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - X connector call returns a clear 401 with an invalid token (real API request path).
 - Existing mock-runtime smoke test and SSE through ingress continue to pass.
 
+## [0.5.0] — worker tokens and token-only bootstrap
+
+### Added
+- Scoped worker tokens (`orbit_wk_`), stored as SHA-256 hashes with org/profile/harness
+  scoping, revocation and last-used tracking.
+- Worker API: session, heartbeat, claim, execution context, running, events, completion,
+  cancellation, approvals, audit and connector credential leases.
+- Worker profiles issue/rotate a token when generating bootstrap output.
+- Worker token administration endpoints: list, create, revoke.
+- Scheduled triggers and orphaned-execution reaping moved into `orbit-api`.
+
+### Changed
+- Workers no longer receive `ORBIT_DATABASE_URL`, `ORBIT_NATS_URL` or
+  `ORBIT_MASTER_KEY`. They use `ORBIT_API_URL` + `ORBIT_WORKER_TOKEN`.
+- Per-execution containers inherit the worker token instead of database credentials.
+- Helm and Compose now take worker tokens (`worker.token`, `opencodeWorker.token`,
+  `ORBIT_WORKER_TOKEN`).
+- Model resolution, connector credentials, skills and approvals are served by the
+  control plane.
+- Worker bootstrap manifests contain the token and no database/master-key placeholders.
+
+### Removed
+- Worker-side scheduler, reaper and direct PostgreSQL/NATS event publishing.
+
+### Known limitations
+- Token rotation in Bootstrap invalidates existing workers using the old token.
+- Launcher UI (`orb-launcher`) is still pending; manifests are generated manually.
+- Per-execution Kubernetes Jobs remain pending.
+
 ## [0.4.0] — Harness rename
 
 ### Changed (breaking)

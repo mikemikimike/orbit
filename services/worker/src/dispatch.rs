@@ -12,7 +12,6 @@ use std::time::Duration;
 
 use chrono::Utc;
 use orbit_contracts::{HarnessError, HarnessErrorKind};
-use orbit_store::ExecutionRecord;
 use tokio::process::Command;
 
 use crate::runner::WorkerState;
@@ -43,7 +42,11 @@ fn rewrite_host(url: &str) -> String {
         .replace("@127.0.0.1:", "@host.docker.internal:")
 }
 
-pub async fn run(state: &WorkerState, execution: &ExecutionRecord) -> anyhow::Result<()> {
+pub async fn run(
+    state: &WorkerState,
+    context: &crate::client::WorkerExecutionContext,
+) -> anyhow::Result<()> {
+    let execution = &context.execution;
     let Some(image) = image_for(&execution.harness_kind) else {
         crate::runner::fail_execution(
             state,
@@ -68,13 +71,8 @@ pub async fn run(state: &WorkerState, execution: &ExecutionRecord) -> anyhow::Re
         Utc::now().timestamp_millis()
     );
     let worker_id = format!("container-{container_name}");
-    let database_url = rewrite_host(
-        &std::env::var("ORBIT_DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://orbit:orbit@localhost:5432/orbit".into()),
-    );
-    let nats_url = rewrite_host(
-        &std::env::var("ORBIT_NATS_URL").unwrap_or_else(|_| "nats://localhost:4222".into()),
-    );
+    let api_url = rewrite_host(state.client.base_url());
+    let worker_token = state.client.token().to_string();
 
     let mut args: Vec<String> = vec![
         "run".into(),
@@ -100,16 +98,8 @@ pub async fn run(state: &WorkerState, execution: &ExecutionRecord) -> anyhow::Re
             "ORBIT_ENV",
             std::env::var("ORBIT_ENV").unwrap_or_else(|_| "development".into()),
         ),
-        ("ORBIT_DATABASE_URL", database_url),
-        ("ORBIT_NATS_URL", nats_url),
-        (
-            "ORBIT_MASTER_KEY",
-            std::env::var("ORBIT_MASTER_KEY").unwrap_or_default(),
-        ),
-        (
-            "ORBIT_EVENTS_DRIVER",
-            std::env::var("ORBIT_EVENTS_DRIVER").unwrap_or_else(|_| "nats".into()),
-        ),
+        ("ORBIT_API_URL", api_url),
+        ("ORBIT_WORKER_TOKEN", worker_token),
         ("ORBIT_SINGLE_EXECUTION_ID", execution.id.to_string()),
         ("ORBIT_WORKER_ID", worker_id.clone()),
         ("ORBIT_WORKER_HARNESSES", execution.harness_kind.clone()),
@@ -197,9 +187,9 @@ pub async fn run(state: &WorkerState, execution: &ExecutionRecord) -> anyhow::Re
             stderr.trim()
         );
         tracing::warn!(execution_id = %execution.id, %message, "container execution failed");
-        let current = state.store.get_execution_by_id(execution.id).await?;
+        let current = state.client.context(execution.id).await?;
         if !matches!(
-            orbit_domain::ExecutionStatus::parse(&current.status),
+            orbit_domain::ExecutionStatus::parse(&current.execution.status),
             Some(status) if status.is_terminal()
         ) {
             crate::runner::fail_execution(

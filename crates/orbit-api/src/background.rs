@@ -1,0 +1,173 @@
+//! Control-plane maintenance loops: scheduled triggers and orphaned-execution reaping.
+//!
+//! These used to run inside the worker, which required database access. They are
+//! control-plane responsibilities, so they now run in `orbit-api` and keep workers
+//! token-only.
+
+use std::time::Duration;
+
+use chrono::Utc;
+use orbit_contracts::{subjects, OrbitEvent};
+use orbit_domain::{AgentStatus, ExecutionStatus, LogLevel, TriggerSource};
+use orbit_store::Trigger;
+
+use crate::state::AppState;
+
+pub fn spawn(state: AppState) {
+    let scheduler_state = state.clone();
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(15));
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticker.tick().await;
+            if let Err(error) = scheduler_tick(&scheduler_state).await {
+                tracing::error!(%error, "scheduler tick failed");
+            }
+        }
+    });
+
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(15));
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticker.tick().await;
+            reap(&state).await;
+        }
+    });
+}
+
+async fn scheduler_tick(state: &AppState) -> anyhow::Result<()> {
+    for trigger in state.store.claim_due_triggers(10).await? {
+        if let Err(error) = fire_trigger(state, trigger).await {
+            tracing::warn!(%error, "scheduled trigger failed");
+        }
+    }
+    Ok(())
+}
+
+async fn fire_trigger(state: &AppState, trigger: Trigger) -> anyhow::Result<()> {
+    let next = trigger
+        .config
+        .get("cron")
+        .and_then(|value| value.as_str())
+        .and_then(|cron| cron.parse::<croner::Cron>().ok())
+        .and_then(|cron| cron.find_next_occurrence(&Utc::now(), false).ok());
+    state.store.reschedule_trigger(trigger.id, next).await?;
+
+    let agent = state
+        .store
+        .get_agent(trigger.org_id, trigger.agent_id)
+        .await?;
+    if AgentStatus::parse(&agent.status) != Some(AgentStatus::Active) {
+        tracing::debug!(agent_id = %agent.id, "scheduled trigger skipped: agent is not active");
+        return Ok(());
+    }
+    let version = state
+        .store
+        .get_current_version(trigger.org_id, &agent)
+        .await?;
+    let spec: orbit_domain::AgentSpec = serde_json::from_value(version.spec.clone())?;
+
+    let active = state
+        .store
+        .count_active_executions_for_agent(trigger.org_id, agent.id)
+        .await?;
+    if active >= spec.resources.max_concurrent_executions as i64 {
+        tracing::info!(agent_id = %agent.id, "scheduled trigger skipped: concurrency limit");
+        return Ok(());
+    }
+
+    let fired_at = trigger.last_fired_at.unwrap_or_else(Utc::now);
+    let input = serde_json::json!({
+        "task": format!("Scheduled run for agent '{}'. Perform your configured monitoring task.", agent.name),
+        "payload": { "triggerId": trigger.id, "firedAt": fired_at },
+        "provenance": {
+            "source": "schedule",
+            "trusted": false,
+            "subject": trigger.id,
+            "receivedAt": fired_at,
+        },
+        "agentVersion": version.version,
+    });
+
+    let idempotency_key = format!("trigger:{}:{}", trigger.id, fired_at.timestamp_millis());
+    let execution = state
+        .store
+        .create_execution(orbit_store::executions::NewExecution {
+            org_id: trigger.org_id,
+            agent_id: agent.id,
+            agent_version_id: version.id,
+            agent_name: &agent.name,
+            harness_kind: spec.harness.kind,
+            trigger_source: TriggerSource::Schedule,
+            placement: spec.harness.placement.as_str(),
+            trigger_id: Some(trigger.id),
+            input,
+            timeout_seconds: spec.resources.timeout_seconds,
+            requested_by: None,
+            idempotency_key: Some(idempotency_key.as_str()),
+        })
+        .await?;
+
+    let event = OrbitEvent::new(
+        subjects::EXECUTION_REQUESTED,
+        "orbit-api-scheduler",
+        serde_json::json!({
+            "executionId": execution.id,
+            "agentId": agent.id,
+            "triggerId": trigger.id,
+            "harness": spec.harness.kind.as_str(),
+        }),
+    )
+    .with_org(trigger.org_id)
+    .with_idempotency(format!("exec:{}", execution.id));
+    if let Err(error) = state.bus.publish(event).await {
+        tracing::warn!(%error, "scheduled execution publish failed; polling will pick it up");
+    }
+    tracing::info!(
+        execution_id = %execution.id,
+        agent_id = %agent.id,
+        status = ExecutionStatus::Queued.as_str(),
+        "scheduled execution queued"
+    );
+    Ok(())
+}
+
+async fn reap(state: &AppState) {
+    match state.store.reap_orphaned_executions(90).await {
+        Ok(rows) if !rows.is_empty() => {
+            for execution in rows {
+                tracing::warn!(
+                    execution_id = %execution.id,
+                    worker_id = ?execution.worker_id,
+                    "reaped orphaned execution"
+                );
+                let _ = state
+                    .store
+                    .append_execution_event(
+                        execution.org_id,
+                        execution.id,
+                        "error",
+                        LogLevel::Error,
+                        "worker heartbeat expired; execution marked failed",
+                        &orbit_store::workers::worker_lost_error(),
+                    )
+                    .await;
+                let event = OrbitEvent::new(
+                    subjects::EXECUTION_UPDATED,
+                    "orbit-api-reaper",
+                    serde_json::json!({
+                        "executionId": execution.id,
+                        "agentId": execution.agent_id,
+                        "status": execution.status,
+                    }),
+                )
+                .with_org(execution.org_id)
+                .with_idempotency(format!("reap:{}", execution.id));
+                let _ = state.bus.publish(event).await;
+            }
+        }
+        Ok(_) => {}
+        Err(error) => tracing::warn!(%error, "execution reaper failed"),
+    }
+}

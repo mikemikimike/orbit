@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # Pi-enabled execution worker. Pi is a Node package; the Rust worker binaries come from
 # the base worker image. Auth is mounted externally (PI_CODING_AGENT_DIR).
-ARG WORKER_BASE=192.168.1.201:5000/orbit-worker:0.4.0
+ARG WORKER_BASE=192.168.1.201:5000/orbit-worker:0.5.0
 FROM node:22-bookworm-slim AS node
 FROM ${WORKER_BASE}
 

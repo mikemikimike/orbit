@@ -359,6 +359,22 @@ pub struct Skill {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkerTokenRecord {
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub profile_id: Option<Uuid>,
+    pub name: String,
+    pub token_prefix: String,
+    pub token_hash: String,
+    pub harnesses: Vec<String>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub revoked_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkerProfile {

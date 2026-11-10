@@ -72,6 +72,7 @@ async fn main() -> anyhow::Result<()> {
         cors_origins: config.cors_origins.clone(),
     };
 
+    orbit_api::background::spawn(state.clone());
     let router = build_router(state);
     let listener = TcpListener::bind(&config.http_addr)
         .await

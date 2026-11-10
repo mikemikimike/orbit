@@ -27,7 +27,9 @@ api:
 
 worker:
   image: orbit-worker
-  tag: 0.4.0
+  tag: 0.5.0
+  # Scoped token issued by the API (POST /api/v1/worker-tokens). Required.
+  token: ""
   replicas: 1
   concurrency: 4
   pollIntervalMs: 500
@@ -49,7 +51,9 @@ worker:
 opencodeWorker:
   enabled: false
   image: orbit-worker-opencode
-  tag: 0.4.0
+  tag: 0.5.0
+  # Token restricted to the opencode harness. Required when enabled.
+  token: ""
   replicas: 1
   concurrency: 2
   harnesses: opencode
@@ -76,7 +80,7 @@ opencodeWorker:
 
 web:
   image: orbit-web
-  tag: 0.4.0
+  tag: 0.5.0
   replicas: 1
   port: 3000
   resources:

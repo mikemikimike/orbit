@@ -288,6 +288,40 @@ async fn execution_lifecycle_and_events() {
 }
 
 #[tokio::test]
+async fn worker_tokens_are_hashed_scoped_and_revocable() {
+    let Some(store) = test_store().await else {
+        return;
+    };
+    let (org, _user) = seed_org(&store).await;
+    let issued = orbit_security::issue_worker_token();
+    assert!(issued.token.starts_with("orbit_wk_"));
+    let record = store
+        .create_worker_token(
+            org,
+            None,
+            "test worker",
+            &issued.prefix,
+            &issued.hash,
+            &["mock".to_string()],
+        )
+        .await
+        .unwrap();
+    assert_eq!(record.harnesses, vec!["mock".to_string()]);
+    let found = store
+        .find_worker_token_by_hash(&issued.hash)
+        .await
+        .unwrap()
+        .expect("token should resolve by hash");
+    assert_eq!(found.id, record.id);
+    store.revoke_worker_token(org, record.id).await.unwrap();
+    assert!(store
+        .find_worker_token_by_hash(&issued.hash)
+        .await
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test]
 async fn secrets_are_encrypted_and_org_scoped_entities_work() {
     let Some(store) = test_store().await else {
         return;

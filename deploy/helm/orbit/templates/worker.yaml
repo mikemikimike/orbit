@@ -38,20 +38,13 @@ spec:
           env:
             - name: ORBIT_ENV
               value: {{ .Values.platform.environment | quote }}
-            - name: ORBIT_DATABASE_URL
+            - name: ORBIT_API_URL
+              value: "http://{{ include "orbit.apiHost" . }}:{{ .Values.api.port }}"
+            - name: ORBIT_WORKER_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ include "orbit.secretName" . }}
-                  key: database-url
-            - name: ORBIT_MASTER_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "orbit.secretName" . }}
-                  key: master-key
-            - name: ORBIT_EVENTS_DRIVER
-              value: "nats"
-            - name: ORBIT_NATS_URL
-              value: {{ include "orbit.natsUrl" . | quote }}
+                  key: worker-token
             - name: ORBIT_WORKER_HARNESSES
               value: {{ .Values.worker.harnesses | quote }}
             - name: ORBIT_WORKER_TARGET
@@ -60,8 +53,6 @@ spec:
               value: {{ .Values.worker.concurrency | quote }}
             - name: ORBIT_WORKER_POLL_MS
               value: {{ .Values.worker.pollIntervalMs | quote }}
-            - name: ORBIT_SCHEDULER_ENABLED
-              value: {{ .Values.worker.schedulerEnabled | quote }}
             - name: ORBIT_WORKSPACE_ROOT
               value: "/tmp/orbit-workspaces"
             - name: ORBIT_LOG_FORMAT

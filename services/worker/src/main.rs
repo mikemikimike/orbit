@@ -1,36 +1,32 @@
 mod broker;
+mod client;
 mod connectors;
 mod dispatch;
 mod github;
 mod liveness;
-mod resolver;
 mod runner;
-mod scheduler;
 mod skills;
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
-use orbit_events::{connect as connect_bus, EventBusConfig};
 use orbit_harness::HarnessRegistry;
-use orbit_security::SecretCipher;
-use orbit_store::Store;
 use tokio::sync::Semaphore;
+
+use crate::client::WorkerClient;
 
 #[derive(Debug, Clone)]
 pub struct WorkerConfig {
     pub worker_id: String,
-    pub database_url: String,
-    pub db_max_connections: u32,
+    pub api_url: String,
+    pub worker_token: String,
     pub poll_interval: Duration,
-    pub scheduler_enabled: bool,
     pub concurrency: usize,
     pub workspace_root: String,
     /// Harness kinds this worker may claim. Enables separate harness images/workers.
     pub harnesses: Vec<String>,
     pub heartbeat_interval: Duration,
-    pub stale_after: Duration,
     pub execution_driver: String,
     pub target: String,
     pub profile_id: Option<uuid::Uuid>,
@@ -46,19 +42,16 @@ impl WorkerConfig {
         });
         Ok(Self {
             worker_id,
-            database_url: std::env::var("ORBIT_DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://orbit:orbit@localhost:5432/orbit".into()),
-            db_max_connections: std::env::var("ORBIT_DB_MAX_CONNECTIONS")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(10),
+            api_url: std::env::var("ORBIT_API_URL")
+                .unwrap_or_else(|_| "http://localhost:8080".into()),
+            worker_token: std::env::var("ORBIT_WORKER_TOKEN")
+                .context("ORBIT_WORKER_TOKEN is required (generate it from a worker profile)")?,
             poll_interval: Duration::from_millis(
                 std::env::var("ORBIT_WORKER_POLL_MS")
                     .ok()
                     .and_then(|v| v.parse().ok())
                     .unwrap_or(1000),
             ),
-            scheduler_enabled: orbit_api_telemetry_env_bool("ORBIT_SCHEDULER_ENABLED", true),
             concurrency: std::env::var("ORBIT_WORKER_CONCURRENCY")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -79,13 +72,6 @@ impl WorkerConfig {
                     .unwrap_or(10)
                     .max(2),
             ),
-            stale_after: Duration::from_secs(
-                std::env::var("ORBIT_WORKER_STALE_SECONDS")
-                    .ok()
-                    .and_then(|value| value.parse().ok())
-                    .unwrap_or(90)
-                    .max(15),
-            ),
             execution_driver: std::env::var("ORBIT_EXECUTION_DRIVER")
                 .unwrap_or_else(|_| "process".into()),
             target: std::env::var("ORBIT_WORKER_TARGET").unwrap_or_else(|_| "local".into()),
@@ -96,128 +82,66 @@ impl WorkerConfig {
     }
 }
 
-fn orbit_api_telemetry_env_bool(key: &str, default: bool) -> bool {
-    std::env::var(key)
-        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes"))
-        .unwrap_or(default)
-}
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
     orbit_api::telemetry::init("orbit-worker");
 
     let config = WorkerConfig::from_env().context("invalid worker configuration")?;
-    if std::env::var("ORBIT_ENV").as_deref() == Ok("production")
-        && std::env::var("ORBIT_EVENTS_DRIVER").as_deref() == Ok("memory")
-    {
-        anyhow::bail!("the in-memory event bus is not allowed in production");
-    }
-
-    let master_key = std::env::var("ORBIT_MASTER_KEY").unwrap_or_default();
-    let cipher = if master_key.trim().is_empty() {
-        tracing::warn!("ORBIT_MASTER_KEY is not set; the worker cannot resolve stored credentials");
-        None
-    } else {
-        Some(Arc::new(
-            SecretCipher::from_base64_key(&master_key).context("invalid ORBIT_MASTER_KEY")?,
-        ))
-    };
-    let store = Store::connect(&config.database_url, config.db_max_connections)
-        .await
-        .context("could not connect to PostgreSQL")?;
-    let store = match cipher {
-        Some(cipher) => store.with_cipher(cipher),
-        None => store,
-    };
-    if std::env::var("ORBIT_ENV").as_deref() != Ok("production") {
-        store.migrate().await.ok();
-    }
-
-    let bus_config = EventBusConfig::from_env().context("invalid event bus configuration")?;
-    let bus = connect_bus(&bus_config)
-        .await
-        .context("could not connect to the event bus")?;
+    let client = WorkerClient::new(&config.api_url, &config.worker_token)
+        .context("invalid worker API configuration")?;
     let registry = Arc::new(HarnessRegistry::builtin());
 
-    // On a fresh Helm install the worker may start before the API has migrated and
-    // seeded the default organization. Wait instead of crash-looping; the container then
-    // becomes ready as soon as bootstrap finishes.
-    let mut organization_found = false;
+    // The API may still be migrating/seeding while a worker starts. Retry session
+    // discovery instead of crash-looping the container.
+    let mut session = None;
     for attempt in 1..=45 {
-        match store.first_organization().await {
-            Ok(Some(_)) => {
-                organization_found = true;
+        match client.session().await {
+            Ok(found) => {
+                session = Some(found);
                 break;
             }
-            Ok(None) => {}
-            Err(err) => {
-                tracing::warn!(error = %err, attempt, "database not ready while waiting for bootstrap");
+            Err(error) => {
+                tracing::warn!(%error, attempt, "waiting for orbit-api worker session");
+                tokio::time::sleep(Duration::from_secs(2)).await;
             }
         }
-        tracing::info!(attempt, "waiting for orbit-api to bootstrap the database");
-        tokio::time::sleep(Duration::from_secs(2)).await;
     }
-    if !organization_found {
-        anyhow::bail!(
-            "no organization exists after waiting 90s; check that orbit-api started and migrated the database"
-        );
-    }
+    let session = session.context(
+        "could not establish a worker session after 90s; check ORBIT_API_URL and ORBIT_WORKER_TOKEN",
+    )?;
 
-    let default_org = store
-        .first_organization()
-        .await?
-        .map(|org| org.id)
-        .context("organization disappeared during startup")?;
-
-    let mut harnesses = config.harnesses.clone();
-    let mut target = config.target.clone();
-    let mut execution_driver = config.execution_driver.clone();
-    let mut profile_agent_ids = Vec::new();
-    let mut profile_skill_slugs = Vec::new();
-    let mut profile_org_id = default_org;
-    if let Some(profile_id) = config.profile_id {
-        let profile = store.get_worker_profile_by_id(profile_id).await?;
-        if !profile.enabled {
-            anyhow::bail!("worker profile '{}' is disabled", profile.name);
-        }
-        harnesses = vec![profile.harness_kind.clone()];
-        target = profile.target.clone();
-        execution_driver = profile.execution_driver.clone();
-        profile_agent_ids = profile.agent_ids.clone();
-        profile_skill_slugs = profile.skill_slugs.clone();
-        profile_org_id = profile.org_id;
-        tracing::info!(
-            profile = %profile.name,
-            harness = %profile.harness_kind,
-            target = %profile.target,
-            agents = profile.agent_ids.len(),
-            skills = profile.skill_slugs.len(),
-            "worker profile loaded"
-        );
+    let mut harnesses = session.harnesses.clone();
+    if harnesses.is_empty() {
+        harnesses = config.harnesses.clone();
     }
+    let target = session
+        .target
+        .clone()
+        .unwrap_or_else(|| config.target.clone());
+    let execution_driver = session
+        .execution_driver
+        .clone()
+        .unwrap_or_else(|| config.execution_driver.clone());
 
     let state = runner::WorkerState {
         worker_id: config.worker_id.clone(),
-        store: store.clone(),
-        bus: bus.clone(),
+        client: client.clone(),
         registry: registry.clone(),
         workspace_root: std::path::PathBuf::from(&config.workspace_root),
         harnesses,
         execution_driver,
         target,
-        profile_org_id,
-        profile_agent_ids,
-        profile_skill_slugs,
+        profile_agent_ids: session.agent_ids.clone(),
+        profile_skill_slugs: session.skill_slugs.clone(),
         active: Arc::new(tokio::sync::Mutex::new(std::collections::BTreeMap::new())),
     };
 
     tracing::info!(
         worker_id = %config.worker_id,
         concurrency = config.concurrency,
-        scheduler = config.scheduler_enabled,
         harnesses = ?state.harnesses,
-        events_driver = %bus_config.driver,
+        profile = ?session.profile_name,
         "ORBIT worker started"
     );
 
@@ -226,30 +150,24 @@ async fn main() -> anyhow::Result<()> {
         let execution_id = uuid::Uuid::parse_str(&execution_id)
             .context("ORBIT_SINGLE_EXECUTION_ID must be a UUID")?;
         tracing::info!(%execution_id, worker_id = %state.worker_id, "single-execution worker starting");
-        state
-            .store
-            .upsert_worker_heartbeat(
-                &state.worker_id,
-                &state.harnesses,
-                &state.target,
-                std::env::var("HOSTNAME").ok().as_deref(),
-            )
-            .await?;
+        let _ = state
+            .client
+            .heartbeat(&crate::client::HeartbeatRequest {
+                worker_id: &state.worker_id,
+                harnesses: &state.harnesses,
+                target: &state.target,
+                hostname: std::env::var("HOSTNAME").ok().as_deref(),
+            })
+            .await;
         let result = runner::run_single(state.clone(), execution_id).await;
-        let _ = state.store.delete_worker_heartbeat(&state.worker_id).await;
+        let _ = state.client.offline(&state.worker_id).await;
         result?;
         tracing::info!(%execution_id, "single-execution worker finished");
         return Ok(());
     }
 
     let semaphore = Arc::new(Semaphore::new(config.concurrency));
-    if config.scheduler_enabled {
-        let scheduler_state = state.clone();
-        tokio::spawn(async move {
-            scheduler::run(scheduler_state).await;
-        });
-    }
-    liveness::spawn(state.clone(), config.heartbeat_interval, config.stale_after);
+    liveness::spawn(state.clone(), config.heartbeat_interval);
 
     loop {
         tokio::select! {
@@ -274,7 +192,7 @@ async fn main() -> anyhow::Result<()> {
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
-    if let Err(error) = state.store.delete_worker_heartbeat(&state.worker_id).await {
+    if let Err(error) = state.client.offline(&state.worker_id).await {
         tracing::warn!(%error, "failed to remove worker heartbeat");
     }
     tracing::info!("ORBIT worker stopped");

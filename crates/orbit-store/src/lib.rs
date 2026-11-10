@@ -24,6 +24,7 @@ pub mod secrets;
 pub mod skills;
 pub mod triggers;
 pub mod worker_profiles;
+pub mod worker_tokens;
 pub mod workers;
 
 pub use models::*;

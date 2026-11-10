@@ -6,7 +6,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use orbit_domain::{HarnessKind, ValidationIssue};
-use orbit_security::{AuthContext, Permission};
+use orbit_security::{issue_worker_token, AuthContext, Permission};
 use orbit_store::WorkerProfile;
 
 use crate::audit;
@@ -59,6 +59,189 @@ pub struct WorkerBootstrap {
     pub compose: String,
     pub kubernetes: String,
     pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateWorkerTokenRequest {
+    pub name: String,
+    #[serde(default)]
+    pub harnesses: Vec<String>,
+    #[serde(default)]
+    pub profile_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct IssuedWorkerToken {
+    pub token: String,
+    pub token_id: Uuid,
+    pub profile_id: Option<Uuid>,
+    pub harnesses: Vec<String>,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkerTokenView {
+    pub id: Uuid,
+    pub name: String,
+    pub profile_id: Option<Uuid>,
+    pub harnesses: Vec<String>,
+    pub token_prefix: String,
+    pub last_used_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub revoked_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+async fn issue_profile_token(
+    state: &AppState,
+    org_id: Uuid,
+    profile: &WorkerProfile,
+    rotate: bool,
+) -> Result<IssuedWorkerToken, ApiError> {
+    if rotate {
+        state
+            .store
+            .revoke_profile_worker_tokens(org_id, profile.id)
+            .await?;
+    }
+    let issued = issue_worker_token();
+    let record = state
+        .store
+        .create_worker_token(
+            org_id,
+            Some(profile.id),
+            &format!("profile:{}", profile.name),
+            &issued.prefix,
+            &issued.hash,
+            std::slice::from_ref(&profile.harness_kind),
+        )
+        .await?;
+    Ok(IssuedWorkerToken {
+        token: issued.token,
+        token_id: record.id,
+        profile_id: record.profile_id,
+        harnesses: record.harnesses,
+        name: record.name,
+    })
+}
+
+#[utoipa::path(post, path = "/api/v1/worker-profiles/{profile_id}/token", tag = "workers", responses((status = 200, body = IssuedWorkerToken)))]
+pub async fn rotate_token(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(profile_id): Path<Uuid>,
+) -> Result<Json<IssuedWorkerToken>, ApiError> {
+    auth.require(Permission::SettingsWrite)?;
+    let profile = state
+        .store
+        .get_worker_profile(auth.org_id, profile_id)
+        .await?;
+    Ok(Json(
+        issue_profile_token(&state, auth.org_id, &profile, true).await?,
+    ))
+}
+
+#[utoipa::path(post, path = "/api/v1/worker-tokens", tag = "workers", request_body = CreateWorkerTokenRequest, responses((status = 201, body = IssuedWorkerToken)))]
+pub async fn create_token(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<CreateWorkerTokenRequest>,
+) -> Result<(StatusCode, Json<IssuedWorkerToken>), ApiError> {
+    auth.require(Permission::SettingsWrite)?;
+    let profile = match body.profile_id {
+        Some(profile_id) => Some(
+            state
+                .store
+                .get_worker_profile(auth.org_id, profile_id)
+                .await?,
+        ),
+        None => None,
+    };
+    let mut harnesses = body.harnesses;
+    if let Some(profile) = &profile {
+        harnesses = vec![profile.harness_kind.clone()];
+    }
+    harnesses.sort();
+    harnesses.dedup();
+    if harnesses.is_empty() {
+        return Err(ApiError::validation(vec![ValidationIssue::new(
+            "harnesses",
+            "at least one harness is required",
+        )]));
+    }
+    let issued = issue_worker_token();
+    let record = state
+        .store
+        .create_worker_token(
+            auth.org_id,
+            body.profile_id,
+            body.name.trim(),
+            &issued.prefix,
+            &issued.hash,
+            &harnesses,
+        )
+        .await?;
+    audit::record(
+        &state,
+        &auth,
+        "worker_token.created",
+        Some("worker_token"),
+        Some(record.id),
+        serde_json::json!({ "name": record.name, "harnesses": record.harnesses }),
+    )
+    .await;
+    Ok((
+        StatusCode::CREATED,
+        Json(IssuedWorkerToken {
+            token: issued.token,
+            token_id: record.id,
+            profile_id: record.profile_id,
+            harnesses: record.harnesses,
+            name: record.name,
+        }),
+    ))
+}
+
+#[utoipa::path(get, path = "/api/v1/worker-tokens", tag = "workers", responses((status = 200, body = [WorkerTokenView])))]
+pub async fn list_tokens(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> Result<Json<Vec<WorkerTokenView>>, ApiError> {
+    auth.require(Permission::HarnessesRead)?;
+    Ok(Json(
+        state
+            .store
+            .list_worker_tokens(auth.org_id)
+            .await?
+            .into_iter()
+            .map(|record| WorkerTokenView {
+                id: record.id,
+                name: record.name,
+                profile_id: record.profile_id,
+                harnesses: record.harnesses,
+                token_prefix: record.token_prefix,
+                last_used_at: record.last_used_at,
+                revoked_at: record.revoked_at,
+                created_at: record.created_at,
+            })
+            .collect(),
+    ))
+}
+
+#[utoipa::path(delete, path = "/api/v1/worker-tokens/{token_id}", tag = "workers", responses((status = 204)))]
+pub async fn revoke_token(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(token_id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    auth.require(Permission::SettingsWrite)?;
+    state
+        .store
+        .revoke_worker_token(auth.org_id, token_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(get, path = "/api/v1/worker-profiles", tag = "workers", responses((status = 200, body = [WorkerProfile])))]
@@ -233,11 +416,17 @@ pub async fn bootstrap(
     Extension(auth): Extension<AuthContext>,
     Path(profile_id): Path<Uuid>,
 ) -> Result<Json<WorkerBootstrap>, ApiError> {
-    auth.require(Permission::HarnessesRead)?;
+    auth.require(Permission::SettingsWrite)?;
     let profile = state
         .store
         .get_worker_profile(auth.org_id, profile_id)
         .await?;
+    if !profile.enabled {
+        return Err(ApiError::conflict(
+            "enable the worker profile before generating bootstrap output",
+        ));
+    }
+    let issued = issue_profile_token(&state, auth.org_id, &profile, true).await?;
     let name = format!(
         "orbit-worker-{}-{}",
         profile.harness_kind.replace('_', "-"),
@@ -249,14 +438,11 @@ pub async fn bootstrap(
     let mut docker_lines = vec![
         format!("docker run --rm --name {name}"),
         format!("  -e ORBIT_WORKER_PROFILE_ID={}", profile.id),
+        format!("  -e ORBIT_WORKER_TOKEN={}", issued.token),
         format!("  -e ORBIT_WORKER_HARNESSES={}", profile.harness_kind),
         format!("  -e ORBIT_WORKER_TARGET={}", profile.target),
         format!("  -e ORBIT_EXECUTION_DRIVER={}", profile.execution_driver),
-        // 0.4.x workers are still database-coupled. Pass credentials from the caller's
-        // environment rather than printing placeholders or secrets into the manifest.
-        "  -e ORBIT_DATABASE_URL".into(),
-        "  -e ORBIT_NATS_URL".into(),
-        "  -e ORBIT_MASTER_KEY".into(),
+        "  -e ORBIT_API_URL=http://host.docker.internal:8080".into(),
     ];
     let mut compose_volumes = String::new();
     let mut compose_command = String::new();
@@ -283,10 +469,11 @@ pub async fn bootstrap(
     let docker = docker_lines.join(" \\\n");
 
     let compose = format!(
-        "services:\n  {name}:\n    image: {image}\n    restart: unless-stopped\n    environment:\n      ORBIT_WORKER_PROFILE_ID: {id}\n      ORBIT_WORKER_HARNESSES: {harness}\n      ORBIT_WORKER_TARGET: {target}\n      ORBIT_EXECUTION_DRIVER: {driver}\n      ORBIT_DATABASE_URL: ${{ORBIT_DATABASE_URL}}\n      ORBIT_NATS_URL: ${{ORBIT_NATS_URL}}\n      ORBIT_MASTER_KEY: ${{ORBIT_MASTER_KEY}}\n{volumes}{command}",
+        "services:\n  {name}:\n    image: {image}\n    restart: unless-stopped\n    extra_hosts:\n      - \"host.docker.internal:host-gateway\"\n    environment:\n      ORBIT_WORKER_PROFILE_ID: {id}\n      ORBIT_WORKER_TOKEN: {token}\n      ORBIT_WORKER_HARNESSES: {harness}\n      ORBIT_WORKER_TARGET: {target}\n      ORBIT_EXECUTION_DRIVER: {driver}\n      ORBIT_API_URL: http://host.docker.internal:8080\n{volumes}{command}",
         name = name,
         image = image,
         id = profile.id,
+        token = issued.token,
         harness = profile.harness_kind,
         target = profile.target,
         driver = profile.execution_driver,
@@ -321,20 +508,16 @@ spec:
           env:
             - name: ORBIT_WORKER_PROFILE_ID
               value: "{id}"
+            - name: ORBIT_WORKER_TOKEN
+              value: "{token}"
             - name: ORBIT_WORKER_HARNESSES
               value: "{harness}"
             - name: ORBIT_WORKER_TARGET
               value: "{target}"
             - name: ORBIT_EXECUTION_DRIVER
               value: "{driver}"
-            - name: ORBIT_DATABASE_URL
-              valueFrom:
-                secretKeyRef: {{ name: orbit-secrets, key: database-url }}
-            - name: ORBIT_MASTER_KEY
-              valueFrom:
-                secretKeyRef: {{ name: orbit-secrets, key: master-key }}
-            - name: ORBIT_NATS_URL
-              value: "nats://orbit-nats:4222"
+            - name: ORBIT_API_URL
+              value: "http://orbit-api:8080"
           resources:
             requests: {{ cpu: 100m, memory: 256Mi }}
             limits: {{ cpu: "2", memory: 1Gi }}
@@ -345,6 +528,7 @@ spec:
         name = name,
         image = image,
         id = profile.id,
+        token = issued.token,
         harness = profile.harness_kind,
         target = profile.target,
         driver = profile.execution_driver
@@ -352,9 +536,10 @@ spec:
 
     let mut notes = vec![
         "The worker loads its agent allowlist and skills from the profile at startup.".into(),
+        "The worker receives only ORBIT_API_URL and a scoped, revocable ORBIT_WORKER_TOKEN; no database, NATS or master key.".into(),
+        "Generating bootstrap output rotates the profile token; re-run it whenever you add a worker.".into(),
         "Credentials are never included here; mount the harness auth Secret/volume.".into(),
         "Pin the image tag to a release and use the generated manifest as a starting point.".into(),
-        "0.4.x workers still read PostgreSQL, NATS and the master key directly; the scoped worker-token API replaces these in 0.5.0.".into(),
     ];
     if has_auth {
         notes.push(format!(

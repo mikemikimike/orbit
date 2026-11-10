@@ -392,6 +392,26 @@ pub fn issue_api_token() -> IssuedApiToken {
     }
 }
 
+/// Worker tokens are separate from user API tokens so the API can reject them on
+/// control-plane routes and accept them only on the worker surface.
+pub fn issue_worker_token() -> IssuedApiToken {
+    use base64::Engine;
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    let token = format!(
+        "orbit_wk_{}",
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+    );
+    let hash = hash_api_token(&token);
+    let prefix = token.chars().take(16).collect();
+    IssuedApiToken {
+        token,
+        hash,
+        prefix,
+    }
+}
+
 /// Extract a bearer token from an Authorization header value.
 pub fn bearer_token(header: Option<&str>) -> Option<&str> {
     let value = header?.trim();

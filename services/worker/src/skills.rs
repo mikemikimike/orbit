@@ -7,28 +7,25 @@
 use std::path::Path;
 
 use orbit_domain::AgentSpec;
+use orbit_store::Skill;
 
-use crate::runner::WorkerState;
-
-pub async fn materialize(state: &WorkerState, spec: &AgentSpec, workspace: &Path) -> Vec<String> {
+pub async fn materialize(
+    spec: &AgentSpec,
+    profile_skill_slugs: &[String],
+    skills: &[Skill],
+    workspace: &Path,
+) -> Vec<String> {
     let mut slugs: Vec<String> = spec.skills.clone();
-    slugs.extend(state.profile_skill_slugs.iter().cloned());
+    slugs.extend(profile_skill_slugs.iter().cloned());
     slugs.sort();
     slugs.dedup();
     if slugs.is_empty() {
         return Vec::new();
     }
-    let skills = match state
-        .store
-        .skills_by_slugs(state.profile_org_id, &slugs)
-        .await
-    {
-        Ok(skills) => skills,
-        Err(error) => {
-            tracing::warn!(%error, "could not load skills");
-            return Vec::new();
-        }
-    };
+    let skills: Vec<&Skill> = skills
+        .iter()
+        .filter(|skill| slugs.contains(&skill.slug))
+        .collect();
     let mut materialized = Vec::new();
     for skill in skills {
         for base in [".pi/skills", ".opencode/skills"] {
@@ -53,7 +50,7 @@ pub async fn materialize(state: &WorkerState, spec: &AgentSpec, workspace: &Path
                 }
             }
         }
-        materialized.push(skill.slug);
+        materialized.push(skill.slug.clone());
     }
     materialized
 }

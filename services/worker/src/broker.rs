@@ -22,8 +22,9 @@ use orbit_domain::{
     evaluate_capability, AgentSpec, ApprovalMode, AutonomyLevel, CapabilityEffect,
     GrantedCapability, LogLevel, PolicyDecision,
 };
-use orbit_store::{Connection, ExecutionRecord, Store, StoreError};
+use orbit_store::{Approval, Connection, ExecutionRecord};
 
+use crate::client::WorkerClient;
 use crate::github::{self, GitHubClientConfig};
 
 #[derive(Debug, Clone)]
@@ -36,7 +37,7 @@ struct ToolSpec {
 }
 
 struct BrokerState {
-    store: Store,
+    client: WorkerClient,
     execution: ExecutionRecord,
     autonomy: AutonomyLevel,
     approval_mode: ApprovalMode,
@@ -142,7 +143,7 @@ fn tool_specs(
 
 /// Start the broker for one execution. Returns `None` when the agent has no GitHub binding.
 pub async fn start(
-    store: Store,
+    client: WorkerClient,
     spec: &AgentSpec,
     execution: &ExecutionRecord,
 ) -> anyhow::Result<Option<BrokerHandle>> {
@@ -157,13 +158,9 @@ pub async fn start(
             "GitHub connector is bound without a connection; select a connection in Agent Studio"
         );
     };
-    let connector = store
-        .get_connector_by_slug(execution.org_id, "github")
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("GitHub connector is not registered"))?;
-    let connection = store
-        .get_connection(execution.org_id, connection_id)
-        .await?;
+    let worker_connection = client.connection(execution.id, connection_id).await?;
+    let connection = worker_connection.connection;
+    let connector = worker_connection.connector;
     if connection.status != "active" {
         anyhow::bail!("GitHub connection is not active");
     }
@@ -193,18 +190,15 @@ pub async fn start(
     }
     let tools = tool_specs(&allowed, &effects);
 
-    let token = match &connection.credential_ref {
-        Some(reference) => store
-            .get_secret_value(reference)
-            .await?
-            .map(|value| value.expose().to_string()),
-        None => None,
-    };
+    let token = worker_connection
+        .credential
+        .as_ref()
+        .map(|credential| credential.value.clone());
     let github = GitHubClientConfig::from_connection(&connection.config, token);
 
     let autonomy = AutonomyLevel::from_level(spec.autonomy.level).unwrap_or(AutonomyLevel::OBSERVE);
     let state = Arc::new(BrokerState {
-        store,
+        client,
         execution: execution.clone(),
         autonomy,
         approval_mode: spec.autonomy.approval_mode,
@@ -415,12 +409,11 @@ async fn request_approval(
     state: &BrokerState,
     tool: &ToolSpec,
     arguments: &Value,
-) -> anyhow::Result<orbit_store::Approval> {
+) -> anyhow::Result<Approval> {
     let wait_seconds = approval_wait_seconds(&state.execution);
     let approval = state
-        .store
+        .client
         .create_approval(
-            state.execution.org_id,
             state.execution.id,
             json!({
                 "capability": tool.capability,
@@ -431,7 +424,7 @@ async fn request_approval(
                 "agentName": state.execution.agent_name,
                 "arguments": truncate_json(arguments, 4000),
             }),
-            Some(Utc::now() + chrono::Duration::seconds(wait_seconds as i64)),
+            wait_seconds,
         )
         .await?;
     record_event(
@@ -459,12 +452,8 @@ async fn request_approval(
     .await;
 
     let decided = state
-        .store
-        .await_approval(
-            state.execution.org_id,
-            approval.id,
-            Duration::from_secs(wait_seconds),
-        )
+        .client
+        .await_approval(state.execution.id, approval.id, wait_seconds)
         .await?;
     record_event(
         state,
@@ -526,38 +515,31 @@ async fn record_event(
     data: Value,
 ) {
     let _ = state
-        .store
-        .append_execution_event(
-            state.execution.org_id,
+        .client
+        .event(
             state.execution.id,
-            kind,
-            level,
-            message,
-            &data,
+            &crate::client::EventRequest {
+                kind,
+                level: level.as_str(),
+                message,
+                data,
+            },
         )
         .await;
 }
 
 async fn record_audit(state: &BrokerState, action: &str, metadata: Value) {
-    let result = state
-        .store
-        .append_audit_log(
-            state.execution.org_id,
-            "worker",
-            None,
-            None,
+    if let Err(error) = state
+        .client
+        .audit(
+            state.execution.id,
             action,
-            Some("connection"),
             Some(state.connection.id),
             metadata,
-            None,
-            None,
         )
-        .await;
-    if let Err(error) = result {
-        if !matches!(error, StoreError::Internal(_)) {
-            tracing::warn!(%error, "failed to write tool audit log");
-        }
+        .await
+    {
+        tracing::warn!(%error, "failed to write tool audit log");
     }
 }
 

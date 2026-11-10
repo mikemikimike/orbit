@@ -33,15 +33,29 @@ The chart is tailored to the mkd.local / microk8s environment used for this proj
 TAG=0.1.0 ./scripts/build-images.sh
 PUSH_REGISTRY=registry.mdk.local:5000 TAG=0.1.0 ./scripts/push-images.sh
 
-# 2. Deploy
-KUBE_CONTEXT=microk8s NAMESPACE=orbit TAG=0.1.0 ./scripts/deploy.sh
+# 2. Deploy (workers need scoped tokens)
+#    Start the API first, then issue tokens:
+MOCK_TOKEN=$(curl -s -X POST -H "Authorization: Bearer $DEV_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"name":"cluster-mock","harnesses":["mock"]}' \
+  http://orbit.mdk.local/api/v1/worker-tokens | jq -r .token)
+OPENCODE_TOKEN=$(curl -s -X POST -H "Authorization: Bearer $DEV_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"name":"cluster-opencode","harnesses":["opencode"]}' \
+  http://orbit.mdk.local/api/v1/worker-tokens | jq -r .token)
+
+KUBE_CONTEXT=microk8s NAMESPACE=orbit TAG=0.5.0 \
+  ./scripts/deploy.sh \
+  --set worker.token="$MOCK_TOKEN" \
+  --set opencodeWorker.token="$OPENCODE_TOKEN"
 
 # Equivalent explicit Helm command
 helm --kube-context microk8s upgrade --install orbit deploy/helm/orbit \
   --namespace orbit --create-namespace \
   -f deploy/helm/orbit/values.yaml \
   --set imageRegistry=192.168.1.201:5000 \
-  --set api.tag=0.1.0 --set worker.tag=0.1.0 --set web.tag=0.1.0
+  --set api.tag=0.5.0 --set worker.tag=0.5.0 --set web.tag=0.5.0 \
+  --set worker.token="$MOCK_TOKEN" --set opencodeWorker.token="$OPENCODE_TOKEN"
 ```
 
 Ingress routes: `/docs`, `/healthz`, `/readyz` → `orbit-api`; `/api` → `orbit-web`

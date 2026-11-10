@@ -6,11 +6,11 @@
 //! or analyses the posts. Writes/posting and general capability invocation are Phase 2.
 
 use serde_json::{json, Value};
-use uuid::Uuid;
 
 use orbit_contracts::{HarnessError, HarnessErrorKind};
 use orbit_domain::AgentSpec;
-use orbit_store::Store;
+
+use crate::client::WorkerClient;
 
 pub struct HydratedContext {
     pub payload: Value,
@@ -25,8 +25,8 @@ const X_SEARCH_PATH: &str = "/tweets/search/recent";
 /// - A configured X binding requires a valid connection, credential and query; failures
 ///   fail the execution with an actionable error instead of silently omitting data.
 pub async fn hydrate(
-    store: &Store,
-    org_id: Uuid,
+    client: &WorkerClient,
+    execution_id: uuid::Uuid,
     spec: &AgentSpec,
     task: &str,
     payload: &Value,
@@ -52,8 +52,8 @@ pub async fn hydrate(
             );
             continue;
         };
-        let connection = store
-            .get_connection_with_connector(org_id, connection_id)
+        let connection = client
+            .connection(execution_id, connection_id)
             .await
             .map_err(|err| {
                 HarnessError::new(
@@ -61,12 +61,12 @@ pub async fn hydrate(
                     format!("X connection not found: {err}"),
                 )
             })?;
-        if connection.connector_slug != "x" {
+        if connection.connector.slug != "x" {
             return Err(HarnessError::new(
                 HarnessErrorKind::InvalidConfig,
                 format!(
                     "connection '{}' belongs to connector '{}', not X",
-                    connection.connection.name, connection.connector_slug
+                    connection.connection.name, connection.connector.slug
                 ),
             ));
         }
@@ -79,31 +79,12 @@ pub async fn hydrate(
                 ),
             ));
         }
-        let reference = connection
-            .connection
-            .credential_ref
-            .as_ref()
-            .ok_or_else(|| {
-                HarnessError::new(
-                    HarnessErrorKind::InvalidConfig,
-                    "X connection has no credential; add a bearer token in Connections",
-                )
-            })?;
-        let credential = store
-            .get_secret_value(reference)
-            .await
-            .map_err(|err| {
-                HarnessError::new(
-                    HarnessErrorKind::Unavailable,
-                    format!("could not read X credential: {err}"),
-                )
-            })?
-            .ok_or_else(|| {
-                HarnessError::new(
-                    HarnessErrorKind::InvalidConfig,
-                    "X credential is missing from the secret store",
-                )
-            })?;
+        let credential = connection.credential.as_ref().ok_or_else(|| {
+            HarnessError::new(
+                HarnessErrorKind::InvalidConfig,
+                "X connection has no credential; add a bearer token in Connections",
+            )
+        })?;
 
         let query = payload
             .get("query")
@@ -145,7 +126,7 @@ pub async fn hydrate(
             })?;
         let response = client
             .get(&url)
-            .bearer_auth(credential.expose())
+            .bearer_auth(&credential.value)
             .query(&[
                 ("query", query.as_str()),
                 ("max_results", "10"),

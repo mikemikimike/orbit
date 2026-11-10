@@ -20,16 +20,19 @@ Images:
   {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.web.image "tag" .Values.web.tag) }}
 
 {{- if .Values.secrets.create }}
-The chart created a development Secret. Replace ORBIT_MASTER_KEY and the database URL
-for real deployments, or set secrets.create=false and secrets.existingSecret.
+The chart created a secret. Replace ORBIT_MASTER_KEY and the database URL for real
+deployments, or set secrets.create=false and secrets.existingSecret.
+Worker tokens are scoped and revocable: issue them with
+  POST /api/v1/worker-tokens {"name":"cluster-mock","harnesses":["mock"]}
 {{- end }}
 
 Check readiness:
   kubectl -n {{ .Release.Namespace }} get pods
   kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "orbit.apiHost" . }}
 
-Runtimes:
+Workers:
   base worker     -> mock harness (ORBIT_WORKER_HARNESSES=mock)
+  Workers use ORBIT_API_URL + ORBIT_WORKER_TOKEN; no database/NATS/master key.
   opencode worker -> OpenCode CLI, tested with v2.2.5 (enabled when auth is configured)
 
 OpenCode credentials are imported from an `opencode auth export` Secret by an init

@@ -3,14 +3,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use orbit_contracts::{
-    subjects, ExecutionOutcome, ExecutionRequest, HarnessError, HarnessErrorKind, HarnessEvent,
-    HarnessEventKind, InstructionsBlock, OrbitEvent, SessionRequest,
+    ExecutionOutcome, ExecutionRequest, HarnessError, HarnessErrorKind, HarnessEvent,
+    HarnessEventKind, InstructionsBlock, SessionRequest,
 };
 use orbit_domain::{
-    AutonomyLevel, ExecutionEventKind, ExecutionStatus, GrantedCapability, HarnessKind, LogLevel,
-    ResourceLimits,
+    AutonomyLevel, ExecutionEventKind, ExecutionStatus, HarnessKind, LogLevel, ResourceLimits,
 };
-use orbit_store::{ExecutionRecord, Store};
+use orbit_store::ExecutionRecord;
 use tokio::sync::{mpsc, Semaphore};
 use uuid::Uuid;
 
@@ -18,8 +17,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct WorkerState {
     pub worker_id: String,
-    pub store: Store,
-    pub bus: Arc<dyn orbit_events::EventBus>,
+    pub client: crate::client::WorkerClient,
     pub registry: Arc<orbit_harness::HarnessRegistry>,
     pub workspace_root: std::path::PathBuf,
     /// Harness kinds this worker is allowed to claim.
@@ -28,7 +26,6 @@ pub struct WorkerState {
     pub execution_driver: String,
     /// Worker target class (`local`, `docker`, `kubernetes`).
     pub target: String,
-    pub profile_org_id: Uuid,
     /// Agents this worker is scoped to (empty = all).
     pub profile_agent_ids: Vec<Uuid>,
     /// Skills materialized for every execution handled by this worker.
@@ -51,20 +48,20 @@ pub async fn claim_and_dispatch(
             Err(_) => break,
         };
         let claimed = match state
-            .store
-            .claim_next_queued(
-                &state.worker_id,
-                &state.harnesses,
-                &state.target,
-                &state.profile_agent_ids,
-            )
+            .client
+            .claim(&crate::client::ClaimRequest {
+                worker_id: &state.worker_id,
+                harnesses: &state.harnesses,
+                target: &state.target,
+                agent_ids: &state.profile_agent_ids,
+            })
             .await
         {
             Ok(Some(execution)) => execution,
             Ok(None) => break,
             Err(err) => {
                 drop(permit);
-                return Err(err.into());
+                return Err(err);
             }
         };
         dispatched += 1;
@@ -92,71 +89,26 @@ pub async fn claim_and_dispatch(
 /// Single-execution container mode: bind one dispatched execution to this worker and run
 /// it, without entering the claim loop or scheduler.
 pub async fn run_single(state: WorkerState, execution_id: uuid::Uuid) -> anyhow::Result<()> {
-    let Some(execution) = state
-        .store
-        .take_execution_for_worker(execution_id, &state.worker_id)
-        .await?
-    else {
-        let existing = state.store.get_execution_by_id(execution_id).await?;
-        anyhow::bail!(
-            "execution {} is not runnable in this worker (status {})",
-            execution_id,
-            existing.status
-        );
-    };
-    run_execution(state, execution).await
+    let context = state.client.context(execution_id).await?;
+    run_execution(state, context).await
 }
 
 /// Execute one claimed execution and persist its lifecycle.
-pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> anyhow::Result<()> {
-    let org_id = execution.org_id;
+pub async fn run_execution(
+    state: WorkerState,
+    context: crate::client::WorkerExecutionContext,
+) -> anyhow::Result<()> {
+    let execution = context.execution.clone();
     let execution_id = execution.id;
-    let spec_version = state
-        .store
-        .get_agent_version_by_id(org_id, execution.agent_version_id)
-        .await?;
-    let spec: orbit_domain::AgentSpec = serde_json::from_value(spec_version.spec.clone())
-        .map_err(|e| anyhow::anyhow!("stored agent spec is invalid: {e}"))?;
-
+    let spec = context.spec;
     let harness_kind = spec.harness.kind;
-    if let Some(record) = state
-        .store
-        .get_harness_by_kind(org_id, harness_kind.as_str())
-        .await?
-    {
-        if !record.enabled {
-            return fail_execution(
-                &state,
-                &execution,
-                HarnessError::new(
-                    HarnessErrorKind::Unavailable,
-                    format!("harness '{harness_kind}' is disabled"),
-                ),
-            )
-            .await;
-        }
-    }
 
     let adapter = match state.registry.require(harness_kind) {
         Ok(adapter) => adapter,
         Err(err) => return fail_execution(&state, &execution, err).await,
     };
 
-    let model = crate::resolver::resolve_model(&state.store, org_id, &spec)
-        .await
-        .map_err(|message| anyhow::anyhow!(message));
-    let model = match model {
-        Ok(model) => model,
-        Err(err) => {
-            return fail_execution(
-                &state,
-                &execution,
-                HarnessError::new(HarnessErrorKind::InvalidConfig, err.to_string()),
-            )
-            .await
-        }
-    };
-
+    let model = context.model.map(|model| model.into_resolved());
     let mut input: orbit_contracts::ExecutionInput =
         match serde_json::from_value(execution.input.clone()) {
             Ok(input) => input,
@@ -175,7 +127,14 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
 
     // Read-only connector hydration (MVP: X recent search). External content is added
     // as untrusted payload; trusted instructions remain separate.
-    match crate::connectors::hydrate(&state.store, org_id, &spec, &input.task, &input.payload).await
+    match crate::connectors::hydrate(
+        &state.client,
+        execution_id,
+        &spec,
+        &input.task,
+        &input.payload,
+    )
+    .await
     {
         Ok(hydrated) => {
             input.payload = hydrated.payload;
@@ -194,13 +153,13 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
         Err(error) => return fail_execution(&state, &execution, error).await,
     }
 
-    let grants = resolve_grants(&state.store, org_id, &spec).await;
+    let grants = context.grants;
     let workspace = state.workspace_root.join(execution_id.to_string());
 
     // Policy-enforcing tool broker: only for harnesses that can consume MCP today
     // (OpenCode). It is execution-scoped and dropped at the end of this function.
     let broker = if matches!(harness_kind, HarnessKind::OpenCode | HarnessKind::Pi) {
-        match crate::broker::start(state.store.clone(), &spec, &execution).await {
+        match crate::broker::start(state.client.clone(), &spec, &execution).await {
             Ok(broker) => broker,
             Err(error) => {
                 return fail_execution(
@@ -234,7 +193,13 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
     if let Err(err) = tokio::fs::create_dir_all(&workspace).await {
         tracing::warn!(error = %err, workspace = %workspace.display(), "could not create workspace");
     }
-    let materialized_skills = crate::skills::materialize(&state, &spec, &workspace).await;
+    let materialized_skills = crate::skills::materialize(
+        &spec,
+        &state.profile_skill_slugs,
+        &context.skills,
+        &workspace,
+    )
+    .await;
     if !materialized_skills.is_empty() {
         append_event(
             &state,
@@ -255,9 +220,9 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
         .await
         .insert(execution_id, cancel.clone());
 
-    let _ = state
-        .store
-        .mark_execution_running(execution_id, None)
+    state
+        .client
+        .running(execution_id, execution.session_ref.as_deref())
         .await?;
     append_event(
         &state,
@@ -280,14 +245,14 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
     });
 
     // Deliver cancellation requests from the control plane.
-    let watcher_state = state.clone();
+    let watcher_client = state.client.clone();
     let watcher_cancel = cancel.clone();
     let done = Arc::new(AtomicBool::new(false));
     let watcher_done = done.clone();
     let watcher = tokio::spawn(async move {
         while !watcher_done.load(Ordering::Relaxed) {
             tokio::time::sleep(Duration::from_millis(1000)).await;
-            match watcher_state.store.is_cancel_requested(execution_id).await {
+            match watcher_client.cancel_requested(execution_id).await {
                 Ok(true) => {
                     tracing::info!(%execution_id, "cancellation requested; cancelling harness");
                     watcher_cancel.cancel();
@@ -374,7 +339,6 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
     state.active.lock().await.remove(&execution_id);
 
     // Drain the event channel: drop the sender by ending the adapter future, then wait.
-    // `event_tx` lives inside the request which has been consumed above.
     let _ = tokio::time::timeout(Duration::from_secs(2), event_task).await;
 
     let mut outcome = outcome;
@@ -417,30 +381,27 @@ pub async fn run_execution(state: WorkerState, execution: ExecutionRecord) -> an
     .await;
 
     let updated = state
-        .store
-        .finish_execution(
+        .client
+        .complete(
             execution_id,
-            status,
-            outcome.output.as_ref(),
-            error_json.as_ref(),
-            serde_json::to_value(&outcome.usage).ok().as_ref(),
-            outcome.session_ref.as_deref(),
+            &crate::client::CompleteRequest {
+                status: status.as_str(),
+                output: outcome.output.clone(),
+                error: error_json,
+                usage: serde_json::to_value(&outcome.usage).ok(),
+                session_ref: outcome.session_ref.as_deref(),
+            },
         )
         .await?;
-
-    match updated {
-        Some(record) => {
-            publish_status(&state, &record).await;
-            tracing::info!(
-                %execution_id,
-                status = status.as_str(),
-                duration_ms = started.elapsed().as_millis() as u64,
-                "execution finished"
-            );
-        }
-        None => {
-            tracing::warn!(%execution_id, "execution was already terminal; result discarded");
-        }
+    if updated {
+        tracing::info!(
+            %execution_id,
+            status = status.as_str(),
+            duration_ms = started.elapsed().as_millis() as u64,
+            "execution finished"
+        );
+    } else {
+        tracing::warn!(%execution_id, "execution was already terminal; result discarded");
     }
     Ok(())
 }
@@ -470,7 +431,7 @@ pub(crate) async fn fail_execution(
         &outcome
             .error
             .as_ref()
-            .map(|e| e.message.clone())
+            .map(|error| error.message.clone())
             .unwrap_or_else(|| "execution failed".into()),
         serde_json::json!({ "error": outcome.error }),
     )
@@ -478,21 +439,20 @@ pub(crate) async fn fail_execution(
     let error_json = outcome
         .error
         .as_ref()
-        .and_then(|e| serde_json::to_value(e).ok());
-    let updated = state
-        .store
-        .finish_execution(
+        .and_then(|error| serde_json::to_value(error).ok());
+    let _ = state
+        .client
+        .complete(
             execution.id,
-            outcome.status,
-            None,
-            error_json.as_ref(),
-            None,
-            None,
+            &crate::client::CompleteRequest {
+                status: outcome.status.as_str(),
+                output: None,
+                error: error_json,
+                usage: None,
+                session_ref: None,
+            },
         )
-        .await?;
-    if let Some(record) = updated {
-        publish_status(state, &record).await;
-    }
+        .await;
     Ok(())
 }
 
@@ -504,49 +464,20 @@ async fn append_event(
     message: &str,
     data: serde_json::Value,
 ) {
-    let result = state
-        .store
-        .append_execution_event(
-            execution.org_id,
+    if let Err(error) = state
+        .client
+        .event(
             execution.id,
-            kind.as_str(),
-            level,
-            message,
-            &data,
+            &crate::client::EventRequest {
+                kind: kind.as_str(),
+                level: level.as_str(),
+                message,
+                data,
+            },
         )
-        .await;
-    match result {
-        Ok(event) => {
-            let envelope = OrbitEvent::new(
-                subjects::EXECUTION_EVENT,
-                "orbit-worker",
-                serde_json::to_value(&event).unwrap_or_default(),
-            )
-            .with_org(execution.org_id)
-            .with_idempotency(format!("event:{}", event.id));
-            if let Err(err) = state.bus.publish(envelope).await {
-                tracing::debug!(error = %err, "event publish failed (SSE reads the database)");
-            }
-        }
-        Err(err) => tracing::error!(error = %err, "failed to persist execution event"),
-    }
-}
-
-async fn publish_status(state: &WorkerState, execution: &ExecutionRecord) {
-    let event = OrbitEvent::new(
-        subjects::EXECUTION_UPDATED,
-        "orbit-worker",
-        serde_json::json!({
-            "executionId": execution.id,
-            "agentId": execution.agent_id,
-            "status": execution.status,
-            "finishedAt": execution.finished_at,
-        }),
-    )
-    .with_org(execution.org_id)
-    .with_idempotency(format!("status:{}:{}", execution.id, execution.status));
-    if let Err(err) = state.bus.publish(event).await {
-        tracing::debug!(error = %err, "status publish failed");
+        .await
+    {
+        tracing::error!(%error, "failed to persist execution event");
     }
 }
 
@@ -562,45 +493,4 @@ fn map_harness_event(
         HarnessEventKind::Error => ExecutionEventKind::Error,
     };
     (kind, event.level, event.message, event.data)
-}
-
-async fn resolve_grants(
-    store: &Store,
-    org_id: Uuid,
-    spec: &orbit_domain::AgentSpec,
-) -> Vec<GrantedCapability> {
-    let mut grants = Vec::new();
-    for binding in &spec.connectors {
-        let connector = match store
-            .get_connector_by_slug(org_id, &binding.connector)
-            .await
-        {
-            Ok(Some(connector)) => connector,
-            Ok(None) => continue,
-            Err(err) => {
-                tracing::warn!(error = %err, connector = %binding.connector, "grant resolution failed");
-                continue;
-            }
-        };
-        for capability in &binding.capabilities {
-            let effect = connector
-                .capabilities
-                .as_array()
-                .and_then(|items| {
-                    items.iter().find(|item| {
-                        item.get("id").and_then(|id| id.as_str()) == Some(capability.as_str())
-                    })
-                })
-                .and_then(|item| item.get("effect").and_then(|e| e.as_str()))
-                .and_then(orbit_domain::CapabilityEffect::parse)
-                .unwrap_or(orbit_domain::CapabilityEffect::Read);
-            grants.push(GrantedCapability {
-                connection_id: binding.connection_id.unwrap_or(Uuid::nil()),
-                connector: binding.connector.clone(),
-                capability: capability.clone(),
-                effect,
-            });
-        }
-    }
-    grants
 }

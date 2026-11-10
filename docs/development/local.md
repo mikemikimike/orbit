@@ -50,9 +50,20 @@ export ORBIT_NATS_URL=nats://localhost:4222
 export ORBIT_HTTP_ADDR=127.0.0.1:8080
 
 cargo run -p orbit-api-server      # terminal 1
-cargo run -p orbit-worker          # terminal 2
+
+# terminal 2: issue a scoped worker token, then run the worker with it
+TOKEN=$(curl -s -X POST -H "Authorization: Bearer orbit-dev-token" \
+  -H 'content-type: application/json' \
+  -d '{"name":"local-mock","harnesses":["mock"]}' \
+  http://localhost:8080/api/v1/worker-tokens | jq -r .token)
+ORBIT_API_URL=http://localhost:8080 ORBIT_WORKER_TOKEN="$TOKEN" \
+  ORBIT_WORKER_HARNESSES=mock ORBIT_WORKER_TARGET=local \
+  cargo run -p orbit-worker        # terminal 2
 pnpm --filter @orbit/web dev       # terminal 3 (http://localhost:3000)
 ```
+
+Workers no longer need `ORBIT_DATABASE_URL`, `ORBIT_NATS_URL` or `ORBIT_MASTER_KEY`.
+For Compose set `ORBIT_WORKER_TOKEN` in `.env` (see `.env.example`).
 
 The Next.js dev server proxies `/api/*` to `ORBIT_API_INTERNAL_URL` (default
 `http://localhost:8080`).

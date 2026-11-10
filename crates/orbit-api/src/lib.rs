@@ -5,6 +5,7 @@
 
 pub mod audit;
 pub mod auth;
+pub mod background;
 pub mod bootstrap;
 pub mod config;
 pub mod connectors;
@@ -18,6 +19,7 @@ pub mod request_id;
 pub mod routes;
 pub mod state;
 pub mod telemetry;
+pub mod worker_auth;
 
 pub use bootstrap::{initialize, Initialized};
 pub use config::ApiConfig;
