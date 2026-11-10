@@ -31,6 +31,7 @@ import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, setAccessToken } from "@/lib/api";
+import { copyText } from "@/lib/browser";
 import {
   queryKeys,
   unwrap,
@@ -332,11 +333,11 @@ export default function SettingsPage() {
             <Button
               size="icon"
               variant="outline"
-              onClick={() => {
-                if (createdToken) {
-                  void navigator.clipboard.writeText(createdToken);
-                  toast.success("Copied");
-                }
+              onClick={async () => {
+                if (!createdToken) return;
+                const copied = await copyText(createdToken);
+                if (copied) toast.success("Copied");
+                else toast.error("Copy is unavailable in this browser context");
               }}
             >
               <Copy />

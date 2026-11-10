@@ -4,6 +4,15 @@ All notable changes to ORBIT are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.4] — Secure-context fix for plain HTTP deployments
+
+### Fixed
+- Agent pages crashed with `crypto.randomUUID is not a function` when ORBIT is served over
+  plain HTTP on a LAN hostname (Web Crypto UUIDs and the async clipboard API require a
+  secure context). Added secure-context-safe `randomId()` and `copyText()` helpers with
+  fallbacks, so the UI works over HTTP until TLS is configured. TLS is still recommended
+  for PWA/service-worker, clipboard and browser security.
+
 ## [0.1.3] — Real OpenCode runtime + X read connector
 
 ### Added

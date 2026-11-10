@@ -68,7 +68,7 @@ opencodeWorker:
 
 web:
   image: orbit-web
-  tag: "0.1.3"
+  tag: "0.1.4"
   replicas: 2
   port: 3000
   resources:

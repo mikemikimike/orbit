@@ -18,6 +18,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
+import { randomId } from "@/lib/browser";
 import { unwrap } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 
@@ -34,9 +35,7 @@ export function RunAgentDialog({
   const [open, setOpen] = useState(false);
   const [task, setTask] = useState("Summarize the current state and report anything important.");
   const [payloadText, setPayloadText] = useState("{}");
-  const [idempotencyKey, setIdempotencyKey] = useState(() =>
-    typeof crypto !== "undefined" ? crypto.randomUUID() : String(Date.now()),
-  );
+  const [idempotencyKey, setIdempotencyKey] = useState(() => randomId());
   const [submitting, setSubmitting] = useState(false);
 
   async function run() {
@@ -75,11 +74,7 @@ export function RunAgentDialog({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (next) {
-          setIdempotencyKey(
-            typeof crypto !== "undefined" ? crypto.randomUUID() : String(Date.now()),
-          );
-        }
+        if (next) setIdempotencyKey(randomId());
       }}
     >
       <DialogTrigger asChild>

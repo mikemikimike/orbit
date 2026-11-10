@@ -24,6 +24,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExecutionStatusBadge } from "@/components/ui/status-badge";
 import { api } from "@/lib/api";
+import { copyText } from "@/lib/browser";
 import {
   queryKeys,
   unwrap,
@@ -254,9 +255,10 @@ export default function ExecutionDetailPage() {
                   size="icon"
                   variant="ghost"
                   aria-label="Copy output"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(JSON.stringify(execution.output, null, 2));
-                    toast.success("Output copied");
+                  onClick={async () => {
+                    const copied = await copyText(JSON.stringify(execution.output, null, 2));
+                    if (copied) toast.success("Output copied");
+                    else toast.error("Copy is unavailable in this browser context");
                   }}
                 >
                   <Copy />
