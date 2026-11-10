@@ -7,7 +7,7 @@ use orbit_contracts::{
     HarnessEventKind, HarnessHealth, HarnessInstance, HarnessInstanceRef, HarnessInstanceStatus,
 };
 use orbit_domain::{
-    ExecutionMode, ExecutionStatus, ImplementationStatus, LogLevel, HarnessKind, Usage,
+    ExecutionMode, ExecutionStatus, HarnessKind, ImplementationStatus, LogLevel, Usage,
     ValidationReport,
 };
 

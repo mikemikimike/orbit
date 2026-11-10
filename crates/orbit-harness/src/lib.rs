@@ -18,8 +18,8 @@ pub use planned::DescriptorOnlyAdapter;
 pub use registry::HarnessRegistry;
 
 pub use orbit_contracts::{
-    CreateInstanceRequest, ExecutionOutcome, ExecutionRequest, InstanceHealth, HarnessAdapter,
-    HarnessCapabilities, HarnessConfig, HarnessDescriptor, HarnessError, HarnessErrorKind,
-    HarnessEvent, HarnessEventKind, HarnessHealth, HarnessInstance, HarnessInstanceRef,
-    HarnessInstanceStatus,
+    CreateInstanceRequest, ExecutionOutcome, ExecutionRequest, HarnessAdapter, HarnessCapabilities,
+    HarnessConfig, HarnessDescriptor, HarnessError, HarnessErrorKind, HarnessEvent,
+    HarnessEventKind, HarnessHealth, HarnessInstance, HarnessInstanceRef, HarnessInstanceStatus,
+    InstanceHealth,
 };

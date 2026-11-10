@@ -7,17 +7,17 @@ pub mod agent;
 pub mod autonomy;
 pub mod error;
 pub mod execution;
+pub mod harness_kind;
 pub mod ids;
 pub mod pagination;
-pub mod harness_kind;
 
 pub use agent::*;
 pub use autonomy::*;
 pub use error::*;
 pub use execution::*;
+pub use harness_kind::*;
 pub use ids::*;
 pub use pagination::*;
-pub use harness_kind::*;
 
 /// Definition API version accepted by this build.
 pub const AGENT_API_VERSION: &str = "orbit.io/v1";

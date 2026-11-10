@@ -190,6 +190,8 @@ export default function WorkersPage() {
                     size="sm"
                     variant="ghost"
                     className="text-destructive"
+                    disabled={profile.enabled}
+                    title={profile.enabled ? "Disable the profile before deleting it" : undefined}
                     onClick={() => {
                       if (window.confirm(`Delete profile ${profile.name}?`)) remove.mutate(profile.id);
                     }}

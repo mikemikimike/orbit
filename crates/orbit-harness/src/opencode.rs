@@ -9,13 +9,13 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
 use orbit_contracts::{
-    CreateInstanceRequest, ExecutionOutcome, ExecutionRequest, InstructionsBlock, HarnessAdapter,
-    HarnessCapabilities, HarnessConfig, HarnessDescriptor, HarnessError, HarnessErrorKind,
-    HarnessEvent, HarnessEventKind, HarnessHealth, HarnessInstance, HarnessInstanceRef,
-    HarnessInstanceStatus, SessionRequest,
+    CreateInstanceRequest, ExecutionOutcome, ExecutionRequest, HarnessAdapter, HarnessCapabilities,
+    HarnessConfig, HarnessDescriptor, HarnessError, HarnessErrorKind, HarnessEvent,
+    HarnessEventKind, HarnessHealth, HarnessInstance, HarnessInstanceRef, HarnessInstanceStatus,
+    InstructionsBlock, SessionRequest,
 };
 use orbit_domain::{
-    ExecutionMode, ExecutionStatus, ImplementationStatus, LogLevel, HarnessKind, Usage,
+    ExecutionMode, ExecutionStatus, HarnessKind, ImplementationStatus, LogLevel, Usage,
     ValidationReport,
 };
 

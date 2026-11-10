@@ -195,13 +195,22 @@ pub async fn disable_profile(
     ))
 }
 
-#[utoipa::path(delete, path = "/api/v1/worker-profiles/{profile_id}", tag = "workers", responses((status = 204)))]
+#[utoipa::path(delete, path = "/api/v1/worker-profiles/{profile_id}", tag = "workers", responses((status = 204), (status = 409)))]
 pub async fn delete_profile(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
     Path(profile_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    let profile = state
+        .store
+        .get_worker_profile(auth.org_id, profile_id)
+        .await?;
+    if profile.enabled {
+        return Err(ApiError::conflict(
+            "disable the worker profile before deleting it",
+        ));
+    }
     state
         .store
         .delete_worker_profile(auth.org_id, profile_id)

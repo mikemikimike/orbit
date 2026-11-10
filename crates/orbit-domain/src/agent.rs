@@ -6,8 +6,8 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
-    canonical_checksum, is_valid_slug, AutonomyLevel, ExecutionMode, PlacementTarget,
-    ResourceLimits, HarnessKind, AGENT_API_VERSION, AGENT_KIND,
+    canonical_checksum, is_valid_slug, AutonomyLevel, ExecutionMode, HarnessKind, PlacementTarget,
+    ResourceLimits, AGENT_API_VERSION, AGENT_KIND,
 };
 
 /// Portable, versioned agent definition (`orbit.io/v1`).

@@ -10,9 +10,9 @@
 use std::time::Duration;
 
 use orbit_contracts::{
-    ExecutionRequest, InputProvenance, InstructionsBlock, HarnessAdapter, HarnessConfig,
+    ExecutionRequest, HarnessAdapter, HarnessConfig, InputProvenance, InstructionsBlock,
 };
-use orbit_domain::{AutonomyLevel, ExecutionMode, ExecutionStatus, ResourceLimits, HarnessKind};
+use orbit_domain::{AutonomyLevel, ExecutionMode, ExecutionStatus, HarnessKind, ResourceLimits};
 use orbit_harness::OpenCodeHarnessAdapter;
 
 fn request(model: &str) -> ExecutionRequest {

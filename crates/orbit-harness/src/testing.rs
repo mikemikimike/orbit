@@ -7,10 +7,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use orbit_contracts::{
-    ExecutionRequest, InputProvenance, InstructionsBlock, HarnessAdapter, HarnessConfig,
-    HarnessErrorKind,
+    ExecutionRequest, HarnessAdapter, HarnessConfig, HarnessErrorKind, InputProvenance,
+    InstructionsBlock,
 };
-use orbit_domain::{AutonomyLevel, ExecutionMode, ExecutionStatus, ResourceLimits, HarnessKind};
+use orbit_domain::{AutonomyLevel, ExecutionMode, ExecutionStatus, HarnessKind, ResourceLimits};
 
 pub fn execution_request(_adapter: &dyn HarnessAdapter, task: &str) -> ExecutionRequest {
     let (events, _receiver) = tokio::sync::mpsc::channel(64);

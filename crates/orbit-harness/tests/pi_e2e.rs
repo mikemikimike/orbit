@@ -5,7 +5,7 @@
 //!   cargo test -p orbit-harness --test pi_e2e -- --ignored --nocapture
 use std::time::Duration;
 
-use orbit_contracts::{ExecutionRequest, InputProvenance, InstructionsBlock, HarnessAdapter};
+use orbit_contracts::{ExecutionRequest, HarnessAdapter, InputProvenance, InstructionsBlock};
 use orbit_domain::{AutonomyLevel, ExecutionMode, ExecutionStatus, ResourceLimits};
 use orbit_harness::PiHarnessAdapter;
 

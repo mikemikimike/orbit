@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use orbit_domain::{
     AgentDefinition, AgentMetadata, AgentSpec, AgentStatus, AutonomySpec, ConnectorBinding,
-    Instructions, MemorySpec, ModelManagement, ModelSpec, ResourceLimits, HarnessKind, HarnessSpec,
+    HarnessKind, HarnessSpec, Instructions, MemorySpec, ModelManagement, ModelSpec, ResourceLimits,
     TriggerSource, TriggerSpec,
 };
 use orbit_events::EventBus;

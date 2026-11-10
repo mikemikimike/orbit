@@ -5,10 +5,10 @@
 
 pub mod connector;
 pub mod events;
-pub mod provider;
 pub mod harness;
+pub mod provider;
 
 pub use connector::*;
 pub use events::*;
-pub use provider::*;
 pub use harness::*;
+pub use provider::*;

@@ -5,7 +5,7 @@ use orbit_contracts::{
     HarnessConfig, HarnessDescriptor, HarnessError, HarnessErrorKind, HarnessHealth,
     HarnessInstance, HarnessInstanceRef, HarnessInstanceStatus,
 };
-use orbit_domain::{ExecutionMode, ImplementationStatus, HarnessKind, ValidationReport};
+use orbit_domain::{ExecutionMode, HarnessKind, ImplementationStatus, ValidationReport};
 
 /// Adapter for harnesses that are registered (so agents can reference them and the UI can
 /// show capabilities) but are not implemented in this build. Execution fails with a

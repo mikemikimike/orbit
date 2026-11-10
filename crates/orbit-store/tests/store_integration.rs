@@ -3,7 +3,7 @@ use std::sync::Arc;
 use base64::Engine;
 use orbit_domain::{
     AgentDefinition, AgentMetadata, AgentSpec, AgentStatus, AutonomySpec, ExecutionMode,
-    ExecutionStatus, Instructions, MemorySpec, ModelSpec, ResourceLimits, HarnessKind, HarnessSpec,
+    ExecutionStatus, HarnessKind, HarnessSpec, Instructions, MemorySpec, ModelSpec, ResourceLimits,
     TriggerSource, TriggerSpec, UserRole,
 };
 use orbit_security::{SecretCipher, SecretValue};
@@ -336,6 +336,22 @@ async fn secrets_are_encrypted_and_org_scoped_entities_work() {
     assert_eq!(providers.len(), 1);
     assert_eq!(providers[0].name, "Gateway 2");
     assert!(!providers[0].enabled);
+
+    let harness_provider = store
+        .create_provider(
+            org,
+            "Opencode Go",
+            "harness_managed",
+            &serde_json::json!({
+                "harness": "opencode",
+                "provider": "opencode-go",
+                "model": "deepseek-v4-pro"
+            }),
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(harness_provider.kind, "harness_managed");
 
     // Connections
     let manifest = orbit_contracts::ConnectorManifest {

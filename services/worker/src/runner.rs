@@ -3,12 +3,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use orbit_contracts::{
-    subjects, ExecutionOutcome, ExecutionRequest, InstructionsBlock, OrbitEvent, HarnessError,
-    HarnessErrorKind, HarnessEvent, HarnessEventKind, SessionRequest,
+    subjects, ExecutionOutcome, ExecutionRequest, HarnessError, HarnessErrorKind, HarnessEvent,
+    HarnessEventKind, InstructionsBlock, OrbitEvent, SessionRequest,
 };
 use orbit_domain::{
-    AutonomyLevel, ExecutionEventKind, ExecutionStatus, GrantedCapability, LogLevel,
-    ResourceLimits, HarnessKind,
+    AutonomyLevel, ExecutionEventKind, ExecutionStatus, GrantedCapability, HarnessKind, LogLevel,
+    ResourceLimits,
 };
 use orbit_store::{ExecutionRecord, Store};
 use tokio::sync::{mpsc, Semaphore};

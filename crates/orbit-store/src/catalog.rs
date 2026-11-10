@@ -5,7 +5,7 @@ use orbit_contracts::{ConnectorManifest, HarnessDescriptor};
 use orbit_domain::new_id;
 
 use crate::models::{
-    Connection, ConnectionWithConnector, ConnectorRecord, Provider, HarnessRecord,
+    Connection, ConnectionWithConnector, ConnectorRecord, HarnessRecord, Provider,
 };
 use crate::{Store, StoreError, StoreResult};
 

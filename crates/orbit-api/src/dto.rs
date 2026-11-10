@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use orbit_contracts::{ProviderKind, HarnessDescriptor};
+use orbit_contracts::{HarnessDescriptor, ProviderKind};
 use orbit_domain::{AgentDefinition, AgentSpec, HarnessKind};
 use orbit_store::{
     Agent, AgentInstance, AgentVersion, ConnectionWithConnector, ConnectorRecord, DashboardSummary,

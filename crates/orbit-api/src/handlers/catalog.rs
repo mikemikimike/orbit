@@ -4,14 +4,14 @@ use axum::Extension;
 use axum::Json;
 use uuid::Uuid;
 
-use orbit_contracts::{validate_provider_config, ProviderKind, HarnessDescriptor};
+use orbit_contracts::{validate_provider_config, HarnessDescriptor, ProviderKind};
 use orbit_domain::HarnessKind;
 use orbit_security::{new_secret_ref, AuthContext, Permission, SecretValue};
 
 use crate::audit;
 use crate::dto::{
     parse_provider_kind, ConnectionView, ConnectorView, CreateConnectionRequest,
-    CreateProviderRequest, ProviderProbeResponse, ProviderView, HarnessHealthView, HarnessView,
+    CreateProviderRequest, HarnessHealthView, HarnessView, ProviderProbeResponse, ProviderView,
     UpdateProviderRequest,
 };
 use crate::error::ApiError;

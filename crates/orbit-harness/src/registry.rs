@@ -4,7 +4,7 @@ use std::sync::Arc;
 use orbit_contracts::HarnessDescriptor;
 use orbit_domain::HarnessKind;
 
-use crate::{MockHarnessAdapter, OpenCodeHarnessAdapter, HarnessAdapter};
+use crate::{HarnessAdapter, MockHarnessAdapter, OpenCodeHarnessAdapter};
 
 /// Registry of adapter implementations available in this build.
 #[derive(Clone)]

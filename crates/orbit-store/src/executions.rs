@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use uuid::Uuid;
 
-use orbit_domain::{new_id, ExecutionStatus, LogLevel, HarnessKind, TriggerSource};
+use orbit_domain::{new_id, ExecutionStatus, HarnessKind, LogLevel, TriggerSource};
 
 use crate::models::{ExecutionEventRecord, ExecutionRecord};
 use crate::{decode_cursor, page_of, Store, StoreError, StoreResult};
