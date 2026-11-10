@@ -30,3 +30,5 @@ dist/
 
 # Helm
 deploy/helm/**/charts/*.tgz
+.orbit-auth-export.json
+auth-export.json

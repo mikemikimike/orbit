@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Boxes,
+  Cable,
   Copy,
   Cpu,
   KeyRound,
@@ -174,7 +175,7 @@ export default function SettingsPage() {
         </Card>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <ShortcutCard
           href="/agents"
           title="Agents"
@@ -192,6 +193,12 @@ export default function SettingsPage() {
           title="Models"
           description="Providers and credentials"
           icon={<Boxes className="h-4 w-4" />}
+        />
+        <ShortcutCard
+          href="/connections"
+          title="Connections"
+          description="External service accounts"
+          icon={<Cable className="h-4 w-4" />}
         />
       </div>
 

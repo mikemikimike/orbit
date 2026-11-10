@@ -482,3 +482,34 @@ impl Store {
         .await?)
     }
 }
+
+impl Store {
+    pub async fn get_execution_by_id(&self, execution_id: Uuid) -> StoreResult<ExecutionRecord> {
+        sqlx::query_as::<_, ExecutionRecord>("SELECT * FROM executions WHERE id = $1")
+            .bind(execution_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| StoreError::NotFound("execution".into()))
+    }
+
+    /// Bind an already-dispatched execution to a specific worker (used by the
+    /// per-execution container dispatcher and single-execution worker mode).
+    pub async fn take_execution_for_worker(
+        &self,
+        execution_id: Uuid,
+        worker_id: &str,
+    ) -> StoreResult<Option<ExecutionRecord>> {
+        Ok(sqlx::query_as::<_, ExecutionRecord>(
+            r#"
+            UPDATE executions
+            SET worker_id = $2, updated_at = now()
+            WHERE id = $1 AND status IN ('dispatched', 'running')
+            RETURNING *
+            "#,
+        )
+        .bind(execution_id)
+        .bind(worker_id)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+}

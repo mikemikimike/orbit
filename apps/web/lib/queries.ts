@@ -19,6 +19,7 @@ import type {
   TriggerRecord,
   ApiTokenView,
   AgentInstanceView,
+  ApprovalWithExecution,
 } from "./types";
 
 export function unwrap<T>(result: {
@@ -50,6 +51,7 @@ export const queryKeys = {
   triggers: (agentId?: string) => ["triggers", agentId ?? "all"] as const,
   tokens: ["api-tokens"] as const,
   instances: ["agent-instances"] as const,
+  approvals: (status?: string) => ["approvals", status ?? "all"] as const,
 };
 
 export function useMeta() {
@@ -220,6 +222,19 @@ export function useAgentInstances() {
   return useQuery<{ items: AgentInstanceView[]; total: number }>({
     queryKey: queryKeys.instances,
     queryFn: async () => unwrap(await api.GET("/api/v1/agent-instances")),
+  });
+}
+
+export function useApprovals(status?: string) {
+  return useQuery<ApprovalWithExecution[]>({
+    queryKey: queryKeys.approvals(status),
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/v1/approvals", {
+          params: { query: { status, limit: 100 } },
+        }),
+      ),
+    refetchInterval: 5_000,
   });
 }
 

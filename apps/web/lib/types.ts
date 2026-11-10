@@ -23,3 +23,4 @@ export type AgentDefinition = components["schemas"]["AgentDefinition"];
 export type AgentSpec = components["schemas"]["AgentSpec"];
 export type AgentInstanceView = components["schemas"]["AgentInstanceView"];
 export type ProviderProbeResponse = components["schemas"]["ProviderProbeResponse"];
+export type ApprovalWithExecution = components["schemas"]["ApprovalWithExecution"];

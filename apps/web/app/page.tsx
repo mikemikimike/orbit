@@ -7,10 +7,12 @@ import {
   Bot,
   CircleAlert,
   Plus,
+  ShieldCheck,
   Sparkles,
   Timer,
 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -43,6 +45,24 @@ export default function DashboardPage() {
           </Button>
         }
       />
+
+      {summary && summary.pendingApprovals > 0 ? (
+        <Link
+          href="/approvals"
+          className="flex items-center justify-between gap-3 rounded-xl border border-[hsl(var(--warning))]/40 bg-[hsl(var(--warning))]/10 px-4 py-3 text-sm transition-colors hover:bg-[hsl(var(--warning))]/15"
+        >
+          <span className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-[hsl(var(--warning))]" />
+            <span className="font-medium">
+              {summary.pendingApprovals} action{summary.pendingApprovals === 1 ? "" : "s"} waiting
+              for approval
+            </span>
+          </span>
+          <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+            Review <ArrowRight className="h-3.5 w-3.5" />
+          </span>
+        </Link>
+      ) : null}
 
       {dashboard.isError ? (
         <Card className="border-destructive/40">

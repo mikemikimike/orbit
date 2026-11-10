@@ -24,6 +24,8 @@ pub struct WorkerState {
     pub workspace_root: std::path::PathBuf,
     /// Runtime kinds this worker is allowed to claim.
     pub runtimes: Vec<String>,
+    /// `process` or `docker` (per-execution container).
+    pub execution_driver: String,
     pub active: Arc<
         tokio::sync::Mutex<std::collections::BTreeMap<Uuid, tokio_util::sync::CancellationToken>>,
     >,
@@ -57,7 +59,13 @@ pub async fn claim_and_dispatch(
         let state = state.clone();
         tokio::spawn(async move {
             let _permit = permit;
-            if let Err(err) = run_execution(state, claimed).await {
+            let driver = state.execution_driver.clone();
+            let result = if driver == "docker" {
+                crate::dispatch::run(&state, &claimed).await
+            } else {
+                run_execution(state, claimed).await
+            };
+            if let Err(err) = result {
                 tracing::error!(error = %err, "execution runner failed");
             }
         });
@@ -67,6 +75,24 @@ pub async fn claim_and_dispatch(
         tokio::time::sleep(poll_interval).await;
     }
     Ok(())
+}
+
+/// Single-execution container mode: bind one dispatched execution to this worker and run
+/// it, without entering the claim loop or scheduler.
+pub async fn run_single(state: WorkerState, execution_id: uuid::Uuid) -> anyhow::Result<()> {
+    let Some(execution) = state
+        .store
+        .take_execution_for_worker(execution_id, &state.worker_id)
+        .await?
+    else {
+        let existing = state.store.get_execution_by_id(execution_id).await?;
+        anyhow::bail!(
+            "execution {} is not runnable in this worker (status {})",
+            execution_id,
+            existing.status
+        );
+    };
+    run_execution(state, execution).await
 }
 
 /// Execute one claimed execution and persist its lifecycle.
@@ -406,7 +432,7 @@ fn outcome_from_error(error: RuntimeError) -> ExecutionOutcome {
     outcome
 }
 
-async fn fail_execution(
+pub(crate) async fn fail_execution(
     state: &WorkerState,
     execution: &ExecutionRecord,
     error: RuntimeError,

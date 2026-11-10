@@ -16,6 +16,8 @@ help:
 	@echo "  compose-logs   Follow api/worker/web logs"
 	@echo "  compose-reset  Remove containers AND data volumes"
 	@echo "  worker-opencode Run host OpenCode worker against the compose stack"
+	@echo "  worker-docker  Spawn a Docker container per OpenCode execution (host dispatcher)"
+	@echo "  compose-build-opencode Build the local OpenCode worker image"
 	@echo "  api/worker     Run Rust services against the dev stack"
 	@echo "  web            Run Next.js (API proxy to localhost:8080)"
 	@echo "  test           Rust tests (DB tests skip without ORBIT_TEST_DATABASE_URL)"
@@ -45,6 +47,15 @@ compose-reset:
 
 worker-opencode:
 	./scripts/dev-worker-opencode.sh
+
+worker-docker:
+	./scripts/dev-worker-docker.sh
+
+compose-build-opencode:
+	docker build -f deploy/docker/worker.Dockerfile -t orbit-worker:dev .
+	docker build --build-arg WORKER_BASE=orbit-worker:dev \
+	  --build-arg OPENCODE_ARCH=$$( [ "$$(uname -m)" = "arm64" ] && echo arm64 || echo x64 ) \
+	  -f deploy/docker/worker-opencode.Dockerfile -t orbit-worker-opencode:dev .
 
 api:
 	cargo run -p orbit-api-server

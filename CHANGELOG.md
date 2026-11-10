@@ -53,6 +53,40 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - X connector call returns a clear 401 with an invalid token (real API request path).
 - Existing mock-runtime smoke test and SSE through ingress continue to pass.
 
+## [0.2.0] — approvals, worker recovery, per-execution containers
+
+### Added
+- **Approvals UI**: pending queue with agent/execution context, argument preview,
+  approve/reject with comment, recent decisions, navigation badge and dashboard banner.
+  Backend decisions are audited; pending approvals expire when their execution reaps.
+- **Worker lease/reaper**: `worker_heartbeats` table; workers heartbeat every 10s; a
+  periodic reaper fails executions whose worker heartbeat is stale (15s grace + threshold)
+  and expires their pending approvals. Fixes stuck `running` rows after crashes/restarts.
+- **Per-execution Docker containers** (host dispatcher): `ORBIT_EXECUTION_DRIVER=docker`
+  starts a short-lived container per execution running `orbit-worker` in
+  `ORBIT_SINGLE_EXECUTION_ID` mode. The container has its own tool broker/MCP bridge,
+  workspace and heartbeat; the parent holds a concurrency permit and waits for exit.
+  Verified locally with mock and OpenCode + GitHub read in a spawned container.
+- `make worker-docker`, `scripts/dev-worker-docker.sh`, `make compose-build-opencode` and
+  host-architecture OpenCode image builds (`OPENCODE_ARCH`).
+- Real GitHub read verified end-to-end: OpenCode → MCP → broker → GitHub `issues.list`
+  → summarized output, including inside a per-execution Docker container.
+
+### Changed
+- Execution timeline hides reasoning, step and usage noise by default; generic internal
+  tools are debug-only. “Show verbose” reveals the raw stream.
+- OpenCode `PWD` is pinned to the per-execution workspace; verified `pwd` isolation.
+- OpenCode stderr diagnostics gated behind `debugLogs` (off by default).
+
+### Known limitations
+- Kubernetes still runs the worker in process mode; Job-per-execution dispatch is the
+  next isolation milestone. Docker dispatch requires Docker socket/CLI access and is for
+  single-user/homelab deployments.
+- GitHub write/approval E2E against a real repository still needs a PAT; the broker and
+  approvals UI are implemented, and the approval UI was verified with a real pending
+  approval record.
+- Orphaned executions are failed, not automatically retried (idempotent retries next).
+
 ## [Unreleased]
 
 ### Added

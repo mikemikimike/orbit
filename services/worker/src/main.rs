@@ -1,6 +1,8 @@
 mod broker;
 mod connectors;
+mod dispatch;
 mod github;
+mod liveness;
 mod resolver;
 mod runner;
 mod scheduler;
@@ -26,6 +28,9 @@ pub struct WorkerConfig {
     pub workspace_root: String,
     /// Runtime kinds this worker may claim. Enables separate runtime images/workers.
     pub runtimes: Vec<String>,
+    pub heartbeat_interval: Duration,
+    pub stale_after: Duration,
+    pub execution_driver: String,
 }
 
 impl WorkerConfig {
@@ -64,6 +69,22 @@ impl WorkerConfig {
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty())
                 .collect(),
+            heartbeat_interval: Duration::from_secs(
+                std::env::var("ORBIT_WORKER_HEARTBEAT_SECONDS")
+                    .ok()
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(10)
+                    .max(2),
+            ),
+            stale_after: Duration::from_secs(
+                std::env::var("ORBIT_WORKER_STALE_SECONDS")
+                    .ok()
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(90)
+                    .max(15),
+            ),
+            execution_driver: std::env::var("ORBIT_EXECUTION_DRIVER")
+                .unwrap_or_else(|_| "process".into()),
         })
     }
 }
@@ -143,6 +164,7 @@ async fn main() -> anyhow::Result<()> {
         registry: registry.clone(),
         workspace_root: std::path::PathBuf::from(&config.workspace_root),
         runtimes: config.runtimes.clone(),
+        execution_driver: config.execution_driver.clone(),
         active: Arc::new(tokio::sync::Mutex::new(std::collections::BTreeMap::new())),
     };
 
@@ -155,6 +177,26 @@ async fn main() -> anyhow::Result<()> {
         "ORBIT worker started"
     );
 
+    // Per-execution container mode: run exactly the assigned execution and exit.
+    if let Ok(execution_id) = std::env::var("ORBIT_SINGLE_EXECUTION_ID") {
+        let execution_id = uuid::Uuid::parse_str(&execution_id)
+            .context("ORBIT_SINGLE_EXECUTION_ID must be a UUID")?;
+        tracing::info!(%execution_id, worker_id = %state.worker_id, "single-execution worker starting");
+        state
+            .store
+            .upsert_worker_heartbeat(
+                &state.worker_id,
+                &state.runtimes,
+                std::env::var("HOSTNAME").ok().as_deref(),
+            )
+            .await?;
+        let result = runner::run_single(state.clone(), execution_id).await;
+        let _ = state.store.delete_worker_heartbeat(&state.worker_id).await;
+        result?;
+        tracing::info!(%execution_id, "single-execution worker finished");
+        return Ok(());
+    }
+
     let semaphore = Arc::new(Semaphore::new(config.concurrency));
     if config.scheduler_enabled {
         let scheduler_state = state.clone();
@@ -162,6 +204,7 @@ async fn main() -> anyhow::Result<()> {
             scheduler::run(scheduler_state).await;
         });
     }
+    liveness::spawn(state.clone(), config.heartbeat_interval, config.stale_after);
 
     loop {
         tokio::select! {
@@ -185,6 +228,9 @@ async fn main() -> anyhow::Result<()> {
             break;
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    if let Err(error) = state.store.delete_worker_heartbeat(&state.worker_id).await {
+        tracing::warn!(%error, "failed to remove worker heartbeat");
     }
     tracing::info!("ORBIT worker stopped");
     Ok(())

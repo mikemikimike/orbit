@@ -11,16 +11,19 @@ import {
   LayoutDashboard,
   Plus,
   Settings,
+  ShieldCheck,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useDashboard } from "@/lib/queries";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/executions", label: "Executions", icon: Activity },
+  { href: "/approvals", label: "Approvals", icon: ShieldCheck },
   { href: "/connections", label: "Connections", icon: Cable },
   { href: "/runtimes", label: "Runtimes", icon: Cpu },
   { href: "/models", label: "Models", icon: Boxes },
@@ -31,7 +34,7 @@ const MOBILE_NAV = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/executions", label: "Runs", icon: Activity },
-  { href: "/connections", label: "Connect", icon: Cable },
+  { href: "/approvals", label: "Approvals", icon: ShieldCheck },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -51,6 +54,8 @@ function BrandMark() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/";
+  const dashboard = useDashboard();
+  const pendingApprovals = dashboard.data?.summary.pendingApprovals ?? 0;
   const hideNewAgent = pathname.startsWith("/agents/new");
   const current = NAV.filter((item) => isActive(pathname, item.href)).at(-1);
 
@@ -82,7 +87,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 )}
               >
                 <item.icon className="h-4 w-4" />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {item.href === "/approvals" && pendingApprovals > 0 ? (
+                  <span className="rounded-full bg-[hsl(var(--warning))] px-1.5 text-[10px] font-semibold text-white">
+                    {pendingApprovals}
+                  </span>
+                ) : null}
               </Link>
             );
           })}
@@ -137,7 +147,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 active ? "text-primary" : "text-muted-foreground",
               )}
             >
-              <item.icon className={cn("h-5 w-5", active && "fill-primary/10")} />
+              <span className="relative">
+                <item.icon className={cn("h-5 w-5", active && "fill-primary/10")} />
+                {item.href === "/approvals" && pendingApprovals > 0 ? (
+                  <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[hsl(var(--warning))] px-1 text-[9px] font-semibold text-white">
+                    {pendingApprovals > 9 ? "9+" : pendingApprovals}
+                  </span>
+                ) : null}
+              </span>
               {item.label}
             </Link>
           );

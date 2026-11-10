@@ -44,6 +44,10 @@ Phase 0 foundation is implemented and validated:
   usage tokens and `AGENTS.md` instruction isolation.
 - **X read connector**: X recent-search posts are hydrated into the runtime input as
   untrusted context (bearer token from an encrypted connection).
+- **GitHub read via the policy-enforcing tool broker** (OpenCode → MCP → broker → GitHub),
+  verified end-to-end; write capabilities are approval-gated.
+- **Approvals UI**, worker heartbeats + orphaned-execution reaper, and opt-in
+  **per-execution Docker containers** for local/single-user deployments.
 - Providers (custom OpenAI-compatible endpoints, runtime-managed), connectors,
   connections, triggers, dashboard, API tokens, health/readiness/metrics, OpenAPI 3.1 +
   Swagger UI.
@@ -54,7 +58,9 @@ Phase 0 foundation is implemented and validated:
 
 Not yet implemented — do not assume otherwise:
 
-- X **posting/writes**, general connector capability invocation, OAuth/webhooks (Phase 2).
+- GitHub/X **writes** still need live end-to-end verification (approvals UI is in place).
+- Kubernetes **Job-per-execution** isolation (Docker per-execution works locally).
+- X posting, general connector invocation, OAuth/webhooks (Phase 2).
 - ORBIT platform provider → OpenCode provider mapping (use OpenCode-managed auth today).
 - Claude Code / Pi / generic adapters (registered descriptors only, fail closed).
 - Connector capability invocation, OAuth flows, webhook verification, approvals (Phase 2).

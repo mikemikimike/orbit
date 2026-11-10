@@ -22,6 +22,7 @@ pub mod identity;
 pub mod models;
 pub mod secrets;
 pub mod triggers;
+pub mod workers;
 
 pub use models::*;
 

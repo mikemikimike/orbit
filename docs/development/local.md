@@ -57,6 +57,24 @@ pnpm --filter @orbit/web dev       # terminal 3 (http://localhost:3000)
 The Next.js dev server proxies `/api/*` to `ORBIT_API_INTERNAL_URL` (default
 `http://localhost:8080`).
 
+## Docker container per execution (OpenCode)
+
+For a stronger local isolation story, run the host dispatcher. Each OpenCode execution
+starts a **new Docker container** running the worker in single-execution mode (own
+workspace, broker, MCP bridge, heartbeat), then is removed.
+
+```bash
+# one-time: credentials + local image (arm64 on Apple Silicon, amd64 on Linux)
+opencode auth export > .orbit-auth-export.json   # gitignored, contains secrets
+make compose-build-opencode
+
+# start the dispatcher (Postgres/NATS/API/web come from Compose)
+make worker-docker
+```
+
+The mock Compose worker stays running; the host dispatcher claims only `opencode`
+executions. Requires Docker socket/CLI access; treat it as a single-user/homelab mode.
+
 ## OpenCode + GitHub locally
 
 Keep the compose stack running (PostgreSQL, NATS, API, web, mock worker), then start a

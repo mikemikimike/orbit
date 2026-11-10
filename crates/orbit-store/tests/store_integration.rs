@@ -412,3 +412,132 @@ async fn runtime_catalog_upsert_is_idempotent() {
         "upsert must not duplicate built-in runtimes"
     );
 }
+
+#[tokio::test]
+async fn orphaned_executions_are_failed_and_approvals_expired() {
+    let Some(store) = test_store().await else {
+        return;
+    };
+    let (org, user) = seed_org(&store).await;
+    let (agent, version) = store
+        .create_agent(org, Some(user), &definition("Reaper Agent"))
+        .await
+        .unwrap();
+
+    let make_execution = |key: &'static str| {
+        let store = &store;
+        let agent = &agent;
+        let version = &version;
+        async move {
+            store
+                .create_execution(NewExecution {
+                    org_id: org,
+                    agent_id: agent.id,
+                    agent_version_id: version.id,
+                    agent_name: &agent.name,
+                    runtime_kind: RuntimeKind::Mock,
+                    trigger_source: TriggerSource::Manual,
+                    trigger_id: None,
+                    input: serde_json::json!({ "task": "x", "payload": {}, "provenance": { "source": "test", "trusted": true, "receivedAt": chrono::Utc::now() } }),
+                    timeout_seconds: 30,
+                    requested_by: Some(user),
+                    idempotency_key: Some(key),
+                })
+                .await
+                .unwrap()
+        }
+    };
+
+    let orphan = make_execution("orphan-1").await;
+    store
+        .claim_execution(orphan.id, "worker-gone")
+        .await
+        .unwrap();
+    store
+        .mark_execution_running(orphan.id, Some("s1"))
+        .await
+        .unwrap();
+    let approval = store
+        .create_approval(
+            org,
+            orphan.id,
+            serde_json::json!({ "capability": "issues.comment" }),
+            None,
+        )
+        .await
+        .unwrap();
+    sqlx::query("UPDATE executions SET created_at = now() - interval '1 hour' WHERE id = $1")
+        .bind(orphan.id)
+        .execute(store.pool())
+        .await
+        .unwrap();
+
+    // A live worker's execution must not be reaped.
+    let healthy = make_execution("healthy-1").await;
+    store
+        .claim_execution(healthy.id, "worker-alive")
+        .await
+        .unwrap();
+    store
+        .mark_execution_running(healthy.id, Some("s2"))
+        .await
+        .unwrap();
+    store
+        .upsert_worker_heartbeat("worker-alive", &["mock".into()], Some("test"))
+        .await
+        .unwrap();
+
+    let reaped = store.reap_orphaned_executions_for_org(org, 60).await.unwrap();
+    assert_eq!(reaped.len(), 1, "only the orphan should be reaped");
+    assert_eq!(reaped[0].id, orphan.id);
+    assert_eq!(reaped[0].status, "failed");
+    assert_eq!(reaped[0].error.as_ref().unwrap()["code"], "worker_lost");
+
+    assert_eq!(
+        store.get_execution(org, healthy.id).await.unwrap().status,
+        "running",
+        "live worker execution must survive"
+    );
+    assert_eq!(
+        store.get_approval(org, approval.id).await.unwrap().status,
+        "expired"
+    );
+}
+
+#[tokio::test]
+async fn single_execution_mode_can_take_a_dispatched_execution() {
+    let Some(store) = test_store().await else {
+        return;
+    };
+    let (org, user) = seed_org(&store).await;
+    let (agent, version) = store
+        .create_agent(org, Some(user), &definition("Single Execution Agent"))
+        .await
+        .unwrap();
+    let execution = store
+        .create_execution(NewExecution {
+            org_id: org,
+            agent_id: agent.id,
+            agent_version_id: version.id,
+            agent_name: &agent.name,
+            runtime_kind: RuntimeKind::Mock,
+            trigger_source: TriggerSource::Manual,
+            trigger_id: None,
+            input: serde_json::json!({ "task": "x", "payload": {}, "provenance": { "source": "test", "trusted": true, "receivedAt": chrono::Utc::now() } }),
+            timeout_seconds: 30,
+            requested_by: Some(user),
+            idempotency_key: Some("single-1"),
+        })
+        .await
+        .unwrap();
+    store
+        .claim_execution(execution.id, "parent-worker")
+        .await
+        .unwrap();
+    let taken = store
+        .take_execution_for_worker(execution.id, "container-worker")
+        .await
+        .unwrap()
+        .expect("dispatched execution must be takeable");
+    assert_eq!(taken.worker_id.as_deref(), Some("container-worker"));
+}
