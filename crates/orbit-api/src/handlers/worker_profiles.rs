@@ -252,10 +252,11 @@ pub async fn bootstrap(
         format!("  -e ORBIT_WORKER_HARNESSES={}", profile.harness_kind),
         format!("  -e ORBIT_WORKER_TARGET={}", profile.target),
         format!("  -e ORBIT_EXECUTION_DRIVER={}", profile.execution_driver),
-        "  -e ORBIT_DATABASE_URL='postgres://orbit:CHANGE_ME@host.docker.internal:5432/orbit'"
-            .into(),
-        "  -e ORBIT_NATS_URL='nats://host.docker.internal:4222'".into(),
-        "  -e ORBIT_MASTER_KEY='CHANGE_ME'".into(),
+        // 0.4.x workers are still database-coupled. Pass credentials from the caller's
+        // environment rather than printing placeholders or secrets into the manifest.
+        "  -e ORBIT_DATABASE_URL".into(),
+        "  -e ORBIT_NATS_URL".into(),
+        "  -e ORBIT_MASTER_KEY".into(),
     ];
     let mut compose_volumes = String::new();
     let mut compose_command = String::new();
@@ -353,6 +354,7 @@ spec:
         "The worker loads its agent allowlist and skills from the profile at startup.".into(),
         "Credentials are never included here; mount the harness auth Secret/volume.".into(),
         "Pin the image tag to a release and use the generated manifest as a starting point.".into(),
+        "0.4.x workers still read PostgreSQL, NATS and the master key directly; the scoped worker-token API replaces these in 0.5.0.".into(),
     ];
     if has_auth {
         notes.push(format!(
