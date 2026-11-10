@@ -32,6 +32,7 @@ interface ProviderForm {
   kind: "openai_compatible" | "harness_managed";
   baseUrl: string;
   model: string;
+  models: string;
   credential: string;
   contextWindow: string;
   maxOutputTokens: string;
@@ -49,6 +50,7 @@ const EMPTY_FORM: ProviderForm = {
   kind: "openai_compatible",
   baseUrl: "",
   model: "",
+  models: "",
   credential: "",
   contextWindow: "",
   maxOutputTokens: "",
@@ -95,6 +97,19 @@ export default function ModelsPage() {
               harness: form.harnessKind,
               provider: form.harnessProvider.trim() || undefined,
               model: form.model.trim() || undefined,
+              settings: {
+                ...(form.models
+                  .split(",")
+                  .map((value) => value.trim())
+                  .filter(Boolean).length
+                  ? {
+                      models: form.models
+                        .split(",")
+                        .map((value) => value.trim())
+                        .filter(Boolean),
+                    }
+                  : {}),
+              },
             };
 
       if (editing) {
@@ -182,6 +197,9 @@ export default function ModelsPage() {
       kind: provider.kind as ProviderForm["kind"],
       baseUrl: String(config.baseUrl ?? ""),
       model: String(config.model ?? ""),
+      models: Array.isArray((config.settings as Record<string, unknown> | undefined)?.models)
+        ? ((config.settings as Record<string, unknown>).models as string[]).join(", ")
+        : "",
       contextWindow: config.contextWindow ? String(config.contextWindow) : "",
       maxOutputTokens: config.maxOutputTokens ? String(config.maxOutputTokens) : "",
       tools: Boolean(compat.tools),
@@ -265,6 +283,21 @@ export default function ModelsPage() {
                         <p className="text-muted-foreground">
                           provider: <span className="font-mono">{String(config.provider ?? "—")}</span>
                         </p>
+                        <p className="text-muted-foreground">
+                          model: <span className="font-mono">{String(config.model ?? "harness default")}</span>
+                        </p>
+                        {Array.isArray((config.settings as Record<string, unknown> | undefined)?.models) &&
+                        ((config.settings as Record<string, unknown>).models as string[]).length ? (
+                          <p
+                            className="text-muted-foreground"
+                            title={((config.settings as Record<string, unknown>).models as string[]).join(", ")}
+                          >
+                            catalog:{" "}
+                            <span className="font-mono">
+                              {((config.settings as Record<string, unknown>).models as string[]).length} models
+                            </span>
+                          </p>
+                        ) : null}
                       </>
                     )}
                     <p className="text-muted-foreground">
@@ -430,18 +463,47 @@ export default function ModelsPage() {
                     onChange={(event) => setForm({ ...form, harnessProvider: event.target.value })}
                   />
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="space-y-1.5">
                   <Label>Default model (optional)</Label>
-                  <Input
-                    value={form.model}
-                    placeholder="harness default"
-                    onChange={(event) => setForm({ ...form, model: event.target.value })}
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    Harness-managed providers are authenticated by their harness; ORBIT only stores
-                    the credential reference.
-                  </p>
+                  {form.models.split(",").map((value) => value.trim()).filter(Boolean).length ? (
+                    <select
+                      className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+                      value={form.model}
+                      onChange={(event) => setForm({ ...form, model: event.target.value })}
+                    >
+                      <option value="">Harness default</option>
+                      {form.models
+                        .split(",")
+                        .map((value) => value.trim())
+                        .filter(Boolean)
+                        .map((candidate) => (
+                          <option key={candidate} value={candidate}>
+                            {candidate}
+                          </option>
+                        ))}
+                    </select>
+                  ) : (
+                    <Input
+                      value={form.model}
+                      placeholder="harness default"
+                      onChange={(event) => setForm({ ...form, model: event.target.value })}
+                    />
+                  )}
                 </div>
+                <div className="space-y-1.5">
+                  <Label>Model catalog (optional)</Label>
+                  <Input
+                    value={form.models}
+                    placeholder="deepseek-v4-pro, claude-sonnet-4"
+                    onChange={(event) => setForm({ ...form, models: event.target.value })}
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground sm:col-span-2">
+                  Comma-separated models populate the model selectors in agent and worker forms.
+                  Leave the catalog empty to allow any harness-defined model. Harness-managed
+                  providers are authenticated by their harness; ORBIT stores only the credential
+                  reference.
+                </p>
               </div>
             )}
 

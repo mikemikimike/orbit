@@ -29,6 +29,7 @@ import {
   queryKeys,
   unwrap,
   useAgents,
+  useProviders,
   useSkills,
   useWorkerProfiles,
 } from "@/lib/queries";
@@ -44,6 +45,7 @@ const DEFAULT_IMAGES: Record<string, string> = {
 
 export default function WorkersPage() {
   const profiles = useWorkerProfiles();
+  const providers = useProviders();
   const agents = useAgents({ limit: 100 });
   const skills = useSkills();
   const queryClient = useQueryClient();
@@ -55,12 +57,27 @@ export default function WorkersPage() {
   const [target, setTarget] = useState("docker");
   const [driver, setDriver] = useState("process");
   const [image, setImage] = useState(DEFAULT_IMAGES.pi);
-  const [tag, setTag] = useState("0.2.1");
+  const [tag, setTag] = useState("0.4.0");
   const [provider, setProvider] = useState("opencode-go");
   const [model, setModel] = useState("deepseek-v4-pro");
   const [authSecret, setAuthSecret] = useState("");
   const [agentIds, setAgentIds] = useState<string[]>([]);
   const [skillSlugs, setSkillSlugs] = useState<string[]>([]);
+
+  const harnessProviders = (providers.data ?? []).filter((candidate) => {
+    const config = (candidate.config ?? {}) as Record<string, unknown>;
+    return candidate.kind === "harness_managed" && String(config.harness ?? "") === harness;
+  });
+  const selectedProvider = harnessProviders.find((candidate) => {
+    const config = (candidate.config ?? {}) as Record<string, unknown>;
+    return String(config.provider ?? "") === provider;
+  });
+  const providerModels = (() => {
+    const settings = (selectedProvider?.config as Record<string, unknown> | undefined)?.settings as
+      | Record<string, unknown>
+      | undefined;
+    return Array.isArray(settings?.models) ? (settings?.models as string[]) : [];
+  })();
 
   const create = useMutation({
     mutationFn: async () =>
@@ -272,11 +289,78 @@ export default function WorkersPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Provider</Label>
-              <Input value={provider} onChange={(event) => setProvider(event.target.value)} />
+              {harnessProviders.length ? (
+                <>
+                  <select
+                    className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+                    value={selectedProvider ? provider : "__custom"}
+                    onChange={(event) => {
+                      if (event.target.value === "__custom") {
+                        setProvider("");
+                        setModel("");
+                        return;
+                      }
+                      const next = harnessProviders.find((candidate) => {
+                        const config = (candidate.config ?? {}) as Record<string, unknown>;
+                        return String(config.provider ?? "") === event.target.value;
+                      });
+                      const config = (next?.config ?? {}) as Record<string, unknown>;
+                      setProvider(event.target.value);
+                      setModel(String(config.model ?? ""));
+                    }}
+                  >
+                    <option value="__custom">Custom provider…</option>
+                    {harnessProviders.map((candidate) => {
+                      const config = (candidate.config ?? {}) as Record<string, unknown>;
+                      const name = String(config.provider ?? candidate.name);
+                      return (
+                        <option key={candidate.id} value={name}>
+                          {candidate.name} · {name}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {selectedProvider ? null : (
+                    <Input
+                      value={provider}
+                      placeholder="harness provider name, e.g. opencode-go"
+                      onChange={(event) => setProvider(event.target.value)}
+                    />
+                  )}
+                </>
+              ) : (
+                <Input
+                  value={provider}
+                  placeholder="opencode-go"
+                  onChange={(event) => setProvider(event.target.value)}
+                />
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Model</Label>
-              <Input value={model} onChange={(event) => setModel(event.target.value)} />
+              {providerModels.length ? (
+                <select
+                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+                  value={model}
+                  onChange={(event) => setModel(event.target.value)}
+                >
+                  {providerModels.includes(model) ? null : (
+                    <option value={model}>{model || "Provider default"}</option>
+                  )}
+                  {providerModels.map((candidate) => (
+                    <option key={candidate} value={candidate}>
+                      {candidate}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input value={model} onChange={(event) => setModel(event.target.value)} />
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                {selectedProvider
+                  ? "Default model from the selected provider; override if needed."
+                  : "Free-form model id for custom or harness-default providers."}
+              </p>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Auth secret name (external)</Label>
