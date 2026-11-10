@@ -3,7 +3,7 @@
 #
 # The base worker image is extended with the OpenCode CLI (not bundled into the control
 # plane). In Kubernetes this runs as a separate Deployment with
-# ORBIT_WORKER_HARNESSS=opencode so only this image claims OpenCode executions.
+# ORBIT_WORKER_HARNESSES=opencode so only this image claims OpenCode executions.
 ARG WORKER_BASE=192.168.1.201:5000/orbit-worker:0.4.0
 FROM ${WORKER_BASE}
 
@@ -32,7 +32,7 @@ ENV HOME=/home/orbit \
     XDG_DATA_HOME=/home/orbit/.local/share \
     XDG_CONFIG_HOME=/home/orbit/.config \
     XDG_CACHE_HOME=/home/orbit/.cache \
-    ORBIT_WORKER_HARNESSS=opencode
+    ORBIT_WORKER_HARNESSES=opencode
 
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/orbit-worker"]

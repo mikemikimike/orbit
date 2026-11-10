@@ -23,7 +23,7 @@ RUN mkdir -p /home/orbit/.pi/agent \
 
 ENV HOME=/home/orbit \
     PI_CODING_AGENT_DIR=/home/orbit/.pi/agent \
-    ORBIT_WORKER_HARNESSS=pi
+    ORBIT_WORKER_HARNESSES=pi
 
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/orbit-worker"]
