@@ -51,6 +51,8 @@ issues, so a coding agent could not complete a repository loop.
   manifest descriptor, tool schema/effect, invocation implementation and policy tests.
 - An agent's connector binding selects the capability subset. The token/scope on the
   external credential is the hard external limit; ORBIT's binding is the platform limit.
+- Agent Teams do not own connections; each step uses its agent's binding. See
+  `docs/architecture/agent-teams.md` for the operator flow.
 - Connection `scopes` remain informational. Enforcement uses the agent binding,
   autonomy level and approvals.
 - GitHub is the reference connector. Its coding loop adds:
