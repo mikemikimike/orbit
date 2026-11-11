@@ -59,10 +59,17 @@ export function deleteAgentTeam(teamId: string): Promise<void> {
   return request<void>(`/api/v1/agent-teams/${teamId}`, { method: "DELETE" });
 }
 
-export function startTeamRun(teamId: string, task: string): Promise<TeamRunDetail> {
+export function startTeamRun(
+  teamId: string,
+  task: string,
+  repository?: string,
+): Promise<TeamRunDetail> {
   return request<TeamRunDetail>(`/api/v1/agent-teams/${teamId}/runs`, {
     method: "POST",
-    body: JSON.stringify({ task, payload: {} }),
+    body: JSON.stringify({
+      task,
+      payload: repository?.trim() ? { repository: repository.trim() } : {},
+    }),
   });
 }
 

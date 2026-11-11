@@ -70,6 +70,7 @@ export default function AgentTeamsPage() {
   ]);
   const [runTeam, setRunTeam] = useState<AgentTeam | null>(null);
   const [task, setTask] = useState("");
+  const [repository, setRepository] = useState("");
   const [detail, setDetail] = useState<TeamRunDetail | null>(null);
 
   const agentOptions = agents.data?.items ?? [];
@@ -144,7 +145,7 @@ export default function AgentTeamsPage() {
   });
 
   const run = useMutation({
-    mutationFn: () => startTeamRun(runTeam!.id, task.trim()),
+    mutationFn: () => startTeamRun(runTeam!.id, task.trim(), repository),
     onSuccess: (result) => {
       toast.success("Agent team run started");
       setRunTeam(null);
@@ -231,6 +232,7 @@ export default function AgentTeamsPage() {
                       onClick={() => {
                         setRunTeam(team);
                         setTask(team.definition.instructions ?? "");
+                        setRepository("");
                       }}
                     >
                       <Play /> Run
@@ -453,6 +455,12 @@ export default function AgentTeamsPage() {
               value={task}
               onChange={(event) => setTask(event.target.value)}
               placeholder={runTeam?.definition.instructions || "Team goal"}
+            />
+            <Label>Repository</Label>
+            <Input
+              value={repository}
+              onChange={(event) => setRepository(event.target.value)}
+              placeholder="owner/repo (optional if the connection sets defaultRepository)"
             />
           </div>
           <DialogFooter>
