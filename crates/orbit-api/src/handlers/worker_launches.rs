@@ -120,7 +120,10 @@ async fn refresh(state: &AppState, launch: WorkerLaunch) -> WorkerLaunch {
         Err(_) => return launch,
     };
     let response = client
-        .get(format!("{url}/launches/{}", launch.id))
+        .get(format!(
+            "{url}/launches/{}?target={}",
+            launch.id, launch.target
+        ))
         .bearer_auth(token)
         .send()
         .await;
@@ -286,7 +289,7 @@ pub async fn stop_launch(
     let _: serde_json::Value = call_launcher(
         &state,
         reqwest::Method::POST,
-        &format!("/launches/{launch_id}/stop"),
+        &format!("/launches/{launch_id}/stop?target={}", launch.target),
         Some(serde_json::json!({})),
     )
     .await?;
@@ -317,14 +320,14 @@ pub async fn launch_logs(
     Path(launch_id): Path<Uuid>,
 ) -> Result<Json<LaunchLogs>, ApiError> {
     auth.require(Permission::HarnessesRead)?;
-    let _ = state
+    let launch = state
         .store
         .get_worker_launch(auth.org_id, launch_id)
         .await?;
     let logs: LaunchLogs = call_launcher(
         &state,
         reqwest::Method::GET,
-        &format!("/launches/{launch_id}/logs"),
+        &format!("/launches/{launch_id}/logs?target={}", launch.target),
         None,
     )
     .await?;

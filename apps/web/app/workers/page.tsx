@@ -68,7 +68,7 @@ export default function WorkersPage() {
   const [target, setTarget] = useState("docker");
   const [driver, setDriver] = useState("process");
   const [image, setImage] = useState(DEFAULT_IMAGES.opencode);
-  const [tag, setTag] = useState("0.4.0");
+  const [tag, setTag] = useState("0.5.1");
   const [provider, setProvider] = useState("opencode-go");
   const [model, setModel] = useState("deepseek-v4-pro");
   const [authSecret, setAuthSecret] = useState("");

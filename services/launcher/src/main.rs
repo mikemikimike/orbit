@@ -7,7 +7,7 @@
 use std::collections::BTreeMap;
 use std::process::Stdio;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
@@ -64,6 +64,15 @@ struct LaunchStatus {
 #[serde(rename_all = "camelCase")]
 struct Logs {
     logs: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct DriverQuery {
+    target: Option<String>,
+}
+
+fn docker_target(target: Option<&str>) -> bool {
+    matches!(target, Some("docker") | Some("local"))
 }
 
 #[tokio::main]
@@ -493,6 +502,7 @@ async fn status(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(launch_id): Path<Uuid>,
+    Query(query): Query<DriverQuery>,
 ) -> Result<Json<LaunchStatus>, (StatusCode, Json<Value>)> {
     if !authorized(&headers, &state.token) {
         return Err((
@@ -501,7 +511,11 @@ async fn status(
         ));
     }
     let name = pod_name(launch_id);
-    let status = if docker_exists(&state, &name).await {
+    let status = if docker_target(query.target.as_deref()) {
+        docker_status(&state, &name).await
+    } else if query.target.as_deref() == Some("kubernetes") {
+        kubernetes_status(&state, &name).await
+    } else if docker_exists(&state, &name).await {
         docker_status(&state, &name).await
     } else {
         kubernetes_status(&state, &name).await
@@ -509,24 +523,11 @@ async fn status(
     Ok(Json(status))
 }
 
-impl AppState {
-    async fn kubectl_available(&self) -> bool {
-        Command::new(&self.kubectl)
-            .arg("version")
-            .arg("--client")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .await
-            .map(|status| status.success())
-            .unwrap_or(false)
-    }
-}
-
 async fn stop(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(launch_id): Path<Uuid>,
+    Query(query): Query<DriverQuery>,
 ) -> Result<Json<LaunchStatus>, (StatusCode, Json<Value>)> {
     if !authorized(&headers, &state.token) {
         return Err((
@@ -535,7 +536,7 @@ async fn stop(
         ));
     }
     let name = pod_name(launch_id);
-    if state.kubectl_available().await {
+    if query.target.as_deref() == Some("kubernetes") {
         let _ = Command::new(&state.kubectl)
             .args([
                 "-n",
@@ -547,13 +548,14 @@ async fn stop(
             ])
             .status()
             .await;
+    } else {
+        let _ = Command::new(&state.docker)
+            .args(["rm", "-f", &name])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await;
     }
-    let _ = Command::new(&state.docker)
-        .args(["rm", "-f", &name])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .await;
     Ok(Json(LaunchStatus {
         status: "stopped".into(),
         runtime_id: Some(name),
@@ -566,6 +568,7 @@ async fn logs(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(launch_id): Path<Uuid>,
+    Query(query): Query<DriverQuery>,
 ) -> Result<Json<Logs>, (StatusCode, Json<Value>)> {
     if !authorized(&headers, &state.token) {
         return Err((
@@ -574,18 +577,16 @@ async fn logs(
         ));
     }
     let name = pod_name(launch_id);
-    let docker_output = Command::new(&state.docker)
-        .args(["logs", "--tail", "200", &name])
-        .output()
-        .await;
-    let output = match docker_output {
-        Ok(output) if output.status.success() => Ok(output),
-        _ => {
-            Command::new(&state.kubectl)
-                .args(["-n", &state.namespace, "logs", &name, "--tail=200"])
-                .output()
-                .await
-        }
+    let output = if query.target.as_deref() == Some("kubernetes") {
+        Command::new(&state.kubectl)
+            .args(["-n", &state.namespace, "logs", &name, "--tail=200"])
+            .output()
+            .await
+    } else {
+        Command::new(&state.docker)
+            .args(["logs", "--tail", "200", &name])
+            .output()
+            .await
     };
     let logs = match output {
         Ok(output) => {
