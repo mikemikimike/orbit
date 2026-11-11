@@ -170,7 +170,9 @@ export default function ApprovalsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {review?.decision === "approved" ? "Approve action" : "Reject action"}
+              {review?.decision === "approved"
+                ? `Approve: ${review ? approvalTitle(review.approval) : "action"}`
+                : "Reject action"}
             </DialogTitle>
             <DialogDescription>
               {review ? `${review.approval.agentName} · ${capabilityOf(review.approval)}` : ""}
@@ -234,7 +236,7 @@ function ApprovalCard({
               <ExecutionStatusBadge status={approval.executionStatus} />
             </p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              {capabilityOf(approval)} · requested {relativeTime(approval.createdAt)}
+              {approvalTitle(approval)} · requested {relativeTime(approval.createdAt)}
             </p>
           </div>
           <div className="flex gap-2">
@@ -263,27 +265,112 @@ function ApprovalCard({
 
 function ApprovalDetails({ approval }: { approval: ApprovalWithExecution }) {
   const action = (approval.requestedAction ?? {}) as {
+    capability?: string;
+    connector?: string;
     connectionName?: string;
     effect?: string;
-    arguments?: unknown;
+    arguments?: Record<string, unknown>;
   };
+  const args = action.arguments ?? {};
+  const rows = actionRows(action.capability, args);
   return (
     <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-xs">
-      <div className="flex flex-wrap gap-x-4 gap-y-1">
+      <p className="text-sm font-medium">{approvalTitle(approval)}</p>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+        <span>
+          <span className="text-muted-foreground">agent:</span> {approval.agentName}
+        </span>
         <span>
           <span className="text-muted-foreground">connection:</span>{" "}
           {action.connectionName ?? "—"}
+        </span>
+        <span>
+          <span className="text-muted-foreground">connector:</span>{" "}
+          {action.connector ?? "—"}
         </span>
         <span>
           <span className="text-muted-foreground">effect:</span>{" "}
           {action.effect ? action.effect.replace("_", " ") : "—"}
         </span>
       </div>
-      <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] text-muted-foreground">
-        {JSON.stringify(action.arguments ?? {}, null, 2)}
-      </pre>
+      {rows.length ? (
+        <dl className="grid gap-1 sm:grid-cols-[7rem_1fr]">
+          {rows.map(([label, value]) => (
+            <div key={label} className="contents">
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="break-words font-mono text-[11px]">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      <p className="text-[10px] text-muted-foreground">
+        Approving allows this exact call once. Rejecting returns a policy error to the
+        harness without executing it.
+      </p>
+      {Object.keys(args).length ? (
+        <details>
+          <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground">
+            Raw arguments
+          </summary>
+          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] text-muted-foreground">
+            {JSON.stringify(args, null, 2)}
+          </pre>
+        </details>
+      ) : null}
     </div>
   );
+}
+
+function approvalTitle(approval: ApprovalWithExecution): string {
+  const action = (approval.requestedAction ?? {}) as {
+    capability?: string;
+    arguments?: Record<string, unknown>;
+  };
+  const args = action.arguments ?? {};
+  switch (action.capability) {
+    case "repo.commit":
+      return `Commit changes${args.message ? `: ${String(args.message).slice(0, 80)}` : ""}`;
+    case "repo.push":
+      return `Push branch${args.branch ? ` ${args.branch}` : ""}`;
+    case "pulls.create":
+      return `Open pull request${args.title ? `: ${String(args.title).slice(0, 80)}` : ""}`;
+    case "issues.comment":
+      return `Comment on issue${args.number ? ` #${args.number}` : ""}`;
+    case "issues.update":
+      return `Update issue${args.number ? ` #${args.number}` : ""}`;
+    case "issues.create":
+      return `Create issue${args.title ? `: ${String(args.title).slice(0, 80)}` : ""}`;
+    default:
+      return capabilityOf(approval);
+  }
+}
+
+function actionRows(
+  capability: string | undefined,
+  args: Record<string, unknown>,
+): Array<[string, string]> {
+  const rows: Array<[string, string]> = [];
+  const push = (label: string, value: unknown) => {
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      rows.push([label, String(value).slice(0, 1000)]);
+    }
+  };
+  if (capability === "repo.commit") push("message", args.message);
+  if (capability === "repo.push") push("branch", args.branch);
+  if (capability === "pulls.create") {
+    push("title", args.title);
+    push("head", args.head);
+    push("base", args.base);
+    push("draft", args.draft);
+  }
+  if (capability?.startsWith("issues.")) push("number", args.number);
+  if (capability === "issues.update" || capability === "issues.create") {
+    push("state", args.state);
+    push("labels", Array.isArray(args.labels) ? args.labels.join(", ") : args.labels);
+    push("assignees", Array.isArray(args.assignees) ? args.assignees.join(", ") : args.assignees);
+  }
+  if (capability === "issues.comment") push("body", args.body);
+  return rows;
 }
 
 function capabilityOf(approval: ApprovalWithExecution): string {

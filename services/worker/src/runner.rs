@@ -100,7 +100,16 @@ pub async fn run_execution(
 ) -> anyhow::Result<()> {
     let execution = context.execution.clone();
     let execution_id = execution.id;
-    let spec = context.spec;
+    let mut spec = context.spec;
+    if execution
+        .input
+        .get("autonomyOverride")
+        .and_then(|value| value.as_u64())
+        == Some(4)
+    {
+        spec.autonomy.level = 4;
+        spec.autonomy.approval_mode = orbit_domain::ApprovalMode::Auto;
+    }
     let harness_kind = spec.harness.kind;
 
     let adapter = match state.registry.require(harness_kind) {

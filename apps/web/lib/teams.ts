@@ -63,12 +63,14 @@ export function startTeamRun(
   teamId: string,
   task: string,
   repository?: string,
+  autoApprove = false,
 ): Promise<TeamRunDetail> {
   return request<TeamRunDetail>(`/api/v1/agent-teams/${teamId}/runs`, {
     method: "POST",
     body: JSON.stringify({
       task,
       payload: repository?.trim() ? { repository: repository.trim() } : {},
+      autoApprove,
     }),
   });
 }

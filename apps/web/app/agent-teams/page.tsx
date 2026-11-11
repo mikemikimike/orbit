@@ -71,6 +71,7 @@ export default function AgentTeamsPage() {
   const [runTeam, setRunTeam] = useState<AgentTeam | null>(null);
   const [task, setTask] = useState("");
   const [repository, setRepository] = useState("");
+  const [autoApprove, setAutoApprove] = useState(false);
   const [detail, setDetail] = useState<TeamRunDetail | null>(null);
 
   const agentOptions = agents.data?.items ?? [];
@@ -145,7 +146,7 @@ export default function AgentTeamsPage() {
   });
 
   const run = useMutation({
-    mutationFn: () => startTeamRun(runTeam!.id, task.trim(), repository),
+    mutationFn: () => startTeamRun(runTeam!.id, task.trim(), repository, autoApprove),
     onSuccess: (result) => {
       toast.success("Agent team run started");
       setRunTeam(null);
@@ -233,6 +234,7 @@ export default function AgentTeamsPage() {
                         setRunTeam(team);
                         setTask(team.definition.instructions ?? "");
                         setRepository("");
+                        setAutoApprove(false);
                       }}
                     >
                       <Play /> Run
@@ -462,6 +464,21 @@ export default function AgentTeamsPage() {
               onChange={(event) => setRepository(event.target.value)}
               placeholder="owner/repo (optional if the connection sets defaultRepository)"
             />
+            <label className="flex items-start gap-2 rounded-lg border border-[hsl(var(--warning))]/40 bg-[hsl(var(--warning))]/10 p-3 text-xs">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-[hsl(var(--primary))]"
+                checked={autoApprove}
+                onChange={(event) => setAutoApprove(event.target.checked)}
+              />
+              <span>
+                <span className="font-medium">Auto-approve writes for this run (L4)</span>
+                <span className="mt-0.5 block text-muted-foreground">
+                  Bound GitHub writes execute without human approval. Capability allowlists
+                  still apply. Use only for trusted repositories and tested agents.
+                </span>
+              </span>
+            </label>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setRunTeam(null)}>Cancel</Button>

@@ -48,6 +48,9 @@ pub struct CreateTeamRunRequest {
     pub task: String,
     #[serde(default)]
     pub payload: serde_json::Value,
+    /// Explicitly allow bound writes for this run without per-call approvals (L4).
+    #[serde(default)]
+    pub auto_approve: bool,
 }
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
@@ -374,7 +377,8 @@ pub(crate) async fn start_step(
             "subject": run.id,
             "receivedAt": chrono::Utc::now(),
         },
-        "team": team_payload
+        "team": team_payload,
+        "autonomyOverride": if run.input.get("autoApprove").and_then(|value| value.as_bool()) == Some(true) { 4 } else { 0 }
     });
     let execution = state
         .store
@@ -438,6 +442,7 @@ pub async fn create_run(
         "instructions": definition.instructions,
         "payload": body.payload,
         "definition": definition,
+        "autoApprove": body.auto_approve,
     });
     let run = state
         .store
