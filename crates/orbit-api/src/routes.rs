@@ -93,6 +93,20 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/executions/{execution_id}/cancel",
             post(handlers::executions::cancel_execution),
         )
+        .route(
+            "/api/v1/agent-teams",
+            get(handlers::teams::list_teams).post(handlers::teams::create_team),
+        )
+        .route(
+            "/api/v1/agent-teams/{team_id}",
+            get(handlers::teams::get_team).delete(handlers::teams::delete_team),
+        )
+        .route(
+            "/api/v1/agent-teams/{team_id}/runs",
+            post(handlers::teams::create_run),
+        )
+        .route("/api/v1/team-runs", get(handlers::teams::list_runs))
+        .route("/api/v1/team-runs/{run_id}", get(handlers::teams::get_run))
         .route("/api/v1/harnesses", get(handlers::catalog::list_harnesses))
         .route("/api/v1/workers", get(handlers::catalog::list_workers))
         .route(

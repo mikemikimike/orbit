@@ -107,13 +107,19 @@ pub async fn invoke(
     let url = request_url(config, capability, &owner, &repo, args)?;
 
     let mut request = match capability {
-        "issues.list" | "issues.get" => client.get(url),
-        "issues.comment" | "issues.create" => client.post(url),
+        "issues.list" | "issues.get" | "pulls.list" | "pulls.get" | "checks.list" => {
+            client.get(url)
+        }
+        "issues.comment" | "issues.create" | "pulls.create" => client.post(url),
+        "issues.update" => client.patch(url),
         other => return Err(format!("unsupported GitHub capability: {other}")),
     };
     if let Some(token) = &config.token {
         request = request.bearer_auth(token);
-    } else if matches!(capability, "issues.comment" | "issues.create") {
+    } else if matches!(
+        capability,
+        "issues.comment" | "issues.create" | "issues.update" | "pulls.create"
+    ) {
         // Public reads are allowed (anonymous GitHub rate limits); writes are not.
         config.requires_token(capability)?;
     }
@@ -153,6 +159,44 @@ pub async fn invoke(
             }
             request = request.json(&payload);
         }
+        "issues.update" => {
+            let mut payload = serde_json::Map::new();
+            for key in ["title", "body", "state"] {
+                if let Some(value) = args.get(key).and_then(Value::as_str) {
+                    payload.insert(key.into(), json!(value));
+                }
+            }
+            for key in ["labels", "assignees"] {
+                if let Some(values) = args.get(key).and_then(Value::as_array) {
+                    payload.insert(
+                        key.into(),
+                        json!(values.iter().filter_map(Value::as_str).collect::<Vec<_>>()),
+                    );
+                }
+            }
+            request = request.json(&Value::Object(payload));
+        }
+        "pulls.create" => {
+            let title = args
+                .get("title")
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| "pull request title is required".to_string())?;
+            let head = args
+                .get("head")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "pull request head branch is required".to_string())?;
+            let base = args.get("base").and_then(Value::as_str).unwrap_or("main");
+            let mut payload = json!({ "title": title, "head": head, "base": base });
+            for key in ["body", "draft"] {
+                if let Some(value) = args.get(key) {
+                    if !value.is_null() {
+                        payload[key] = value.clone();
+                    }
+                }
+            }
+            request = request.json(&payload);
+        }
         _ => {}
     }
 
@@ -181,6 +225,37 @@ pub async fn invoke(
                 .map(|items| items.iter().map(summarize_issue).collect())
                 .unwrap_or_default();
             json!({ "repository": format!("{owner}/{repo}"), "count": items.len(), "issues": items })
+        }
+        "pulls.list" => {
+            let items: Vec<Value> = body
+                .as_array()
+                .map(|items| items.iter().map(summarize_pull).collect())
+                .unwrap_or_default();
+            json!({ "repository": format!("{owner}/{repo}"), "count": items.len(), "pullRequests": items })
+        }
+        "pulls.get" | "pulls.create" => summarize_pull(&body),
+        "checks.list" => {
+            let items: Vec<Value> = body
+                .get("check_runs")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .map(|check| {
+                            json!({
+                                "id": check.get("id"),
+                                "name": check.get("name"),
+                                "status": check.get("status"),
+                                "conclusion": check.get("conclusion"),
+                                "detailsUrl": check.get("details_url"),
+                                "startedAt": check.get("started_at"),
+                                "completedAt": check.get("completed_at"),
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            json!({ "repository": format!("{owner}/{repo}"), "count": items.len(), "checks": items })
         }
         _ => summarize_issue(&body),
     })
@@ -219,7 +294,39 @@ fn request_url(
             number(args)?
         ),
         "issues.create" => format!("{base}/repos/{owner}/{repo}/issues"),
+        "issues.update" => format!("{base}/repos/{owner}/{repo}/issues/{}", number(args)?),
+        "pulls.list" => {
+            let state = args.get("state").and_then(Value::as_str).unwrap_or("open");
+            format!("{base}/repos/{owner}/{repo}/pulls?state={state}&per_page=20")
+        }
+        "pulls.get" => format!("{base}/repos/{owner}/{repo}/pulls/{}", number(args)?),
+        "pulls.create" => format!("{base}/repos/{owner}/{repo}/pulls"),
+        "checks.list" => {
+            let reference = args
+                .get("ref")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "check ref (commit or branch) is required".to_string())?;
+            format!("{base}/repos/{owner}/{repo}/commits/{reference}/check-runs?per_page=20")
+        }
         other => return Err(format!("unsupported GitHub capability: {other}")),
+    })
+}
+
+fn summarize_pull(pull: &Value) -> Value {
+    json!({
+        "id": pull.get("id"),
+        "number": pull.get("number"),
+        "title": pull.get("title"),
+        "state": pull.get("state"),
+        "draft": pull.get("draft"),
+        "body": pull.get("body").and_then(Value::as_str).map(|b| b.chars().take(4000).collect::<String>()),
+        "url": pull.get("html_url"),
+        "head": pull.get("head").and_then(|h| h.get("ref")),
+        "base": pull.get("base").and_then(|b| b.get("ref")),
+        "author": pull.get("user").and_then(|u| u.get("login")),
+        "mergeable": pull.get("mergeable"),
+        "createdAt": pull.get("created_at"),
+        "updatedAt": pull.get("updated_at"),
     })
 }
 
@@ -296,6 +403,28 @@ mod tests {
         assert_eq!(
             request_url(&config, "issues.list", "acme", "orbit", &json!({})).unwrap(),
             "https://api.github.com/repos/acme/orbit/issues?state=open&per_page=20"
+        );
+        assert_eq!(
+            request_url(
+                &config,
+                "pulls.create",
+                "acme",
+                "orbit",
+                &json!({"title": "x", "head": "feature"})
+            )
+            .unwrap(),
+            "https://api.github.com/repos/acme/orbit/pulls"
+        );
+        assert_eq!(
+            request_url(
+                &config,
+                "checks.list",
+                "acme",
+                "orbit",
+                &json!({"ref": "feature"})
+            )
+            .unwrap(),
+            "https://api.github.com/repos/acme/orbit/commits/feature/check-runs?per_page=20"
         );
     }
 }

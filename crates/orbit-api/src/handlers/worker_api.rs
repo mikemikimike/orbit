@@ -370,6 +370,7 @@ async fn build_context(
     let model = resolve_model(&state.store, org_id, &spec).await?;
     let grants = resolve_grants(&state.store, org_id, &spec).await;
     let mut slugs = spec.skills.clone();
+    slugs.extend(execution.skills.iter().cloned());
     if let Some(profile) = profile {
         slugs.extend(profile.skill_slugs.iter().cloned());
     }

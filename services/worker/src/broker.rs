@@ -39,6 +39,7 @@ struct ToolSpec {
 struct BrokerState {
     client: WorkerClient,
     execution: ExecutionRecord,
+    workspace: std::path::PathBuf,
     autonomy: AutonomyLevel,
     approval_mode: ApprovalMode,
     connection: Connection,
@@ -117,6 +118,68 @@ fn tool_specs(
                     },
                     "required": ["title"]
                 }),
+                "issues.update" => json!({
+                    "type": "object",
+                    "properties": {
+                        "owner": { "type": "string" }, "repo": { "type": "string" },
+                        "number": { "type": "integer", "minimum": 1 },
+                        "title": { "type": "string" },
+                        "body": { "type": "string" },
+                        "state": { "type": "string", "enum": ["open", "closed"] },
+                        "labels": { "type": "array", "items": { "type": "string" } },
+                        "assignees": { "type": "array", "items": { "type": "string" } }
+                    },
+                    "required": ["number"]
+                }),
+                "pulls.list" => json!({
+                    "type": "object",
+                    "properties": {
+                        "owner": { "type": "string" }, "repo": { "type": "string" },
+                        "state": { "type": "string", "enum": ["open", "closed", "all"] }
+                    }
+                }),
+                "pulls.get" => json!({
+                    "type": "object",
+                    "properties": {
+                        "owner": { "type": "string" }, "repo": { "type": "string" },
+                        "number": { "type": "integer", "minimum": 1 }
+                    },
+                    "required": ["number"]
+                }),
+                "pulls.create" => json!({
+                    "type": "object",
+                    "properties": {
+                        "owner": { "type": "string" }, "repo": { "type": "string" },
+                        "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+                        "head": { "type": "string", "description": "Source branch" },
+                        "base": { "type": "string", "default": "main" },
+                        "body": { "type": "string" },
+                        "draft": { "type": "boolean" }
+                    },
+                    "required": ["title", "head"]
+                }),
+                "checks.list" => json!({
+                    "type": "object",
+                    "properties": {
+                        "owner": { "type": "string" }, "repo": { "type": "string" },
+                        "ref": { "type": "string", "description": "Commit SHA or branch" }
+                    },
+                    "required": ["ref"]
+                }),
+                "repo.commit" => json!({
+                    "type": "object",
+                    "properties": {
+                        "message": { "type": "string", "minLength": 1, "maxLength": 2000 }
+                    },
+                    "required": ["message"]
+                }),
+                "repo.push" => json!({
+                    "type": "object",
+                    "properties": {
+                        "branch": { "type": "string", "minLength": 1, "maxLength": 200 }
+                    },
+                    "required": ["branch"]
+                }),
                 _ => json!({ "type": "object", "properties": {} }),
             };
             let description = match capability.as_str() {
@@ -128,6 +191,17 @@ fn tool_specs(
                 "issues.create" => {
                     "Create a GitHub issue. Write action, may require human approval."
                 }
+                "issues.update" => {
+                    "Update a GitHub issue, including state, labels and assignees. Write action."
+                }
+                "pulls.list" => "List pull requests in a repository (read-only).",
+                "pulls.get" => "Read one pull request (read-only).",
+                "pulls.create" => {
+                    "Create a pull request from a branch. Write action, may require human approval."
+                }
+                "checks.list" => "Read CI check runs for a commit or branch (read-only).",
+                "repo.commit" => "Commit all workspace changes. Write action.",
+                "repo.push" => "Push the current workspace HEAD to a branch. External side effect.",
                 _ => "GitHub capability.",
             };
             ToolSpec {
@@ -146,6 +220,7 @@ pub async fn start(
     client: WorkerClient,
     spec: &AgentSpec,
     execution: &ExecutionRecord,
+    workspace: &std::path::Path,
 ) -> anyhow::Result<Option<BrokerHandle>> {
     let Some(binding) = spec.connectors.iter().find(|b| b.connector == "github") else {
         return Ok(None);
@@ -182,7 +257,7 @@ pub async fn start(
     let allowed: Vec<String> = binding
         .capabilities
         .iter()
-        .filter(|capability| effects.contains_key(*capability))
+        .filter(|capability| effects.contains_key(*capability) && *capability != "repo.checkout")
         .cloned()
         .collect();
     if allowed.is_empty() {
@@ -200,6 +275,7 @@ pub async fn start(
     let state = Arc::new(BrokerState {
         client,
         execution: execution.clone(),
+        workspace: workspace.to_path_buf(),
         autonomy,
         approval_mode: spec.autonomy.approval_mode,
         connection,
@@ -329,14 +405,54 @@ async fn call_tool(
         }
     }
 
-    match github::invoke(
-        &state.http,
-        &state.github,
-        &tool.capability,
-        &call.arguments,
-    )
-    .await
-    {
+    let result = if matches!(tool.capability.as_str(), "repo.commit" | "repo.push") {
+        let outcome = if tool.capability == "repo.commit" {
+            let message = call
+                .arguments
+                .get("message")
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty());
+            match message {
+                Some(message) => {
+                    crate::git::commit(
+                        &state.client,
+                        state.execution.id,
+                        state.connection.id,
+                        &state.workspace,
+                        message,
+                    )
+                    .await
+                }
+                None => Err(anyhow::anyhow!("commit message is required")),
+            }
+        } else {
+            let branch = call.arguments.get("branch").and_then(Value::as_str);
+            match branch {
+                Some(branch) => {
+                    crate::git::push(
+                        &state.client,
+                        state.execution.id,
+                        state.connection.id,
+                        &state.workspace,
+                        branch,
+                    )
+                    .await
+                }
+                None => Err(anyhow::anyhow!("branch is required")),
+            }
+        };
+        outcome.map_err(|error| error.to_string())
+    } else {
+        github::invoke(
+            &state.http,
+            &state.github,
+            &tool.capability,
+            &call.arguments,
+        )
+        .await
+    };
+
+    match result {
         Ok(result) => {
             record_event(
                 &state,
@@ -624,6 +740,7 @@ mod tests {
             status: "running".into(),
             session_ref: None,
             input: Value::Null,
+            skills: vec![],
             output: None,
             error: None,
             usage: json!({}),

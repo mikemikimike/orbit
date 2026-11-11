@@ -28,6 +28,53 @@ export type WorkerView = components["schemas"]["WorkerView"];
 export type Skill = components["schemas"]["Skill"];
 export type WorkerProfile = components["schemas"]["WorkerProfile"];
 export type WorkerBootstrap = components["schemas"]["WorkerBootstrap"];
+export type AgentTeam = {
+  id: string;
+  orgId: string;
+  name: string;
+  description: string;
+  definition: { steps?: Array<{ name: string; agentId: string; skills?: string[] }> };
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TeamRun = {
+  id: string;
+  orgId: string;
+  teamId: string;
+  status: string;
+  input: Record<string, unknown>;
+  output?: unknown;
+  error?: string | null;
+  requestedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  finishedAt?: string | null;
+};
+
+export type TeamStep = {
+  id: string;
+  runId: string;
+  orgId: string;
+  stepIndex: number;
+  name: string;
+  agentId: string;
+  agentVersionId: string;
+  skills: string[];
+  status: string;
+  executionId?: string | null;
+  input: Record<string, unknown>;
+  output?: unknown;
+  error?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+};
+
+export type TeamRunDetail = { run: TeamRun; steps: TeamStep[] };
+
 export type WorkerLaunch = {
   id: string;
   orgId: string;

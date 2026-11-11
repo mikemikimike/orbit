@@ -1,0 +1,383 @@
+//! Agent teams: sequential role handoffs materialized as normal executions.
+
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use axum::Extension;
+use axum::Json;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use orbit_domain::{TriggerSource, ValidationIssue};
+use orbit_security::{AuthContext, Permission};
+use orbit_store::{AgentTeam, TeamRun, TeamStep};
+
+use crate::error::ApiError;
+use crate::state::AppState;
+
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamStepInput {
+    pub name: String,
+    pub agent_id: Uuid,
+    #[serde(default)]
+    pub skills: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTeamRequest {
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    pub steps: Vec<TeamStepInput>,
+}
+
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTeamRunRequest {
+    pub task: String,
+    #[serde(default)]
+    pub payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamRunDetail {
+    pub run: TeamRun,
+    pub steps: Vec<TeamStep>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamDefinition {
+    pub steps: Vec<TeamStepDefinition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamStepDefinition {
+    pub name: String,
+    pub agent_id: Uuid,
+    #[serde(default)]
+    pub skills: Vec<String>,
+}
+
+fn parse_definition(team: &AgentTeam) -> Result<TeamDefinition, ApiError> {
+    serde_json::from_value(team.definition.clone())
+        .map_err(|error| ApiError::internal(format!("team definition is invalid: {error}")))
+}
+
+pub async fn create_team(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<CreateTeamRequest>,
+) -> Result<(StatusCode, Json<AgentTeam>), ApiError> {
+    auth.require(Permission::SettingsWrite)?;
+    if body.name.trim().is_empty() || body.steps.is_empty() {
+        return Err(ApiError::validation(vec![
+            ValidationIssue::new("name", "name is required"),
+            ValidationIssue::new("steps", "at least one step is required"),
+        ]));
+    }
+    let mut issues = Vec::new();
+    let mut names = std::collections::BTreeSet::new();
+    for step in &body.steps {
+        if step.name.trim().is_empty() {
+            issues.push(ValidationIssue::new("steps.name", "step name is required"));
+        }
+        if !names.insert(step.name.trim().to_string()) {
+            issues.push(ValidationIssue::new(
+                "steps.name",
+                format!("duplicate step name '{}'", step.name),
+            ));
+        }
+        if state
+            .store
+            .get_agent(auth.org_id, step.agent_id)
+            .await
+            .is_err()
+        {
+            issues.push(ValidationIssue::new(
+                "steps.agentId",
+                format!("unknown agent '{}'", step.agent_id),
+            ));
+        }
+        for slug in &step.skills {
+            if state
+                .store
+                .get_skill_by_slug(auth.org_id, slug)
+                .await?
+                .is_none()
+            {
+                issues.push(ValidationIssue::new(
+                    "steps.skills",
+                    format!("unknown skill '{slug}'"),
+                ));
+            }
+        }
+    }
+    if !issues.is_empty() {
+        return Err(ApiError::validation(issues));
+    }
+    let definition = serde_json::json!({
+        "steps": body.steps.iter().map(|step| serde_json::json!({
+            "name": step.name.trim(),
+            "agentId": step.agent_id,
+            "skills": step.skills,
+        })).collect::<Vec<_>>()
+    });
+    let team = state
+        .store
+        .create_agent_team(
+            auth.org_id,
+            body.name.trim(),
+            body.description.trim(),
+            &definition,
+            Some(auth.user_id),
+        )
+        .await?;
+    Ok((StatusCode::CREATED, Json(team)))
+}
+
+pub async fn list_teams(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> Result<Json<Vec<AgentTeam>>, ApiError> {
+    auth.require(Permission::HarnessesRead)?;
+    Ok(Json(state.store.list_agent_teams(auth.org_id).await?))
+}
+
+pub async fn get_team(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(team_id): Path<Uuid>,
+) -> Result<Json<AgentTeam>, ApiError> {
+    auth.require(Permission::HarnessesRead)?;
+    Ok(Json(
+        state.store.get_agent_team(auth.org_id, team_id).await?,
+    ))
+}
+
+pub async fn delete_team(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(team_id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    auth.require(Permission::SettingsWrite)?;
+    state.store.delete_agent_team(auth.org_id, team_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub(crate) async fn start_step(
+    state: &AppState,
+    run: &TeamRun,
+    definition: &TeamDefinition,
+    step_index: usize,
+    previous_output: Option<&serde_json::Value>,
+) -> Result<TeamStep, ApiError> {
+    let step = definition
+        .steps
+        .get(step_index)
+        .ok_or_else(|| ApiError::internal("team step index out of range"))?;
+    let agent = state.store.get_agent(run.org_id, step.agent_id).await?;
+    let version = state.store.get_current_version(run.org_id, &agent).await?;
+    let spec: orbit_domain::AgentSpec = serde_json::from_value(version.spec.clone())
+        .map_err(|error| ApiError::internal(format!("stored agent spec is invalid: {error}")))?;
+    let task = run
+        .input
+        .get("task")
+        .and_then(|value| value.as_str())
+        .unwrap_or("Team run");
+    let previous = previous_output
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "null".into());
+    let input = serde_json::json!({
+        "task": format!("Team step '{}' of '{}'.\n\n{}", step.name, team_task(run), task),
+        "payload": {
+            "teamRunId": run.id,
+            "stepIndex": step_index,
+            "stepName": step.name,
+            "previous": previous_output,
+            "repository": run.input.get("payload").and_then(|value| value.get("repository")).cloned(),
+            "branch": run.input.get("payload").and_then(|value| value.get("branch")).cloned(),
+        },
+        "provenance": {
+            "source": "team",
+            "trusted": true,
+            "subject": run.id,
+            "receivedAt": chrono::Utc::now(),
+        },
+        "team": {
+            "runId": run.id,
+            "step": step.name,
+            "previous": previous,
+        }
+    });
+    let execution = state
+        .store
+        .create_execution(orbit_store::executions::NewExecution {
+            org_id: run.org_id,
+            agent_id: agent.id,
+            agent_version_id: version.id,
+            agent_name: &agent.name,
+            harness_kind: spec.harness.kind,
+            trigger_source: TriggerSource::Manual,
+            placement: spec.harness.placement.as_str(),
+            trigger_id: None,
+            input,
+            skills: &step.skills,
+            timeout_seconds: spec.resources.timeout_seconds,
+            requested_by: run.requested_by,
+            idempotency_key: Some(&format!("team:{}:{}", run.id, step_index)),
+        })
+        .await?;
+    let created = state
+        .store
+        .create_team_step(
+            run.id,
+            run.org_id,
+            step_index as i32,
+            &step.name,
+            agent.id,
+            version.id,
+            &step.skills,
+            &execution.input,
+            Some(execution.id),
+        )
+        .await?;
+    Ok(created)
+}
+
+fn team_task(run: &TeamRun) -> &str {
+    run.input
+        .get("task")
+        .and_then(|value| value.as_str())
+        .unwrap_or("Team run")
+}
+
+pub async fn create_run(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(team_id): Path<Uuid>,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<CreateTeamRunRequest>,
+) -> Result<(StatusCode, Json<TeamRunDetail>), ApiError> {
+    auth.require(Permission::ExecutionsCreate)?;
+    if body.task.trim().is_empty() {
+        return Err(ApiError::validation(vec![ValidationIssue::new(
+            "task",
+            "task is required",
+        )]));
+    }
+    let team = state.store.get_agent_team(auth.org_id, team_id).await?;
+    let definition = parse_definition(&team)?;
+    let input = serde_json::json!({ "task": body.task.trim(), "payload": body.payload });
+    let run = state
+        .store
+        .create_team_run(auth.org_id, team.id, &input, Some(auth.user_id))
+        .await?;
+    let step = match start_step(&state, &run, &definition, 0, None).await {
+        Ok(step) => step,
+        Err(error) => {
+            let _ = state
+                .store
+                .update_team_run(run.id, "failed", None, Some(&error.message))
+                .await;
+            return Err(error);
+        }
+    };
+    Ok((
+        StatusCode::CREATED,
+        Json(TeamRunDetail {
+            run,
+            steps: vec![step],
+        }),
+    ))
+}
+
+pub async fn list_runs(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> Result<Json<Vec<TeamRun>>, ApiError> {
+    auth.require(Permission::HarnessesRead)?;
+    Ok(Json(state.store.list_team_runs(auth.org_id).await?))
+}
+
+pub async fn get_run(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(run_id): Path<Uuid>,
+) -> Result<Json<TeamRunDetail>, ApiError> {
+    auth.require(Permission::HarnessesRead)?;
+    let run = state.store.get_team_run(auth.org_id, run_id).await?;
+    let steps = state.store.list_team_steps(run.id).await?;
+    Ok(Json(TeamRunDetail { run, steps }))
+}
+
+/// Advance a running team after its current execution reaches a terminal state.
+pub(crate) async fn advance(state: &AppState, run: TeamRun) -> anyhow::Result<()> {
+    let Some(current) = state.store.current_team_step(run.id).await? else {
+        return Ok(());
+    };
+    if current.status != "running" {
+        return Ok(());
+    }
+    let Some(execution_id) = current.execution_id else {
+        return Ok(());
+    };
+    let execution = state.store.get_execution_by_id(execution_id).await?;
+    if !matches!(
+        orbit_domain::ExecutionStatus::parse(&execution.status),
+        Some(status) if status.is_terminal()
+    ) {
+        return Ok(());
+    }
+    let team = state.store.get_agent_team(run.org_id, run.team_id).await?;
+    let definition = parse_definition(&team).map_err(|error| anyhow::anyhow!(error.message))?;
+    if execution.status == "succeeded" {
+        state
+            .store
+            .finish_team_step(current.id, "succeeded", execution.output.as_ref(), None)
+            .await?;
+        let next = (current.step_index as usize) + 1;
+        if next < definition.steps.len() {
+            let run_for_step = state.store.get_team_run(run.org_id, run.id).await?;
+            start_step(
+                state,
+                &run_for_step,
+                &definition,
+                next,
+                execution.output.as_ref(),
+            )
+            .await
+            .map_err(|error| anyhow::anyhow!(error.message))?;
+        } else {
+            state
+                .store
+                .update_team_run(run.id, "succeeded", execution.output.as_ref(), None)
+                .await?;
+        }
+    } else {
+        state
+            .store
+            .finish_team_step(
+                current.id,
+                "failed",
+                execution.output.as_ref(),
+                Some(&execution.status),
+            )
+            .await?;
+        state
+            .store
+            .update_team_run(
+                run.id,
+                "failed",
+                execution.output.as_ref(),
+                Some(&format!(
+                    "step '{}' finished with {}",
+                    current.name, execution.status
+                )),
+            )
+            .await?;
+    }
+    Ok(())
+}

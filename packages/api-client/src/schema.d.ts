@@ -1066,6 +1066,8 @@ export interface components {
         CreateExecutionRequest: {
             idempotencyKey?: string | null;
             payload?: unknown;
+            /** @description Skills to materialize for this execution, in addition to the agent spec. */
+            skills?: string[];
             /** @description The task or message for the agent. */
             task: string;
         };
@@ -1205,6 +1207,7 @@ export interface components {
             /** Format: uuid */
             requestedBy?: string | null;
             sessionRef?: string | null;
+            skills: string[];
             /** Format: date-time */
             startedAt?: string | null;
             status: string;
@@ -2729,6 +2732,12 @@ export interface operations {
         requestBody?: never;
         responses: {
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

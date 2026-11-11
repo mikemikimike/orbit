@@ -137,6 +137,21 @@ pub async fn execute_agent(
             orbit_domain::ValidationIssue::new("task", "task must be <= 200000 characters"),
         ]));
     }
+    let mut skills = body.skills.clone();
+    skills.sort();
+    skills.dedup();
+    for slug in &skills {
+        if state
+            .store
+            .get_skill_by_slug(auth.org_id, slug)
+            .await?
+            .is_none()
+        {
+            return Err(ApiError::validation(vec![
+                orbit_domain::ValidationIssue::new("skills", format!("unknown skill '{slug}'")),
+            ]));
+        }
+    }
 
     let version = state.store.get_current_version(auth.org_id, &agent).await?;
     let spec = parse_spec(&version)?;
@@ -207,6 +222,7 @@ pub async fn execute_agent(
             placement: spec.harness.placement.as_str(),
             trigger_id: None,
             input,
+            skills: &skills,
             timeout_seconds: spec.resources.timeout_seconds,
             requested_by: Some(auth.user_id),
             idempotency_key: idempotency_key.as_deref(),

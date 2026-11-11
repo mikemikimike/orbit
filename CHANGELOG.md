@@ -53,6 +53,24 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - X connector call returns a clear 401 with an invalid token (real API request path).
 - Existing mock-runtime smoke test and SSE through ingress continue to pass.
 
+## [Unreleased]
+
+### Added
+- Agent teams with sequential role steps; each step is a normal execution with its own
+  agent, skills, connectors and approvals.
+- Execution-level skills (`skills` on create-execution and team steps), unioned with
+  agent spec skills and optional profile defaults.
+- Worker materializes execution-level skills into Pi/OpenCode workspaces.
+- GitHub connector capabilities: issue update/labels/state, pull list/get/create, checks
+  list, repository checkout, commit and push through the tool broker.
+- Teams UI and API.
+
+### Changed
+- Worker profiles should be treated as infrastructure only; agent/skill fields remain as
+  legacy defaults.
+- Team runs are advanced by the control plane by creating ordinary executions, never by
+  running an agent loop in `orbit-api`.
+
 ## [0.5.1] — worker launcher
 
 ### Added

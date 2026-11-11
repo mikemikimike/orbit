@@ -24,7 +24,10 @@ import type {
   Skill,
   WorkerProfile,
   WorkerLaunch,
+  AgentTeam,
+  TeamRun,
 } from "./types";
+import { listAgentTeams, listTeamRuns } from "./teams";
 import { workerLaunches } from "./launcher";
 
 export function unwrap<T>(result: {
@@ -61,6 +64,8 @@ export const queryKeys = {
   skills: ["skills"] as const,
   workerProfiles: ["worker-profiles"] as const,
   workerLaunches: ["worker-launches"] as const,
+  agentTeams: ["agent-teams"] as const,
+  teamRuns: ["team-runs"] as const,
 };
 
 export function useMeta() {
@@ -253,6 +258,21 @@ export function useWorkerProfiles() {
   return useQuery<WorkerProfile[]>({
     queryKey: queryKeys.workerProfiles,
     queryFn: async () => unwrap(await api.GET("/api/v1/worker-profiles")),
+  });
+}
+
+export function useAgentTeams() {
+  return useQuery<AgentTeam[]>({
+    queryKey: queryKeys.agentTeams,
+    queryFn: listAgentTeams,
+  });
+}
+
+export function useTeamRuns() {
+  return useQuery<TeamRun[]>({
+    queryKey: queryKeys.teamRuns,
+    queryFn: listTeamRuns,
+    refetchInterval: 3_000,
   });
 }
 

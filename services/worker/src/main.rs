@@ -2,6 +2,7 @@ mod broker;
 mod client;
 mod connectors;
 mod dispatch;
+mod git;
 mod github;
 mod liveness;
 mod runner;

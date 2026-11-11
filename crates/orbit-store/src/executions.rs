@@ -17,6 +17,7 @@ pub struct NewExecution<'a> {
     pub placement: &'a str,
     pub trigger_id: Option<Uuid>,
     pub input: Value,
+    pub skills: &'a [String],
     pub timeout_seconds: u64,
     pub requested_by: Option<Uuid>,
     pub idempotency_key: Option<&'a str>,
@@ -39,9 +40,9 @@ impl Store {
         let inserted = sqlx::query_as::<_, ExecutionRecord>(
             r#"
             INSERT INTO executions (id, org_id, agent_id, agent_version_id, agent_name, harness_kind,
-                                    trigger_id, trigger_source, placement, status, input, timeout_seconds,
-                                    idempotency_key, requested_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $10, $11, $12, $13)
+                                    trigger_id, trigger_source, placement, status, input, skills,
+                                    timeout_seconds, idempotency_key, requested_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $10, $11, $12, $13, $14)
             ON CONFLICT (org_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
             RETURNING *
             "#,
@@ -56,6 +57,7 @@ impl Store {
         .bind(new.trigger_source.as_str())
         .bind(new.placement)
         .bind(&new.input)
+        .bind(new.skills)
         .bind(new.timeout_seconds as i32)
         .bind(new.idempotency_key)
         .bind(new.requested_by)

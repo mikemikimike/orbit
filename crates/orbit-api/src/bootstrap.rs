@@ -194,6 +194,7 @@ async fn seed_demo(store: &Store, org_id: Uuid, config: &ApiConfig) -> anyhow::R
                             "receivedAt": Utc::now(),
                         }
                     }),
+                    skills: &[],
                     timeout_seconds: spec.resources.timeout_seconds,
                     requested_by: None,
                     idempotency_key: Some("demo-seed-execution-1"),

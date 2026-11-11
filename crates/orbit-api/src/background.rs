@@ -26,12 +26,31 @@ pub fn spawn(state: AppState) {
         }
     });
 
+    let reaper_state = state.clone();
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(15));
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             ticker.tick().await;
-            reap(&state).await;
+            reap(&reaper_state).await;
+        }
+    });
+
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(2));
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticker.tick().await;
+            match state.store.list_running_team_runs().await {
+                Ok(runs) => {
+                    for run in runs {
+                        if let Err(error) = crate::handlers::teams::advance(&state, run).await {
+                            tracing::warn!(%error, "team run advance failed");
+                        }
+                    }
+                }
+                Err(error) => tracing::warn!(%error, "team run polling failed"),
+            }
         }
     });
 }
@@ -103,6 +122,7 @@ async fn fire_trigger(state: &AppState, trigger: Trigger) -> anyhow::Result<()> 
             placement: spec.harness.placement.as_str(),
             trigger_id: Some(trigger.id),
             input,
+            skills: &[],
             timeout_seconds: spec.resources.timeout_seconds,
             requested_by: None,
             idempotency_key: Some(idempotency_key.as_str()),

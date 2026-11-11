@@ -187,6 +187,9 @@ pub struct CreateExecutionRequest {
     pub payload: serde_json::Value,
     #[serde(default)]
     pub idempotency_key: Option<String>,
+    /// Skills to materialize for this execution, in addition to the agent spec.
+    #[serde(default)]
+    pub skills: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]

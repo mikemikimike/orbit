@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use orbit_security::SecretCipher;
 
+pub mod agent_teams;
 pub mod agents;
 pub mod approvals;
 pub mod audit;

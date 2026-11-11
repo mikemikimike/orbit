@@ -155,11 +155,58 @@ pub async fn run_execution(
 
     let grants = context.grants;
     let workspace = state.workspace_root.join(execution_id.to_string());
+    if let Err(err) = tokio::fs::create_dir_all(&workspace).await {
+        tracing::warn!(error = %err, workspace = %workspace.display(), "could not create workspace");
+    }
+    let checkout_connection = spec
+        .connectors
+        .iter()
+        .find(|binding| {
+            binding.connector == "github"
+                && binding
+                    .capabilities
+                    .iter()
+                    .any(|capability| capability == "repo.checkout")
+        })
+        .and_then(|binding| binding.connection_id);
+    match crate::git::checkout(
+        &state.client,
+        execution_id,
+        checkout_connection,
+        &execution.input,
+        &workspace,
+    )
+    .await
+    {
+        Ok(Some(note)) => {
+            append_event(
+                &state,
+                &execution,
+                ExecutionEventKind::Status,
+                LogLevel::Info,
+                &note,
+                serde_json::json!({ "connector": "github", "capability": "repo.checkout" }),
+            )
+            .await;
+        }
+        Ok(None) => {}
+        Err(error) => {
+            return fail_execution(
+                &state,
+                &execution,
+                HarnessError::new(
+                    HarnessErrorKind::InvalidConfig,
+                    format!("repository checkout failed: {error}"),
+                ),
+            )
+            .await
+        }
+    }
 
     // Policy-enforcing tool broker: only for harnesses that can consume MCP today
     // (OpenCode). It is execution-scoped and dropped at the end of this function.
     let broker = if matches!(harness_kind, HarnessKind::OpenCode | HarnessKind::Pi) {
-        match crate::broker::start(state.client.clone(), &spec, &execution).await {
+        match crate::broker::start(state.client.clone(), &spec, &execution, &workspace).await {
             Ok(broker) => broker,
             Err(error) => {
                 return fail_execution(
@@ -190,11 +237,9 @@ pub async fn run_execution(
         )
         .await;
     }
-    if let Err(err) = tokio::fs::create_dir_all(&workspace).await {
-        tracing::warn!(error = %err, workspace = %workspace.display(), "could not create workspace");
-    }
     let materialized_skills = crate::skills::materialize(
         &spec,
+        &execution.skills,
         &state.profile_skill_slugs,
         &context.skills,
         &workspace,

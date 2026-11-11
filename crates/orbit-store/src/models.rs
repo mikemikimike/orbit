@@ -216,6 +216,8 @@ pub struct ExecutionRecord {
     pub status: String,
     pub session_ref: Option<String>,
     pub input: serde_json::Value,
+    #[sqlx(default)]
+    pub skills: Vec<String>,
     pub output: Option<serde_json::Value>,
     pub error: Option<serde_json::Value>,
     pub usage: serde_json::Value,
@@ -373,6 +375,57 @@ pub struct WorkerTokenRecord {
     pub last_used_at: Option<DateTime<Utc>>,
     pub revoked_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentTeam {
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub name: String,
+    pub description: String,
+    pub definition: serde_json::Value,
+    pub created_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamRun {
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub team_id: Uuid,
+    pub status: String,
+    pub input: serde_json::Value,
+    pub output: Option<serde_json::Value>,
+    pub error: Option<String>,
+    pub requested_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub finished_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamStep {
+    pub id: Uuid,
+    pub run_id: Uuid,
+    pub org_id: Uuid,
+    pub step_index: i32,
+    pub name: String,
+    pub agent_id: Uuid,
+    pub agent_version_id: Uuid,
+    pub skills: Vec<String>,
+    pub status: String,
+    pub execution_id: Option<Uuid>,
+    pub input: serde_json::Value,
+    pub output: Option<serde_json::Value>,
+    pub error: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub finished_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]

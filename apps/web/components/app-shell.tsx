@@ -14,6 +14,7 @@ import {
   Server,
   Settings,
   ShieldCheck,
+  Users,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ const NAV = [
   { href: "/harnesses", label: "Harnesses", icon: Cpu },
   { href: "/models", label: "Providers", icon: Boxes },
   { href: "/skills", label: "Skills", icon: BookOpen },
+  { href: "/teams", label: "Teams", icon: Users },
   { href: "/workers", label: "Workers", icon: Server },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -38,6 +40,7 @@ const MOBILE_NAV = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/executions", label: "Runs", icon: Activity },
+  { href: "/teams", label: "Teams", icon: Users },
   { href: "/approvals", label: "Approvals", icon: ShieldCheck },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -139,7 +142,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Mobile bottom navigation */}
-      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-background/95 backdrop-blur lg:hidden">
+      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t bg-background/95 backdrop-blur lg:hidden">
         {MOBILE_NAV.map((item) => {
           const active = isActive(pathname, item.href);
           return (

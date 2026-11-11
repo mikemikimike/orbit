@@ -31,7 +31,7 @@ RUN cargo build --release --locked -p orbit-worker --bin orbit-worker -p orbit-m
 
 FROM debian:bookworm-slim AS harness
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates procps \
+    && apt-get install -y --no-install-recommends ca-certificates procps git \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 orbit \
     && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin orbit \

@@ -11,11 +11,13 @@ use orbit_store::Skill;
 
 pub async fn materialize(
     spec: &AgentSpec,
+    execution_skill_slugs: &[String],
     profile_skill_slugs: &[String],
     skills: &[Skill],
     workspace: &Path,
 ) -> Vec<String> {
     let mut slugs: Vec<String> = spec.skills.clone();
+    slugs.extend(execution_skill_slugs.iter().cloned());
     slugs.extend(profile_skill_slugs.iter().cloned());
     slugs.sort();
     slugs.dedup();
