@@ -174,6 +174,26 @@ export default function ExecutionDetailPage() {
         </div>
       </div>
 
+      {execution.error ? (
+        <Card className="border-destructive/40 bg-destructive/5">
+          <CardContent className="space-y-2 p-4">
+            <p className="flex items-center gap-2 text-sm font-medium text-destructive">
+              <CircleAlert className="h-4 w-4" />
+              Execution {execution.status.replace("_", " ")}
+            </p>
+            <p className="text-sm text-destructive/90">
+              {String((execution.error as { message?: string }).message ?? "Unknown error")}
+            </p>
+            {execution.status === "timed_out" ? (
+              <p className="text-[11px] text-muted-foreground">
+                The harness exceeded the agent timeout of {execution.timeoutSeconds}s.
+                Raise the agent resource timeout or reduce the task scope.
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
       {execution.status === "queued" ? (
         <Card className="border-[hsl(var(--warning))]/40 bg-[hsl(var(--warning))]/10">
           <CardContent className="space-y-2 p-4 text-sm">
@@ -425,9 +445,25 @@ function isImportantEvent(event: ExecutionEventRecord): boolean {
 }
 
 function EventLine({ event }: { event: ExecutionEventRecord }) {
+  const data =
+    event.data && typeof event.data === "object"
+      ? (event.data as Record<string, unknown>)
+      : {};
+  const capability = typeof data.capability === "string" ? data.capability : null;
+  const tool = typeof data.tool === "string" ? data.tool : null;
+  const input =
+    data.input && typeof data.input === "object"
+      ? (data.input as Record<string, unknown>)
+      : data.arguments && typeof data.arguments === "object"
+        ? (data.arguments as Record<string, unknown>)
+        : {};
+  const title = eventTitle(event, capability, tool, input);
+  const detail = eventDetail(capability, tool, input, data);
   const icon =
-    event.kind === "tool_call" ? (
-      <Wrench className="h-3.5 w-3.5" />
+    capability ? (
+      <Wrench className="h-3.5 w-3.5 text-primary" />
+    ) : event.kind === "tool_call" ? (
+      <Terminal className="h-3.5 w-3.5" />
     ) : event.kind === "error" ? (
       <CircleAlert className="h-3.5 w-3.5" />
     ) : event.kind === "output" ? (
@@ -443,19 +479,32 @@ function EventLine({ event }: { event: ExecutionEventRecord }) {
         : "text-foreground";
 
   return (
-    <div className="log-line flex items-start gap-2.5">
-      <span className="w-6 shrink-0 pt-0.5 text-right text-[10px] text-muted-foreground">
-        {event.seq}
+    <div
+      className={`log-line flex items-start gap-2.5 border-l-2 pl-3 ${
+        event.level === "error"
+          ? "border-destructive/50"
+          : event.level === "warn"
+            ? "border-[hsl(var(--warning))]/50"
+            : "border-transparent"
+      }`}
+    >
+      <span className="w-16 shrink-0 pt-0.5 text-right font-mono text-[10px] text-muted-foreground">
+        {formatClock(event.createdAt)}
       </span>
       <span className="mt-0.5 shrink-0 text-muted-foreground">{icon}</span>
       <div className="min-w-0 flex-1">
-        <p className={`whitespace-pre-wrap break-words ${levelClass}`}>{event.message}</p>
-        {event.data && Object.keys(event.data as object).length > 0 ? (
+        <p className={`whitespace-pre-wrap break-words ${levelClass}`}>{title}</p>
+        {detail ? (
+          <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
+            {detail}
+          </p>
+        ) : null}
+        {event.data && Object.keys(data).length > 0 ? (
           <details className="mt-1">
             <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground">
-              data
+              raw event
             </summary>
-            <pre className="mt-1 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 text-[10px] text-muted-foreground">
+            <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 text-[10px] text-muted-foreground">
               {JSON.stringify(event.data, null, 2)}
             </pre>
           </details>
@@ -466,4 +515,54 @@ function EventLine({ event }: { event: ExecutionEventRecord }) {
       </span>
     </div>
   );
+}
+
+function eventTitle(
+  event: ExecutionEventRecord,
+  capability: string | null,
+  tool: string | null,
+  input: Record<string, unknown>,
+): string {
+  if (capability) {
+    const target = [input.owner, input.repo].filter(Boolean).join("/");
+    return `GitHub ${capability}${target ? ` · ${target}` : ""}`;
+  }
+  if (tool) {
+    return `${tool}${toolDetail(tool, input) ? ` · ${toolDetail(tool, input)}` : ""}`;
+  }
+  return event.message;
+}
+
+function eventDetail(
+  capability: string | null,
+  tool: string | null,
+  input: Record<string, unknown>,
+  data: Record<string, unknown>,
+): string | null {
+  if (capability) {
+    const entries = Object.entries(input)
+      .filter(([key]) => !["owner", "repo"].includes(key))
+      .slice(0, 3)
+      .map(([key, value]) => `${key}=${String(value).slice(0, 80)}`);
+    return entries.join(" · ") || null;
+  }
+  if (tool) return toolDetail(tool, input);
+  const output = typeof data.output === "string" ? data.output : null;
+  if (output) return output.split("\n")[0]?.slice(0, 160) ?? null;
+  return null;
+}
+
+function toolDetail(tool: string, input: Record<string, unknown>): string | null {
+  const value = input.path ?? input.command ?? input.pattern ?? input.query;
+  if (typeof value !== "string") return null;
+  return value.replace(/\s+/g, " ").slice(0, 140);
+}
+
+function formatClock(value: string): string {
+  return new Date(value).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
 }
