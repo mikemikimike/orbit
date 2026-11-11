@@ -18,9 +18,11 @@ Agent Team ──ordered agents───────────────┘
   connections and capabilities of its agent.
 - **Team skills and instruction**: shared by every step. Agent-level instructions define
   the role. The first agent is the primary agent; later agents are subagents.
-- **Team repository**: `repository` and optional `branch` are structured checkout
+- **Team repository**: optional `repository` and `branch` are structured checkout
   settings. They are passed to the worker's `repo.checkout`; instructions alone do not
-  drive checkout. A run can override the team repository.
+  drive checkout. A run can override the team repository. Teams that only use GitHub
+  API capabilities leave this empty; checkout is skipped and issue list/comment/update
+  tools work without a local clone.
 - **Execution mode**:
   - `pipeline`: one ORBIT execution per agent, sequential.
   - `native`: one OpenCode execution; later team agents are materialized as

@@ -122,8 +122,13 @@ pub async fn checkout(
         anyhow::bail!("repo.checkout requires git in the worker image");
     }
     let connection = client.connection(execution_id, connection_id).await?;
-    let repo = repo_name(&connection, input)
-        .ok_or_else(|| anyhow::anyhow!("set payload.repository or connection defaultRepository"))?;
+    let Some(repo) = repo_name(&connection, input) else {
+        // The binding may be shared by coding and non-coding teams. A GitHub API-only
+        // team can list/comment on issues without a local checkout.
+        return Ok(Some(
+            "repository checkout skipped: no repository configured".into(),
+        ));
+    };
     validate_repo(&connection, &repo)?;
     let token = connection
         .credential
