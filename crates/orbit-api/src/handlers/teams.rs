@@ -143,6 +143,77 @@ pub async fn create_team(
     Ok((StatusCode::CREATED, Json(team)))
 }
 
+pub async fn update_team(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(team_id): Path<Uuid>,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<CreateTeamRequest>,
+) -> Result<Json<AgentTeam>, ApiError> {
+    auth.require(Permission::SettingsWrite)?;
+    if body.name.trim().is_empty() || body.steps.is_empty() {
+        return Err(ApiError::validation(vec![
+            ValidationIssue::new("name", "name is required"),
+            ValidationIssue::new("steps", "at least one step is required"),
+        ]));
+    }
+    let mut issues = Vec::new();
+    let mut agent_ids = std::collections::BTreeSet::new();
+    for step in &body.steps {
+        if !agent_ids.insert(step.agent_id) {
+            issues.push(ValidationIssue::new(
+                "steps.agentId",
+                "the same agent cannot appear twice in one team",
+            ));
+        }
+        if state
+            .store
+            .get_agent(auth.org_id, step.agent_id)
+            .await
+            .is_err()
+        {
+            issues.push(ValidationIssue::new(
+                "steps.agentId",
+                format!("unknown agent '{}'", step.agent_id),
+            ));
+        }
+    }
+    for slug in &body.skills {
+        if state
+            .store
+            .get_skill_by_slug(auth.org_id, slug)
+            .await?
+            .is_none()
+        {
+            issues.push(ValidationIssue::new(
+                "skills",
+                format!("unknown skill '{slug}'"),
+            ));
+        }
+    }
+    if !issues.is_empty() {
+        return Err(ApiError::validation(issues));
+    }
+    let definition = serde_json::json!({
+        "instructions": body.instructions.trim(),
+        "skills": body.skills,
+        "steps": body.steps.iter().map(|step| serde_json::json!({
+            "agentId": step.agent_id,
+        })).collect::<Vec<_>>()
+    });
+    Ok(Json(
+        state
+            .store
+            .update_agent_team(
+                auth.org_id,
+                team_id,
+                body.name.trim(),
+                body.description.trim(),
+                &definition,
+            )
+            .await?,
+    ))
+}
+
 pub async fn list_teams(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -247,6 +318,8 @@ pub(crate) async fn start_step(
             timeout_seconds: spec.resources.timeout_seconds,
             requested_by: run.requested_by,
             idempotency_key: Some(&format!("team:{}:{}", run.id, step_index)),
+            team_run_id: Some(run.id),
+            team_step_index: Some(step_index as i32),
         })
         .await?;
     let created = state
@@ -290,6 +363,7 @@ pub async fn create_run(
         "task": task,
         "instructions": definition.instructions,
         "payload": body.payload,
+        "definition": definition,
     });
     let run = state
         .store
@@ -351,8 +425,14 @@ pub(crate) async fn advance(state: &AppState, run: TeamRun) -> anyhow::Result<()
     ) {
         return Ok(());
     }
-    let team = state.store.get_agent_team(run.org_id, run.team_id).await?;
-    let definition = parse_definition(&team).map_err(|error| anyhow::anyhow!(error.message))?;
+    let definition = match run.input.get("definition").cloned() {
+        Some(value) => serde_json::from_value::<TeamDefinition>(value)
+            .map_err(|error| anyhow::anyhow!("team run definition is invalid: {error}"))?,
+        None => {
+            let team = state.store.get_agent_team(run.org_id, run.team_id).await?;
+            parse_definition(&team).map_err(|error| anyhow::anyhow!(error.message))?
+        }
+    };
     if execution.status == "succeeded" {
         state
             .store

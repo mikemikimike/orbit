@@ -748,6 +748,8 @@ mod tests {
             idempotency_key: None,
             requested_by: None,
             worker_id: None,
+            team_run_id: None,
+            team_step_index: None,
             created_at: Utc::now(),
             started_at: Some(Utc::now()),
             finished_at: None,

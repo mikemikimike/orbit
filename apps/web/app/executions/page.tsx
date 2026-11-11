@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Activity, Filter } from "lucide-react";
+import { Activity, Filter, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -26,6 +26,18 @@ const STATUSES = [
 export default function ExecutionsPage() {
   const [status, setStatus] = useState("");
   const executions = useExecutions({ status: status || undefined, limit: 50 });
+  const groups = useMemo(() => {
+    const items = executions.data?.items ?? [];
+    const grouped = new Map<string, typeof items>();
+    for (const execution of items) {
+      const teamRunId = (execution as typeof execution & { teamRunId?: string | null }).teamRunId;
+      const key = teamRunId ?? "standalone";
+      const current = grouped.get(key) ?? [];
+      current.push(execution);
+      grouped.set(key, current);
+    }
+    return Array.from(grouped.entries());
+  }, [executions.data?.items]);
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -66,9 +78,34 @@ export default function ExecutionsPage() {
         ) : executions.isError ? (
           <p className="p-4 text-sm text-destructive">{errorMessage(executions.error)}</p>
         ) : executions.data?.items.length ? (
-          executions.data.items.map((execution) => (
-            <ExecutionRow key={execution.id} execution={execution} />
-          ))
+          groups.map(([key, items]) =>
+            key === "standalone" ? (
+              items.map((execution) => (
+                <ExecutionRow key={execution.id} execution={execution} />
+              ))
+            ) : (
+              <div key={key}>
+                <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2">
+                  <Users className="h-3.5 w-3.5 text-primary" />
+                  <Link
+                    href={`/agent-teams?run=${key}`}
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    Agent Team run
+                  </Link>
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {key.slice(0, 8)}
+                  </span>
+                  <span className="ml-auto text-[10px] text-muted-foreground">
+                    {items.length} step{items.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                {items.map((execution) => (
+                  <ExecutionRow key={execution.id} execution={execution} />
+                ))}
+              </div>
+            ),
+          )
         ) : (
           <EmptyState
             icon={<Activity className="h-6 w-6" />}

@@ -53,6 +53,32 @@ impl Store {
             .ok_or_else(|| StoreError::NotFound("agent team".into()))
     }
 
+    pub async fn update_agent_team(
+        &self,
+        org_id: Uuid,
+        team_id: Uuid,
+        name: &str,
+        description: &str,
+        definition: &Value,
+    ) -> StoreResult<AgentTeam> {
+        sqlx::query_as::<_, AgentTeam>(
+            r#"
+            UPDATE agent_teams
+            SET name = $3, description = $4, definition = $5, updated_at = now()
+            WHERE org_id = $1 AND id = $2
+            RETURNING *
+            "#,
+        )
+        .bind(org_id)
+        .bind(team_id)
+        .bind(name)
+        .bind(description)
+        .bind(definition)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("agent team".into()))
+    }
+
     pub async fn delete_agent_team(&self, org_id: Uuid, team_id: Uuid) -> StoreResult<()> {
         let result = sqlx::query("DELETE FROM agent_teams WHERE org_id = $1 AND id = $2")
             .bind(org_id)

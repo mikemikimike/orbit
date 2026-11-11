@@ -225,6 +225,10 @@ pub struct ExecutionRecord {
     pub idempotency_key: Option<String>,
     pub requested_by: Option<Uuid>,
     pub worker_id: Option<String>,
+    #[sqlx(default)]
+    pub team_run_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub team_step_index: Option<i32>,
     pub created_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,
     pub finished_at: Option<DateTime<Utc>>,

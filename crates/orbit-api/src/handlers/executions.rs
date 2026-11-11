@@ -226,6 +226,8 @@ pub async fn execute_agent(
             timeout_seconds: spec.resources.timeout_seconds,
             requested_by: Some(auth.user_id),
             idempotency_key: idempotency_key.as_deref(),
+            team_run_id: None,
+            team_step_index: None,
         })
         .await?;
 

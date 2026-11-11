@@ -126,6 +126,8 @@ async fn fire_trigger(state: &AppState, trigger: Trigger) -> anyhow::Result<()> 
             timeout_seconds: spec.resources.timeout_seconds,
             requested_by: None,
             idempotency_key: Some(idempotency_key.as_str()),
+            team_run_id: None,
+            team_step_index: None,
         })
         .await?;
 

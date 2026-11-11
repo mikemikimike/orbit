@@ -178,6 +178,8 @@ async fn execution_lifecycle_and_events() {
             timeout_seconds: 30,
             requested_by: Some(user),
             idempotency_key: Some("idem-1"),
+            team_run_id: None,
+            team_step_index: None,
         })
         .await
         .unwrap();
@@ -199,6 +201,8 @@ async fn execution_lifecycle_and_events() {
             timeout_seconds: 30,
             requested_by: Some(user),
             idempotency_key: Some("idem-1"),
+            team_run_id: None,
+            team_step_index: None,
         })
         .await
         .unwrap();
@@ -500,6 +504,8 @@ async fn orphaned_executions_are_failed_and_approvals_expired() {
                     timeout_seconds: 30,
                     requested_by: Some(user),
                     idempotency_key: Some(key),
+                    team_run_id: None,
+                    team_step_index: None,
                 })
                 .await
                 .unwrap()
@@ -590,6 +596,8 @@ async fn single_execution_mode_can_take_a_dispatched_execution() {
             timeout_seconds: 30,
             requested_by: Some(user),
             idempotency_key: Some("single-1"),
+            team_run_id: None,
+            team_step_index: None,
         })
         .await
         .unwrap();
@@ -666,6 +674,8 @@ async fn skills_profiles_and_agent_scoped_claims() {
             timeout_seconds: 30,
             requested_by: Some(user),
             idempotency_key: Some("scoped-a"),
+            team_run_id: None,
+            team_step_index: None,
         })
         .await
         .unwrap();
@@ -684,6 +694,8 @@ async fn skills_profiles_and_agent_scoped_claims() {
             timeout_seconds: 30,
             requested_by: Some(user),
             idempotency_key: Some("scoped-b"),
+            team_run_id: None,
+            team_step_index: None,
         })
         .await
         .unwrap();

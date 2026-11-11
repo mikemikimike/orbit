@@ -1211,6 +1211,10 @@ export interface components {
             /** Format: date-time */
             startedAt?: string | null;
             status: string;
+            /** Format: uuid */
+            teamRunId?: string | null;
+            /** Format: int32 */
+            teamStepIndex?: number | null;
             /** Format: int32 */
             timeoutSeconds: number;
             /** Format: uuid */

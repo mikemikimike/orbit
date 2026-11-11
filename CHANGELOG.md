@@ -64,7 +64,7 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - Worker materializes execution-level skills into Pi/OpenCode workspaces.
 - GitHub connector capabilities: issue update/labels/state, pull list/get/create, checks
   list, repository checkout, commit and push through the tool broker.
-- Teams UI and API.
+- Teams UI and API, including editing a team and grouping executions by Agent Team run.
 
 ### Changed
 - Worker profiles should be treated as infrastructure only; agent/skill fields remain as

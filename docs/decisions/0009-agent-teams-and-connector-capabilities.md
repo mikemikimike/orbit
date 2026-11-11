@@ -31,7 +31,10 @@ issues, so a coding agent could not complete a repository loop.
   step. There are no separate role records.
 - A team has an `instructions` goal. The first step receives it with the run task;
   later steps receive it with the original task and the previous step output.
-- A `TeamRun` creates one normal execution per step, sequentially.
+- Team definitions are editable; a run snapshots its definition so edits affect future
+  runs only.
+- A `TeamRun` creates one normal execution per step, sequentially. Executions carry
+  `teamRunId`/`teamStepIndex` for grouped visibility.
 - OpenCode/Pi native primary/subagent features are harness-internal and run inside one
   execution. ORBIT Agent Teams are harness-agnostic and use separate executions so each
   step has its own policy, approvals, events and audit.

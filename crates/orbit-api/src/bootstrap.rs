@@ -198,6 +198,8 @@ async fn seed_demo(store: &Store, org_id: Uuid, config: &ApiConfig) -> anyhow::R
                     timeout_seconds: spec.resources.timeout_seconds,
                     requested_by: None,
                     idempotency_key: Some("demo-seed-execution-1"),
+                    team_run_id: None,
+                    team_step_index: None,
                 })
                 .await?;
             let _ = store.claim_execution(execution.id, "seed").await?;

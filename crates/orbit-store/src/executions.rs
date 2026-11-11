@@ -21,6 +21,8 @@ pub struct NewExecution<'a> {
     pub timeout_seconds: u64,
     pub requested_by: Option<Uuid>,
     pub idempotency_key: Option<&'a str>,
+    pub team_run_id: Option<Uuid>,
+    pub team_step_index: Option<i32>,
 }
 
 impl Store {
@@ -41,8 +43,9 @@ impl Store {
             r#"
             INSERT INTO executions (id, org_id, agent_id, agent_version_id, agent_name, harness_kind,
                                     trigger_id, trigger_source, placement, status, input, skills,
-                                    timeout_seconds, idempotency_key, requested_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $10, $11, $12, $13, $14)
+                                    timeout_seconds, idempotency_key, requested_by,
+                                    team_run_id, team_step_index)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $10, $11, $12, $13, $14, $15, $16)
             ON CONFLICT (org_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
             RETURNING *
             "#,
@@ -61,6 +64,8 @@ impl Store {
         .bind(new.timeout_seconds as i32)
         .bind(new.idempotency_key)
         .bind(new.requested_by)
+        .bind(new.team_run_id)
+        .bind(new.team_step_index)
         .fetch_optional(&self.pool)
         .await?;
 

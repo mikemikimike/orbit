@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Plus, Play, Trash2, Users, X } from "lucide-react";
+import { ChevronRight, Pencil, Plus, Play, Trash2, Users, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +40,7 @@ import {
   deleteAgentTeam,
   getTeamRun,
   startTeamRun,
+  updateAgentTeam,
   type TeamStepInput,
 } from "@/lib/teams";
 import type { AgentTeam, TeamRunDetail } from "@/lib/types";
@@ -53,6 +54,7 @@ export default function AgentTeamsPage() {
   const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<AgentTeam | null>(null);
   const [name, setName] = useState("Coding team");
   const [description, setDescription] = useState(
     "Primary coding agent with specialist agents for implementation and review.",
@@ -84,22 +86,49 @@ export default function AgentTeamsPage() {
     return (id: string) => map.get(id) ?? id.slice(0, 8);
   }, [agentOptions]);
 
-  const create = useMutation({
-    mutationFn: () =>
-      createAgentTeam({
+  const save = useMutation({
+    mutationFn: () => {
+      const payload = {
         name: name.trim(),
         description,
         instructions,
         skills: teamSkills,
         steps,
-      }),
+      };
+      return editing
+        ? updateAgentTeam(editing.id, payload)
+        : createAgentTeam(payload);
+    },
     onSuccess: () => {
-      toast.success("Agent team created");
+      toast.success(editing ? "Agent team updated" : "Agent team created");
       setOpen(false);
+      setEditing(null);
       void queryClient.invalidateQueries({ queryKey: queryKeys.agentTeams });
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
+
+  function openCreate() {
+    setEditing(null);
+    setName("Coding team");
+    setDescription("Primary coding agent with specialist agents for implementation and review.");
+    setInstructions(
+      "Pick up the next GitHub issue labelled agent-ready, implement it, test it and request review. Repeat until no ready issues remain.",
+    );
+    setTeamSkills([]);
+    setSteps([{ agentId: "" }, { agentId: "" }]);
+    setOpen(true);
+  }
+
+  function openEdit(team: AgentTeam) {
+    setEditing(team);
+    setName(team.name);
+    setDescription(team.description);
+    setInstructions(team.definition.instructions ?? "");
+    setTeamSkills(team.definition.skills ?? []);
+    setSteps((team.definition.steps ?? []).map((step) => ({ agentId: step.agentId })));
+    setOpen(true);
+  }
 
   const remove = useMutation({
     mutationFn: deleteAgentTeam,
@@ -130,6 +159,12 @@ export default function AgentTeamsPage() {
     }
   }
 
+  useEffect(() => {
+    const runId = new URLSearchParams(window.location.search).get("run");
+    if (runId) void inspect(runId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="space-y-5 animate-fade-in">
       <PageHeader
@@ -137,7 +172,7 @@ export default function AgentTeamsPage() {
         title="Agent Teams"
         description="Ordered primary and specialist agents. Every step is a normal execution with its own connector grants and approvals; skills and the team goal are shared."
         actions={
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={openCreate}>
             <Plus /> New agent team
           </Button>
         }
@@ -152,7 +187,7 @@ export default function AgentTeamsPage() {
           icon={<Users className="h-6 w-6" />}
           title="No agent teams"
           description="Create a primary coding agent followed by builder, tester and reviewer agents."
-          action={<Button onClick={() => setOpen(true)}><Plus /> Create agent team</Button>}
+          action={<Button onClick={openCreate}><Plus /> Create agent team</Button>}
         />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -190,6 +225,13 @@ export default function AgentTeamsPage() {
                       }}
                     >
                       <Play /> Run
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => openEdit(team)}
+                    >
+                      <Pencil /> Edit
                     </Button>
                     <Button
                       size="sm"
@@ -262,7 +304,7 @@ export default function AgentTeamsPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>New agent team</DialogTitle>
+            <DialogTitle>{editing ? "Edit agent team" : "New agent team"}</DialogTitle>
             <DialogDescription>
               The first agent is the primary agent. Its agent instructions define its role;
               the team instruction defines the shared goal.
@@ -365,8 +407,8 @@ export default function AgentTeamsPage() {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={() => create.mutate()} loading={create.isPending} disabled={!canCreate}>
-              Create agent team
+            <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!canCreate}>
+              {editing ? "Save changes" : "Create agent team"}
             </Button>
           </DialogFooter>
         </DialogContent>

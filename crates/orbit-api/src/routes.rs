@@ -99,7 +99,9 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route(
             "/api/v1/agent-teams/{team_id}",
-            get(handlers::teams::get_team).delete(handlers::teams::delete_team),
+            get(handlers::teams::get_team)
+                .patch(handlers::teams::update_team)
+                .delete(handlers::teams::delete_team),
         )
         .route(
             "/api/v1/agent-teams/{team_id}/runs",

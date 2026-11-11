@@ -42,6 +42,22 @@ export function createAgentTeam(input: {
   });
 }
 
+export function updateAgentTeam(
+  teamId: string,
+  input: {
+    name: string;
+    description: string;
+    instructions: string;
+    skills: string[];
+    steps: TeamStepInput[];
+  },
+): Promise<AgentTeam> {
+  return request<AgentTeam>(`/api/v1/agent-teams/${teamId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
 export function deleteAgentTeam(teamId: string): Promise<void> {
   return request<void>(`/api/v1/agent-teams/${teamId}`, { method: "DELETE" });
 }
