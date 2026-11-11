@@ -28,6 +28,7 @@ struct AppState {
     pi_agent_dir: Option<String>,
     pi_agent_host_dir: Option<String>,
     image_pull_secret: Option<String>,
+    image_aliases: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -104,6 +105,13 @@ async fn main() -> anyhow::Result<()> {
         image_pull_secret: std::env::var("ORBIT_LAUNCHER_IMAGE_PULL_SECRET")
             .ok()
             .filter(|value| !value.trim().is_empty()),
+        image_aliases: std::env::var("ORBIT_LAUNCHER_IMAGE_ALIASES")
+            .unwrap_or_default()
+            .split(',')
+            .filter_map(|pair| pair.trim().split_once('='))
+            .map(|(from, to)| (from.trim().to_string(), to.trim().to_string()))
+            .filter(|(from, to)| !from.is_empty() && !to.is_empty())
+            .collect(),
     };
     let addr = std::env::var("ORBIT_LAUNCHER_ADDR").unwrap_or_else(|_| "0.0.0.0:8090".into());
     let app = Router::new()
@@ -167,6 +175,36 @@ async fn launch(
             ))
         }
     }
+}
+
+async fn docker_image_exists(state: &AppState, image: &str) -> bool {
+    Command::new(&state.docker)
+        .args(["image", "inspect", image])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .await
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+/// Docker treats `192.168.1.201:5000/...` and `registry.mdk.local:5000/...` as different
+/// repositories even though they are the same registry. Resolve configured aliases to a
+/// locally present image instead of attempting a registry pull while offline.
+async fn resolve_docker_image(state: &AppState, image: &str, tag: &str) -> String {
+    let exact = format!("{image}:{tag}");
+    if docker_image_exists(state, &exact).await {
+        return exact;
+    }
+    for (from, to) in &state.image_aliases {
+        if let Some(suffix) = image.strip_prefix(from) {
+            let candidate = format!("{to}{suffix}:{tag}");
+            if docker_image_exists(state, &candidate).await {
+                return candidate;
+            }
+        }
+    }
+    exact
 }
 
 async fn launch_docker(state: &AppState, request: &LaunchRequest) -> anyhow::Result<LaunchStatus> {
@@ -249,7 +287,7 @@ async fn launch_docker(state: &AppState, request: &LaunchRequest) -> anyhow::Res
     }
     args.push("--entrypoint".into());
     args.push("/bin/sh".into());
-    args.push(format!("{}:{}", request.image, request.image_tag));
+    args.push(resolve_docker_image(state, &request.image, &request.image_tag).await);
     args.push("-c".into());
     args.push(command.to_string());
     let output = Command::new(&state.docker).args(&args).output().await?;
