@@ -280,7 +280,15 @@ fn write_open_code_mcp_config(workspace: &Path, bridge: &OrbitMcpBridge) -> std:
 
 fn write_agent_instructions(workspace: &Path, request: &ExecutionRequest) -> std::io::Result<()> {
     let instructions: &InstructionsBlock = &request.instructions;
+    let path = workspace.join("AGENTS.md");
+    let existing = std::fs::read_to_string(&path).unwrap_or_default();
     let mut content = String::new();
+    if !existing.trim().is_empty() {
+        // Do not discard repository-local agent guidance when an execution runs in a
+        // cloned repository. Put the trusted ORBIT instructions after it so they win.
+        content.push_str(existing.trim_end());
+        content.push_str("\n\n---\n\n");
+    }
     content.push_str(&format!("# ORBIT agent: {}\n\n", request.agent_name));
     content.push_str("## Trusted system instructions\n\n");
     content.push_str(&instructions.system);
@@ -306,7 +314,7 @@ fn write_agent_instructions(workspace: &Path, request: &ExecutionRequest) -> std
          retry the same write.
 ",
     );
-    std::fs::write(workspace.join("AGENTS.md"), content)
+    std::fs::write(path, content)
 }
 
 fn truncate(value: &str, limit: usize) -> String {
