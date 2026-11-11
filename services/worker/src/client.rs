@@ -337,10 +337,21 @@ impl WorkerClient {
         approval_id: Uuid,
         seconds: u64,
     ) -> anyhow::Result<Approval> {
-        self.get_json(&format!(
-            "/api/v1/worker/approvals/{approval_id}/wait?executionId={execution_id}&seconds={seconds}"
-        ))
-        .await
+        // Approval waits are deliberately long; the default client timeout is for
+        // ordinary control-plane calls and would abort while a human is deciding.
+        let response = self
+            .http
+            .get(self.url(&format!(
+                "/api/v1/worker/approvals/{approval_id}/wait?executionId={execution_id}&seconds={seconds}"
+            )))
+            .bearer_auth(&self.token)
+            .timeout(Duration::from_secs(seconds.clamp(1, 900) + 15))
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            return Err(Self::error(response).await);
+        }
+        Ok(response.json().await?)
     }
 
     pub async fn audit(

@@ -28,6 +28,7 @@ import { copyText } from "@/lib/browser";
 import {
   queryKeys,
   unwrap,
+  useApprovals,
   useExecution,
   useExecutionEvents,
   useWorkers,
@@ -52,6 +53,10 @@ export default function ExecutionDetailPage() {
   const eventsQuery = useExecutionEvents(executionId);
   const live = useExecutionStream(executionId);
   const workers = useWorkers();
+  const pendingApprovals = useApprovals("pending");
+  const pendingApproval = pendingApprovals.data?.find(
+    (approval) => approval.executionId === executionId,
+  );
   const [autoScroll, setAutoScroll] = useState(true);
   const [showVerbose, setShowVerbose] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
@@ -68,6 +73,11 @@ export default function ExecutionDetailPage() {
     () => (showVerbose ? events : events.filter(isImportantEvent)),
     [events, showVerbose],
   );
+  const internalToolEvents = useMemo(
+    () => events.filter(isInternalToolCall),
+    [events],
+  );
+  const latestInternalTool = internalToolEvents.at(-1);
   const hiddenCount = events.length - visibleEvents.length;
 
   const cancel = useMutation({
@@ -173,6 +183,26 @@ export default function ExecutionDetailPage() {
           </div>
         </div>
       </div>
+
+      {pendingApproval ? (
+        <Card className="border-[hsl(var(--warning))]/40 bg-[hsl(var(--warning))]/10">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div>
+              <p className="text-sm font-medium">Waiting for approval</p>
+              <p className="text-[11px] text-muted-foreground">
+                {String(
+                  (pendingApproval.requestedAction as { capability?: string })?.capability ??
+                    "write action",
+                )}{" "}
+                · this execution is paused until a human decides.
+              </p>
+            </div>
+            <Button asChild size="sm">
+              <Link href="/approvals">Review approval</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {execution.error ? (
         <Card className="border-destructive/40 bg-destructive/5">
@@ -299,6 +329,28 @@ export default function ExecutionDetailPage() {
               ) : (
                 visibleEvents.map((event) => <EventLine key={event.seq} event={event} />)
               )}
+              {internalToolEvents.length > 0 ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
+                  <Terminal className="h-3.5 w-3.5 text-primary" />
+                  <span>
+                    Harness activity:{" "}
+                    <span className="font-medium text-foreground">
+                      {latestInternalTool
+                        ? eventTitle(latestInternalTool, null, toolName(latestInternalTool), toolInput(latestInternalTool))
+                        : "working"}
+                    </span>{" "}
+                    · {internalToolEvents.length} internal call(s) ·{" "}
+                    {latestInternalTool ? relativeTime(latestInternalTool.createdAt) : ""}
+                  </span>
+                  <button
+                    type="button"
+                    className="ml-auto rounded border px-1.5 py-0.5 text-[10px] font-medium hover:bg-muted"
+                    onClick={() => setShowVerbose(true)}
+                  >
+                    show
+                  </button>
+                </div>
+              ) : null}
               {active ? (
                 <p className="pt-2 text-[11px] text-muted-foreground">
                   <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse-soft rounded-full bg-primary align-middle" />
@@ -316,7 +368,27 @@ export default function ExecutionDetailPage() {
         </Card>
 
         <div className="space-y-4 lg:col-span-2">
-          {execution.error ? (
+          {pendingApproval ? (
+        <Card className="border-[hsl(var(--warning))]/40 bg-[hsl(var(--warning))]/10">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div>
+              <p className="text-sm font-medium">Waiting for approval</p>
+              <p className="text-[11px] text-muted-foreground">
+                {String(
+                  (pendingApproval.requestedAction as { capability?: string })?.capability ??
+                    "write action",
+                )}{" "}
+                · this execution is paused until a human decides.
+              </p>
+            </div>
+            <Button asChild size="sm">
+              <Link href="/approvals">Review approval</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {execution.error ? (
             <Card className="border-destructive/40">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-destructive">
@@ -436,12 +508,46 @@ function isImportantEvent(event: ExecutionEventRecord): boolean {
   if (event.kind === "error" || event.kind === "status") return true;
   if (event.kind === "log") return event.level === "warn" || event.level === "error";
   if (event.kind === "tool_call") {
-    // Show harness tool activity (read/grep/shell/glob) as well as connector calls.
-    // Users otherwise see a silent gap while a coding agent is inspecting the repo.
-    return true;
+    const capability =
+      event.data && typeof event.data === "object"
+        ? (event.data as { capability?: string }).capability
+        : undefined;
+    return (
+      event.level === "error" ||
+      event.level === "warn" ||
+      Boolean(capability) ||
+      /approval/i.test(event.message)
+    );
   }
   // output deltas, metrics and debug logs are verbose-only
   return false;
+}
+
+function isInternalToolCall(event: ExecutionEventRecord): boolean {
+  if (event.kind !== "tool_call") return false;
+  const data =
+    event.data && typeof event.data === "object"
+      ? (event.data as Record<string, unknown>)
+      : {};
+  return !data.capability && Boolean(data.tool);
+}
+
+function toolName(event: ExecutionEventRecord): string | null {
+  const data =
+    event.data && typeof event.data === "object"
+      ? (event.data as Record<string, unknown>)
+      : {};
+  return typeof data.tool === "string" ? data.tool : null;
+}
+
+function toolInput(event: ExecutionEventRecord): Record<string, unknown> {
+  const data =
+    event.data && typeof event.data === "object"
+      ? (event.data as Record<string, unknown>)
+      : {};
+  return data.input && typeof data.input === "object"
+    ? (data.input as Record<string, unknown>)
+    : {};
 }
 
 function EventLine({ event }: { event: ExecutionEventRecord }) {
