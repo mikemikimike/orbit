@@ -1,0 +1,99 @@
+{{- if .Values.launcher.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "orbit.fullname" . }}-launcher
+  labels:
+    {{- include "orbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: launcher
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "orbit.fullname" . }}-launcher
+  labels:
+    {{- include "orbit.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "orbit.fullname" . }}-launcher
+  labels:
+    {{- include "orbit.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "orbit.fullname" . }}-launcher
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "orbit.fullname" . }}-launcher
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "orbit.fullname" . }}-launcher
+  labels:
+    {{- include "orbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: launcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "orbit.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: launcher
+  template:
+    metadata:
+      labels:
+        {{- include "orbit.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: launcher
+    spec:
+      serviceAccountName: {{ include "orbit.fullname" . }}-launcher
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: launcher
+          image: {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.launcher.image "tag" .Values.launcher.tag) | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: ORBIT_LAUNCHER_ADDR
+              value: "0.0.0.0:8090"
+            - name: ORBIT_LAUNCHER_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: ORBIT_LAUNCHER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orbit.secretName" . }}
+                  key: launcher-token
+            {{- if .Values.launcher.imagePullSecret }}
+            - name: ORBIT_LAUNCHER_IMAGE_PULL_SECRET
+              value: {{ .Values.launcher.imagePullSecret | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8090
+          resources:
+            {{- toYaml .Values.launcher.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "orbit.fullname" . }}-launcher
+  labels:
+    {{- include "orbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: launcher
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8090
+      targetPort: http
+      name: http
+  selector:
+    {{- include "orbit.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: launcher
+{{- end }}

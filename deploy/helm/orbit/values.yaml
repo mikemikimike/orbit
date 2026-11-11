@@ -27,7 +27,7 @@ api:
 
 worker:
   image: orbit-worker
-  tag: 0.5.0
+  tag: 0.5.1
   # Scoped token issued by the API (POST /api/v1/worker-tokens). Required.
   token: ""
   replicas: 1
@@ -51,7 +51,7 @@ worker:
 opencodeWorker:
   enabled: false
   image: orbit-worker-opencode
-  tag: 0.5.0
+  tag: 0.5.1
   # Token restricted to the opencode harness. Required when enabled.
   token: ""
   replicas: 1
@@ -80,7 +80,7 @@ opencodeWorker:
 
 web:
   image: orbit-web
-  tag: 0.5.0
+  tag: 0.5.1
   replicas: 1
   port: 3000
   resources:
@@ -90,6 +90,22 @@ web:
     limits:
       cpu: 500m
       memory: 384Mi
+
+# Optional worker launcher. Enables Launch/Stop/Logs in Workers. The launcher gets
+# namespaced Pod RBAC; the API does not.
+launcher:
+  enabled: false
+  image: orbit-launcher
+  tag: 0.5.1
+  token: ""
+  imagePullSecret: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
 
 # ─── Authentication ───────────────────────────────────────────
 auth:

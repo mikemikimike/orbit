@@ -17,6 +17,9 @@ pub struct ApiConfig {
     pub body_limit_bytes: usize,
     pub auth: AuthConfig,
     pub master_key: String,
+    pub launcher_url: Option<String>,
+    pub launcher_token: Option<String>,
+    pub worker_api_url: String,
 }
 
 impl ApiConfig {
@@ -52,6 +55,13 @@ impl ApiConfig {
                 .unwrap_or(2 * 1024 * 1024),
             auth,
             master_key,
+            launcher_url: std::env::var("ORBIT_LAUNCHER_URL")
+                .ok()
+                .filter(|value| !value.trim().is_empty()),
+            launcher_token: std::env::var("ORBIT_LAUNCHER_TOKEN")
+                .ok()
+                .filter(|value| !value.trim().is_empty()),
+            worker_api_url: env_or("ORBIT_WORKER_API_URL", "http://orbit-api:8080"),
         })
     }
 

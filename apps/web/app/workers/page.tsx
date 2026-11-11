@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Boxes, Copy, Plus, Server, Trash2 } from "lucide-react";
+import { Boxes, Copy, Plus, Rocket, ScrollText, Server, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -31,8 +31,14 @@ import {
   useAgents,
   useProviders,
   useSkills,
+  useWorkerLaunches,
   useWorkerProfiles,
 } from "@/lib/queries";
+import {
+  launchWorkerProfile,
+  stopWorkerLaunch,
+  workerLaunchLogs,
+} from "@/lib/launcher";
 import { errorMessage } from "@orbit/api-client";
 import type { WorkerBootstrap, WorkerProfile } from "@/lib/types";
 import { relativeTime, titleCase } from "@/lib/utils";
@@ -45,12 +51,17 @@ const DEFAULT_IMAGES: Record<string, string> = {
 
 export default function WorkersPage() {
   const profiles = useWorkerProfiles();
+  const launches = useWorkerLaunches();
   const providers = useProviders();
   const agents = useAgents({ limit: 100 });
   const skills = useSkills();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [bootstrapProfile, setBootstrapProfile] = useState<WorkerProfile | null>(null);
+  const [logsLaunch, setLogsLaunch] = useState<{ id: string; name: string } | null>(null);
+  const [logs, setLogs] = useState("");
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsOpen, setLogsOpen] = useState(false);
 
   const [name, setName] = useState("OpenCode production");
   const [harness, setHarness] = useState("opencode");
@@ -107,6 +118,39 @@ export default function WorkersPage() {
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
+
+  const launch = useMutation({
+    mutationFn: launchWorkerProfile,
+    onSuccess: () => {
+      toast.success("Worker launch requested");
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workerLaunches });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const stop = useMutation({
+    mutationFn: stopWorkerLaunch,
+    onSuccess: () => {
+      toast.success("Worker launch stopped");
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workerLaunches });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  async function openLogs(launchId: string, name: string) {
+    setLogsLaunch({ id: launchId, name });
+    setLogsOpen(true);
+    setLogs("");
+    setLogsLoading(true);
+    try {
+      const result = await workerLaunchLogs(launchId);
+      setLogs(result.logs || "No log output yet.");
+    } catch (error) {
+      setLogs(errorMessage(error));
+    } finally {
+      setLogsLoading(false);
+    }
+  }
 
   const toggle = useMutation({
     mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) =>
@@ -192,6 +236,17 @@ export default function WorkersPage() {
                   ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={launch.isPending || launches.data?.some((item) =>
+                      item.profileId === profile.id &&
+                      ["pending", "starting", "running"].includes(item.status),
+                    )}
+                    onClick={() => launch.mutate(profile.id)}
+                  >
+                    <Rocket /> Launch
+                  </Button>
                   <Button size="sm" onClick={() => setBootstrapProfile(profile)}>
                     <Boxes /> Bootstrap
                   </Button>
@@ -224,7 +279,95 @@ export default function WorkersPage() {
         </div>
       )}
 
+      <div className="space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold">Launches</h2>
+          <p className="text-[11px] text-muted-foreground">
+            Worker instances started by the optional launcher. Stop or inspect logs here.
+          </p>
+        </div>
+        {launches.isLoading ? (
+          <Skeleton className="h-20 rounded-xl" />
+        ) : launches.isError ? (
+          <p className="text-sm text-destructive">{errorMessage(launches.error)}</p>
+        ) : !launches.data?.length ? (
+          <p className="rounded-xl border border-dashed p-4 text-xs text-muted-foreground">
+            No launches yet. Use Launch on an enabled profile.
+          </p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {launches.data.map((item) => (
+              <Card key={item.id}>
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <CardTitle className="truncate">{item.name}</CardTitle>
+                      <p className="text-[11px] text-muted-foreground">
+                        {item.target} · {item.image}
+                      </p>
+                    </div>
+                    <Badge
+                      variant={
+                        item.status === "running"
+                          ? "success"
+                          : item.status === "failed"
+                            ? "destructive"
+                            : item.status === "stopped"
+                              ? "outline"
+                              : "warning"
+                      }
+                    >
+                      {item.status}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <p className="text-[11px] text-muted-foreground">
+                    worker: <span className="font-mono">{item.workerId ?? "—"}</span>
+                  </p>
+                  {item.error ? (
+                    <p className="text-[11px] text-destructive">{item.error}</p>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void openLogs(item.id, item.name)}
+                    >
+                      <ScrollText /> Logs
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={!["pending", "starting", "running"].includes(item.status)}
+                      onClick={() => stop.mutate(item.id)}
+                    >
+                      <Square /> Stop
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    updated {relativeTime(item.updatedAt)}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
       <BootstrapDialog profile={bootstrapProfile} onClose={() => setBootstrapProfile(null)} />
+
+      <Dialog open={logsOpen} onOpenChange={setLogsOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Logs · {logsLaunch?.name}</DialogTitle>
+            <DialogDescription>Last 200 lines from the launcher runtime.</DialogDescription>
+          </DialogHeader>
+          <pre className="max-h-80 overflow-auto rounded-lg bg-muted/50 p-3 text-[10px] leading-relaxed">
+            {logsLoading ? "Loading…" : logs}
+          </pre>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl">

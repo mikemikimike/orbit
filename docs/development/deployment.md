@@ -58,6 +58,21 @@ helm --kube-context microk8s upgrade --install orbit deploy/helm/orbit \
   --set worker.token="$MOCK_TOKEN" --set opencodeWorker.token="$OPENCODE_TOKEN"
 ```
 
+### Worker launcher (optional)
+
+Set `launcher.enabled=true` and `launcher.token=<random>` to enable Launch/Stop/Logs.
+The chart creates a namespaced Pod Role/RoleBinding for the launcher only; `orbit-api`
+never gets workload RBAC. Without the launcher, Workers still supports profiles,
+tokens and bootstrap manifests.
+
+```bash
+helm upgrade orbit deploy/helm/orbit -n orbit -f values.yaml \
+  --set launcher.enabled=true --set launcher.token="$LAUNCHER_TOKEN"
+```
+
+Launch images must be pullable by the cluster. Kubernetes launches create one Pod per
+launch with `ORBIT_API_URL` + the profile token and mount the harness auth Secret.
+
 Ingress routes: `/docs`, `/healthz`, `/readyz` → `orbit-api`; `/api` → `orbit-web`
 (the web container proxies `/api/*` to the API at harness, injecting the dev token
 server-side when dev auth is enabled and forwarding OIDC/API bearer headers otherwise);

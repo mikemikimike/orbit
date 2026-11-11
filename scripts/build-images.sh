@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.."
 
 echo "==> Building ORBIT images for ${PLATFORM}, registry ${REGISTRY}, tag ${TAG}"
 
-for component in api worker web; do
+for component in api worker web launcher; do
   dockerfile="deploy/docker/${component}.Dockerfile"
   image="${REGISTRY}/orbit-${component}:${TAG}"
   echo "--- ${component} -> ${image}"

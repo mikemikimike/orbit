@@ -53,6 +53,21 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - X connector call returns a clear 401 with an invalid token (real API request path).
 - Existing mock-runtime smoke test and SSE through ingress continue to pass.
 
+## [0.5.1] — worker launcher
+
+### Added
+- Optional `orb-launcher` service with Docker and Kubernetes Pod drivers, protected by
+  an internal launcher token. The API never receives Docker socket or workload RBAC.
+- Durable `worker_launches` records with status, runtime id, worker id and errors.
+- Workers UI: Launch, Stop, status and last-200-lines logs.
+- Helm launcher Deployment, namespaced Pod RBAC and launcher token plumbing; Compose
+  launcher with Docker socket.
+- API endpoints for launching profiles and listing/stopping/inspecting launches.
+
+### Changed
+- Worker launches use profile-scoped, per-launch tokens that are revoked on stop.
+- Launcher is opt-in; without it the API returns a clear `launcher_unavailable` error.
+
 ## [0.5.0] — worker tokens and token-only bootstrap
 
 ### Added
@@ -79,7 +94,6 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Known limitations
 - Token rotation in Bootstrap invalidates existing workers using the old token.
-- Launcher UI (`orb-launcher`) is still pending; manifests are generated manually.
 - Per-execution Kubernetes Jobs remain pending.
 
 ## [0.4.0] — Harness rename

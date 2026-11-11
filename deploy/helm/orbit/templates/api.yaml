@@ -65,6 +65,17 @@ spec:
               value: {{ .Values.platform.corsOrigins | quote }}
             - name: ORBIT_PUBLIC_BASE_URL
               value: {{ .Values.platform.publicBaseUrl | quote }}
+            - name: ORBIT_WORKER_API_URL
+              value: "http://{{ include "orbit.apiHost" . }}:{{ .Values.api.port }}"
+            {{- if .Values.launcher.enabled }}
+            - name: ORBIT_LAUNCHER_URL
+              value: "http://{{ include "orbit.fullname" . }}-launcher:8090"
+            - name: ORBIT_LAUNCHER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orbit.secretName" . }}
+                  key: launcher-token
+            {{- end }}
             - name: ORBIT_SEED_DEMO
               value: {{ .Values.platform.seedDemo | quote }}
             - name: ORBIT_LOG_FORMAT

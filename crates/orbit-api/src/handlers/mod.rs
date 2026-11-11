@@ -8,6 +8,7 @@ pub mod health;
 pub mod skills;
 pub mod triggers;
 pub mod worker_api;
+pub mod worker_launches;
 pub mod worker_profiles;
 
 use uuid::Uuid;

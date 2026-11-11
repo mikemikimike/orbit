@@ -132,6 +132,26 @@ pub fn build_router(state: AppState) -> Router {
             post(handlers::worker_profiles::rotate_token),
         )
         .route(
+            "/api/v1/worker-profiles/{profile_id}/launch",
+            post(handlers::worker_launches::launch_profile),
+        )
+        .route(
+            "/api/v1/worker-launches",
+            get(handlers::worker_launches::list_launches),
+        )
+        .route(
+            "/api/v1/worker-launches/{launch_id}",
+            get(handlers::worker_launches::get_launch),
+        )
+        .route(
+            "/api/v1/worker-launches/{launch_id}/stop",
+            post(handlers::worker_launches::stop_launch),
+        )
+        .route(
+            "/api/v1/worker-launches/{launch_id}/logs",
+            get(handlers::worker_launches::launch_logs),
+        )
+        .route(
             "/api/v1/worker-tokens",
             get(handlers::worker_profiles::list_tokens)
                 .post(handlers::worker_profiles::create_token),

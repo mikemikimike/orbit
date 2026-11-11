@@ -377,6 +377,27 @@ pub struct WorkerTokenRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct WorkerLaunch {
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub profile_id: Uuid,
+    pub name: String,
+    pub target: String,
+    pub status: String,
+    pub runtime_id: Option<String>,
+    pub image: String,
+    pub worker_id: Option<String>,
+    pub worker_token_id: Option<Uuid>,
+    pub error: Option<String>,
+    pub created_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub stopped_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkerProfile {
     pub id: Uuid,
     pub org_id: Uuid,

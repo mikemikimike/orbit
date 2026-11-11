@@ -63,7 +63,12 @@ pnpm --filter @orbit/web dev       # terminal 3 (http://localhost:3000)
 ```
 
 Workers no longer need `ORBIT_DATABASE_URL`, `ORBIT_NATS_URL` or `ORBIT_MASTER_KEY`.
-For Compose set `ORBIT_WORKER_TOKEN` in `.env` (see `.env.example`).
+For Compose set `ORBIT_WORKER_TOKEN` in `.env` (see `.env.example`). The optional
+launcher runs with the Docker socket and exposes Launch/Stop/Logs in Workers:
+
+```bash
+docker compose --env-file .env -f deploy/compose/compose.yaml up -d launcher api
+```
 
 The Next.js dev server proxies `/api/*` to `ORBIT_API_INTERNAL_URL` (default
 `http://localhost:8080`).

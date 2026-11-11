@@ -32,6 +32,9 @@ pub struct AppState {
     pub metrics: Arc<Metrics>,
     pub max_body_bytes: usize,
     pub cors_origins: Vec<String>,
+    pub launcher_url: Option<String>,
+    pub launcher_token: Option<String>,
+    pub worker_api_url: String,
 }
 
 impl AppState {

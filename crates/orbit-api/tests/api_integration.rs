@@ -92,6 +92,9 @@ async fn test_app(allow_anonymous: bool) -> Option<TestApp> {
         metrics: Arc::new(orbit_api::metrics::Metrics::new()),
         max_body_bytes: 2 * 1024 * 1024,
         cors_origins: vec!["*".into()],
+        launcher_url: None,
+        launcher_token: None,
+        worker_api_url: "http://localhost:8080".into(),
     };
     // In this test harness anonymous is controlled by auth_config.dev.allow_anonymous;
     // rebuild the config accordingly for the negative auth test.

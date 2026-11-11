@@ -1,6 +1,6 @@
 # ADR-0008: Harness / Provider / Model / Worker terminology
 
-**Status:** Accepted. 0.4.0 rename and 0.5.0 worker-token API implemented.
+**Status:** Accepted. 0.4.0 rename, 0.5.0 worker-token API and 0.5.1 launcher implemented.
 
 ## Context
 

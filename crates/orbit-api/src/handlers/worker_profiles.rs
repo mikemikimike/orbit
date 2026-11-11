@@ -94,7 +94,7 @@ pub struct WorkerTokenView {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-async fn issue_profile_token(
+pub(crate) async fn issue_profile_token(
     state: &AppState,
     org_id: Uuid,
     profile: &WorkerProfile,

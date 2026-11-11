@@ -35,6 +35,7 @@ helm --kube-context "${KUBE_CONTEXT}" upgrade --install "${RELEASE}" deploy/helm
   --set api.tag="${TAG}" \
   --set worker.tag="${TAG}" \
   --set web.tag="${TAG}" \
+  --set launcher.tag="${TAG}" \
   --set ingress.host="${INGRESS_HOST}" \
   "$@"
 set +x

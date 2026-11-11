@@ -23,7 +23,9 @@ import type {
   WorkerView,
   Skill,
   WorkerProfile,
+  WorkerLaunch,
 } from "./types";
+import { workerLaunches } from "./launcher";
 
 export function unwrap<T>(result: {
   data?: T;
@@ -58,6 +60,7 @@ export const queryKeys = {
   workers: ["workers"] as const,
   skills: ["skills"] as const,
   workerProfiles: ["worker-profiles"] as const,
+  workerLaunches: ["worker-launches"] as const,
 };
 
 export function useMeta() {
@@ -250,6 +253,14 @@ export function useWorkerProfiles() {
   return useQuery<WorkerProfile[]>({
     queryKey: queryKeys.workerProfiles,
     queryFn: async () => unwrap(await api.GET("/api/v1/worker-profiles")),
+  });
+}
+
+export function useWorkerLaunches() {
+  return useQuery<WorkerLaunch[]>({
+    queryKey: queryKeys.workerLaunches,
+    queryFn: workerLaunches,
+    refetchInterval: 5_000,
   });
 }
 

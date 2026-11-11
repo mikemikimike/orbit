@@ -48,6 +48,9 @@ services:
       ORBIT_NATS_URL: nats://nats:4222
       ORBIT_CORS_ORIGINS: ${ORBIT_CORS_ORIGINS:-http://localhost:3000}
       ORBIT_PUBLIC_BASE_URL: ${ORBIT_PUBLIC_BASE_URL:-http://localhost:8080}
+      ORBIT_WORKER_API_URL: http://host.docker.internal:8080
+      ORBIT_LAUNCHER_URL: http://launcher:8090
+      ORBIT_LAUNCHER_TOKEN: ${ORBIT_LAUNCHER_TOKEN:-orbit-dev-launcher-token}
       ORBIT_LOG_FORMAT: ${ORBIT_LOG_FORMAT:-text}
     ports:
       - "8080:8080"
@@ -80,6 +83,24 @@ services:
         condition: service_started
       db:
         condition: service_healthy
+    restart: unless-stopped
+
+  launcher:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/launcher.Dockerfile
+    image: orbit-launcher:dev
+    environment:
+      ORBIT_LAUNCHER_TOKEN: ${ORBIT_LAUNCHER_TOKEN:-orbit-dev-launcher-token}
+      ORBIT_LAUNCHER_NAMESPACE: ${ORBIT_LAUNCHER_NAMESPACE:-orbit}
+      ORBIT_OPENCODE_AUTH_EXPORT: /auth/auth-export.json
+      ORBIT_PI_AGENT_DIR: /auth/pi-agent
+      ORBIT_LOG_FORMAT: ${ORBIT_LOG_FORMAT:-text}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../.orbit-auth-export.json:/auth/auth-export.json:ro
+    ports:
+      - "8090:8090"
     restart: unless-stopped
 
   web:

@@ -70,6 +70,9 @@ async fn main() -> anyhow::Result<()> {
         metrics: Arc::new(orbit_api::metrics::Metrics::new()),
         max_body_bytes: config.body_limit_bytes,
         cors_origins: config.cors_origins.clone(),
+        launcher_url: config.launcher_url.clone(),
+        launcher_token: config.launcher_token.clone(),
+        worker_api_url: config.worker_api_url.clone(),
     };
 
     orbit_api::background::spawn(state.clone());
