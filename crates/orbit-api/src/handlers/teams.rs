@@ -87,6 +87,38 @@ fn parse_definition(team: &AgentTeam) -> Result<TeamDefinition, ApiError> {
         .map_err(|error| ApiError::internal(format!("team definition is invalid: {error}")))
 }
 
+async fn validate_native_primary(
+    state: &AppState,
+    org_id: Uuid,
+    mode: &str,
+    steps: &[TeamStepInput],
+    issues: &mut Vec<ValidationIssue>,
+) {
+    if mode != "native" {
+        return;
+    }
+    let Some(primary) = steps.first() else {
+        return;
+    };
+    let Ok(agent) = state.store.get_agent(org_id, primary.agent_id).await else {
+        return;
+    };
+    let Ok(version) = state.store.get_current_version(org_id, &agent).await else {
+        return;
+    };
+    match serde_json::from_value::<orbit_domain::AgentSpec>(version.spec) {
+        Ok(spec) if spec.harness.kind == HarnessKind::OpenCode => {}
+        Ok(_) => issues.push(ValidationIssue::new(
+            "mode",
+            "native Agent Teams currently require an OpenCode primary agent; Pi and other harnesses can use pipeline mode",
+        )),
+        Err(error) => issues.push(ValidationIssue::new(
+            "mode",
+            format!("primary agent spec is invalid: {error}"),
+        )),
+    }
+}
+
 pub async fn create_team(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -139,6 +171,7 @@ pub async fn create_team(
             ));
         }
     }
+    validate_native_primary(&state, auth.org_id, &body.mode, &body.steps, &mut issues).await;
     if !issues.is_empty() {
         return Err(ApiError::validation(issues));
     }
@@ -216,6 +249,7 @@ pub async fn update_team(
             ));
         }
     }
+    validate_native_primary(&state, auth.org_id, &body.mode, &body.steps, &mut issues).await;
     if !issues.is_empty() {
         return Err(ApiError::validation(issues));
     }

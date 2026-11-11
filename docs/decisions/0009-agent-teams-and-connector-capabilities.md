@@ -35,9 +35,9 @@ issues, so a coding agent could not complete a repository loop.
   runs only.
 - A `TeamRun` creates one normal execution per step, sequentially. Executions carry
   `teamRunId`/`teamStepIndex` for grouped visibility.
-- OpenCode/Pi native primary/subagent features are harness-internal and run inside one
-  execution. ORBIT Agent Teams are harness-agnostic and use separate executions so each
-  step has its own policy, approvals, events and audit.
+- OpenCode's native primary/subagent feature is supported as native team mode. Pi has
+  no equivalent verified feature; Pi teams use pipeline mode with separate executions.
+  Pipeline execution gives each step its own policy, approvals, events and audit.
 - `orbit-api` advances team runs as a coordinator. It does not reason or call model APIs;
   it only creates executions, records state and publishes events. Agent loops remain in
   the execution plane.

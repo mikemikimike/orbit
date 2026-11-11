@@ -85,6 +85,11 @@ Native mode currently requires an OpenCode primary agent. Subagent tool calls ar
 visible as one ORBIT execution; connector policy is enforced against the primary agent's
 binding for the whole native team.
 
+Pi does **not** have an equivalent primary/subagent configuration in the tested 1.5.x
+release, so native Agent Teams are rejected for Pi. Pi can still use **pipeline** mode:
+each agent is a separate ORBIT execution, with explicit output handoff but without a
+shared workspace or an internal feedback loop.
+
 ## Current limitations
 
 - Connections are **not** attached to an Agent Team. Attach them to each agent.

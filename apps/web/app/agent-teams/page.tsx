@@ -76,9 +76,13 @@ export default function AgentTeamsPage() {
 
   const agentOptions = agents.data?.items ?? [];
   const skillOptions = skills.data ?? [];
+  const primaryAgent = agentOptions.find((agent) => agent.id === steps[0]?.agentId);
+  const nativeInvalid =
+    mode === "native" && Boolean(primaryAgent) && primaryAgent?.harness !== "opencode";
   const canCreate =
     name.trim() &&
     steps.length > 0 &&
+    !nativeInvalid &&
     steps.every((step) => step.agentId) &&
     new Set(steps.map((step) => step.agentId)).size === steps.length;
 
@@ -348,6 +352,12 @@ export default function AgentTeamsPage() {
                 Native mode runs the primary agent once and exposes later agents as OpenCode
                 subagents. Pipeline mode gives every agent a separate ORBIT execution.
               </p>
+              {nativeInvalid ? (
+                <p className="text-[11px] text-destructive">
+                  Native teams currently require an OpenCode primary agent. Pi and other
+                  harnesses can use pipeline mode.
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label>Team instruction / goal</Label>
