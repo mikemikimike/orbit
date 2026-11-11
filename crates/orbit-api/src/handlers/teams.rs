@@ -34,6 +34,13 @@ pub struct CreateTeamRequest {
     /// later steps receive it together with the previous step output.
     #[serde(default)]
     pub instructions: String,
+    /// Structured workspace repository (owner/repo). Instructions alone cannot drive
+    /// repository checkout; this is passed to the worker.
+    #[serde(default)]
+    pub repository: Option<String>,
+    /// Optional base/working branch for repository checkout.
+    #[serde(default)]
+    pub branch: Option<String>,
     /// Skills materialized for every step in the team.
     #[serde(default)]
     pub skills: Vec<String>,
@@ -67,6 +74,10 @@ pub struct TeamDefinition {
     pub mode: String,
     #[serde(default)]
     pub instructions: String,
+    #[serde(default)]
+    pub repository: Option<String>,
+    #[serde(default)]
+    pub branch: Option<String>,
     #[serde(default)]
     pub skills: Vec<String>,
     pub steps: Vec<TeamStepDefinition>,
@@ -137,6 +148,19 @@ pub async fn create_team(
             "mode must be pipeline or native",
         )]));
     }
+    if let Some(repository) = body
+        .repository
+        .as_deref()
+        .map(str::trim)
+        .filter(|r| !r.is_empty())
+    {
+        if !repository.contains('/') || repository.chars().any(char::is_whitespace) {
+            return Err(ApiError::validation(vec![ValidationIssue::new(
+                "repository",
+                "repository must be owner/repo",
+            )]));
+        }
+    }
     let mut issues = Vec::new();
     let mut agent_ids = std::collections::BTreeSet::new();
     for step in &body.steps {
@@ -178,6 +202,8 @@ pub async fn create_team(
     let definition = serde_json::json!({
         "mode": body.mode,
         "instructions": body.instructions.trim(),
+        "repository": body.repository.as_deref().map(str::trim).filter(|value| !value.is_empty()),
+        "branch": body.branch.as_deref().map(str::trim).filter(|value| !value.is_empty()),
         "skills": body.skills,
         "steps": body.steps.iter().map(|step| serde_json::json!({
             "agentId": step.agent_id,
@@ -215,6 +241,19 @@ pub async fn update_team(
             "mode must be pipeline or native",
         )]));
     }
+    if let Some(repository) = body
+        .repository
+        .as_deref()
+        .map(str::trim)
+        .filter(|r| !r.is_empty())
+    {
+        if !repository.contains('/') || repository.chars().any(char::is_whitespace) {
+            return Err(ApiError::validation(vec![ValidationIssue::new(
+                "repository",
+                "repository must be owner/repo",
+            )]));
+        }
+    }
     let mut issues = Vec::new();
     let mut agent_ids = std::collections::BTreeSet::new();
     for step in &body.steps {
@@ -256,6 +295,8 @@ pub async fn update_team(
     let definition = serde_json::json!({
         "mode": body.mode,
         "instructions": body.instructions.trim(),
+        "repository": body.repository.as_deref().map(str::trim).filter(|value| !value.is_empty()),
+        "branch": body.branch.as_deref().map(str::trim).filter(|value| !value.is_empty()),
         "skills": body.skills,
         "steps": body.steps.iter().map(|step| serde_json::json!({
             "agentId": step.agent_id,
@@ -471,10 +512,32 @@ pub async fn create_run(
             "task or team instructions are required",
         )]));
     }
+    let mut payload = body.payload.clone();
+    if !payload.is_object() {
+        payload = serde_json::json!({});
+    }
+    if payload
+        .get("repository")
+        .and_then(|value| value.as_str())
+        .is_none()
+    {
+        if let Some(repository) = &definition.repository {
+            payload["repository"] = serde_json::json!(repository);
+        }
+    }
+    if payload
+        .get("branch")
+        .and_then(|value| value.as_str())
+        .is_none()
+    {
+        if let Some(branch) = &definition.branch {
+            payload["branch"] = serde_json::json!(branch);
+        }
+    }
     let input = serde_json::json!({
         "task": task,
         "instructions": definition.instructions,
-        "payload": body.payload,
+        "payload": payload,
         "definition": definition,
         "autoApprove": body.auto_approve,
     });

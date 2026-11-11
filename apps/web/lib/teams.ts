@@ -34,6 +34,8 @@ type TeamInput = {
   description: string;
   mode: "pipeline" | "native";
   instructions: string;
+  repository?: string;
+  branch?: string;
   skills: string[];
   steps: TeamStepInput[];
 };

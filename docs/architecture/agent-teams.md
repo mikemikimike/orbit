@@ -18,6 +18,9 @@ Agent Team ──ordered agents───────────────┘
   connections and capabilities of its agent.
 - **Team skills and instruction**: shared by every step. Agent-level instructions define
   the role. The first agent is the primary agent; later agents are subagents.
+- **Team repository**: `repository` and optional `branch` are structured checkout
+  settings. They are passed to the worker's `repo.checkout`; instructions alone do not
+  drive checkout. A run can override the team repository.
 - **Execution mode**:
   - `pipeline`: one ORBIT execution per agent, sequential.
   - `native`: one OpenCode execution; later team agents are materialized as
@@ -96,8 +99,8 @@ shared workspace or an internal feedback loop.
 - A pipeline team run executes each agent **once**. Native mode supports an internal
   coordinator/subagent loop within one execution. A queue of many issues still requires
   multiple runs or a future dispatcher.
-- The run UI does not yet accept a repository override. Set `defaultRepository` on the
-  connection.
+- A run can override the team repository; if neither is set, the connection's
+  `defaultRepository` is used.
 - GitLab invocation, automatic per-execution worker launch and parallel subagents are
   still pending.
 - GitHub writes require a PAT and may require approvals depending on autonomy.

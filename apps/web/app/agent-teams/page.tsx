@@ -63,6 +63,8 @@ export default function AgentTeamsPage() {
   const [instructions, setInstructions] = useState(
     "Pick up the next GitHub issue labelled agent-ready, implement it, test it and request review. Repeat until no ready issues remain.",
   );
+  const [teamRepository, setTeamRepository] = useState("mkluiver/orbit");
+  const [teamBranch, setTeamBranch] = useState("");
   const [teamSkills, setTeamSkills] = useState<string[]>([]);
   const [steps, setSteps] = useState<TeamStepInput[]>([
     { agentId: "" },
@@ -100,6 +102,8 @@ export default function AgentTeamsPage() {
         description,
         mode,
         instructions,
+        repository: teamRepository.trim() || undefined,
+        branch: teamBranch.trim() || undefined,
         skills: teamSkills,
         steps,
       };
@@ -124,6 +128,8 @@ export default function AgentTeamsPage() {
     setInstructions(
       "Pick up the next GitHub issue labelled agent-ready, implement it, test it and request review. Repeat until no ready issues remain.",
     );
+    setTeamRepository("mkluiver/orbit");
+    setTeamBranch("");
     setTeamSkills([]);
     setSteps([{ agentId: "" }, { agentId: "" }]);
     setOpen(true);
@@ -135,6 +141,8 @@ export default function AgentTeamsPage() {
     setName(team.name);
     setDescription(team.description);
     setInstructions(team.definition.instructions ?? "");
+    setTeamRepository(team.definition.repository ?? "");
+    setTeamBranch(team.definition.branch ?? "");
     setTeamSkills(team.definition.skills ?? []);
     setSteps((team.definition.steps ?? []).map((step) => ({ agentId: step.agentId })));
     setOpen(true);
@@ -226,6 +234,12 @@ export default function AgentTeamsPage() {
                       </Badge>
                     ))}
                   </div>
+                  {team.definition.repository ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      repository: <span className="font-mono">{team.definition.repository}</span>
+                      {team.definition.branch ? ` · ${team.definition.branch}` : ""}
+                    </p>
+                  ) : null}
                   {team.definition.skills?.length ? (
                     <p className="text-[11px] text-muted-foreground">
                       team skills: {team.definition.skills.join(", ")}
@@ -237,7 +251,7 @@ export default function AgentTeamsPage() {
                       onClick={() => {
                         setRunTeam(team);
                         setTask(team.definition.instructions ?? "");
-                        setRepository("");
+                        setRepository(team.definition.repository ?? "");
                         setAutoApprove(false);
                       }}
                     >
@@ -338,6 +352,28 @@ export default function AgentTeamsPage() {
                 <Input value={description} onChange={(event) => setDescription(event.target.value)} />
               </div>
             </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Repository</Label>
+                <Input
+                  value={teamRepository}
+                  onChange={(event) => setTeamRepository(event.target.value)}
+                  placeholder="owner/repo"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Base branch (optional)</Label>
+                <Input
+                  value={teamBranch}
+                  onChange={(event) => setTeamBranch(event.target.value)}
+                  placeholder="main"
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Used as the structured checkout target. A run can override it. Putting a
+              repository only in the instruction does not affect checkout.
+            </p>
             <div className="space-y-1.5">
               <Label>Execution mode</Label>
               <select
