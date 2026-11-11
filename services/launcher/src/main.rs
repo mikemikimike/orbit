@@ -24,7 +24,9 @@ struct AppState {
     kubectl: String,
     namespace: String,
     opencode_auth_export: Option<String>,
+    opencode_auth_host_path: Option<String>,
     pi_agent_dir: Option<String>,
+    pi_agent_host_dir: Option<String>,
     image_pull_secret: Option<String>,
 }
 
@@ -81,7 +83,13 @@ async fn main() -> anyhow::Result<()> {
         opencode_auth_export: std::env::var("ORBIT_OPENCODE_AUTH_EXPORT")
             .ok()
             .filter(|value| !value.trim().is_empty()),
+        opencode_auth_host_path: std::env::var("ORBIT_OPENCODE_AUTH_HOST_PATH")
+            .ok()
+            .filter(|value| !value.trim().is_empty()),
         pi_agent_dir: std::env::var("ORBIT_PI_AGENT_DIR")
+            .ok()
+            .filter(|value| !value.trim().is_empty()),
+        pi_agent_host_dir: std::env::var("ORBIT_PI_AGENT_HOST_DIR")
             .ok()
             .filter(|value| !value.trim().is_empty()),
         image_pull_secret: std::env::var("ORBIT_LAUNCHER_IMAGE_PULL_SECRET")
@@ -203,19 +211,31 @@ async fn launch_docker(state: &AppState, request: &LaunchRequest) -> anyhow::Res
            opencode auth import --standalone /seed/auth-export.json || true; \
          fi; exec /usr/local/bin/orbit-worker";
     if request.harness_kind == "opencode" {
-        if let Some(path) = &state.opencode_auth_export {
-            if std::path::Path::new(path).exists() {
-                args.push("-v".into());
-                args.push(format!("{path}:/seed/auth-export.json:ro"));
-            }
+        // A launcher running in a container must pass the host path used by the Docker
+        // daemon; a native launcher can use the path it can see directly.
+        let path = state
+            .opencode_auth_host_path
+            .as_ref()
+            .or(state.opencode_auth_export.as_ref())
+            .filter(|path| {
+                state.opencode_auth_host_path.is_some() || std::path::Path::new(path).exists()
+            });
+        if let Some(path) = path {
+            args.push("-v".into());
+            args.push(format!("{path}:/seed/auth-export.json:ro"));
         }
     }
     if request.harness_kind == "pi" {
-        if let Some(path) = &state.pi_agent_dir {
-            if std::path::Path::new(path).exists() {
-                args.push("-v".into());
-                args.push(format!("{path}:/home/orbit/.pi/agent"));
-            }
+        let path = state
+            .pi_agent_host_dir
+            .as_ref()
+            .or(state.pi_agent_dir.as_ref())
+            .filter(|path| {
+                state.pi_agent_host_dir.is_some() || std::path::Path::new(path).exists()
+            });
+        if let Some(path) = path {
+            args.push("-v".into());
+            args.push(format!("{path}:/home/orbit/.pi/agent"));
         }
     }
     args.push("--entrypoint".into());

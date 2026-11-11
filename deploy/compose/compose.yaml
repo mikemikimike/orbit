@@ -94,7 +94,9 @@ services:
       ORBIT_LAUNCHER_TOKEN: ${ORBIT_LAUNCHER_TOKEN:-orbit-dev-launcher-token}
       ORBIT_LAUNCHER_NAMESPACE: ${ORBIT_LAUNCHER_NAMESPACE:-orbit}
       ORBIT_OPENCODE_AUTH_EXPORT: /auth/auth-export.json
+      ORBIT_OPENCODE_AUTH_HOST_PATH: ${ORBIT_OPENCODE_AUTH_HOST_PATH:-}
       ORBIT_PI_AGENT_DIR: /auth/pi-agent
+      ORBIT_PI_AGENT_HOST_DIR: ${ORBIT_PI_AGENT_HOST_DIR:-}
       ORBIT_LOG_FORMAT: ${ORBIT_LOG_FORMAT:-text}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

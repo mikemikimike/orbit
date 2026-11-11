@@ -70,6 +70,10 @@ launcher runs with the Docker socket and exposes Launch/Stop/Logs in Workers:
 docker compose --env-file .env -f deploy/compose/compose.yaml up -d launcher api
 ```
 
+For Docker-launched OpenCode/Pi workers, set `ORBIT_OPENCODE_AUTH_HOST_PATH` or
+`ORBIT_PI_AGENT_HOST_DIR` to the **host** path the Docker daemon should mount. The
+launcher container cannot translate its own mount paths into sibling mounts.
+
 The Next.js dev server proxies `/api/*` to `ORBIT_API_INTERNAL_URL` (default
 `http://localhost:8080`).
 
