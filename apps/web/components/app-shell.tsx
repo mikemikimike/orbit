@@ -25,13 +25,13 @@ import { useDashboard } from "@/lib/queries";
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/agent-teams", label: "Agent Teams", icon: Users },
   { href: "/executions", label: "Executions", icon: Activity },
   { href: "/approvals", label: "Approvals", icon: ShieldCheck },
   { href: "/connections", label: "Connections", icon: Cable },
   { href: "/harnesses", label: "Harnesses", icon: Cpu },
   { href: "/models", label: "Providers", icon: Boxes },
   { href: "/skills", label: "Skills", icon: BookOpen },
-  { href: "/agent-teams", label: "Agent Teams", icon: Users },
   { href: "/workers", label: "Workers", icon: Server },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -39,8 +39,8 @@ const NAV = [
 const MOBILE_NAV = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/agents", label: "Agents", icon: Bot },
-  { href: "/executions", label: "Runs", icon: Activity },
   { href: "/agent-teams", label: "Agent Teams", icon: Users },
+  { href: "/executions", label: "Runs", icon: Activity },
   { href: "/approvals", label: "Approvals", icon: ShieldCheck },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
