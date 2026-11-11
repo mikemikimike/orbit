@@ -33,7 +33,7 @@ export type AgentTeam = {
   orgId: string;
   name: string;
   description: string;
-  definition: { steps?: Array<{ name: string; agentId: string; skills?: string[] }> };
+  definition: { instructions?: string; skills?: string[]; steps?: Array<{ agentId: string }> };
   createdBy?: string | null;
   createdAt: string;
   updatedAt: string;

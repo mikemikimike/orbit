@@ -17,10 +17,7 @@ use crate::state::AppState;
 #[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamStepInput {
-    pub name: String,
     pub agent_id: Uuid,
-    #[serde(default)]
-    pub skills: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
@@ -29,12 +26,21 @@ pub struct CreateTeamRequest {
     pub name: String,
     #[serde(default)]
     pub description: String,
+    /// Shared goal/instruction for the team. The first step receives it as its task;
+    /// later steps receive it together with the previous step output.
+    #[serde(default)]
+    pub instructions: String,
+    /// Skills materialized for every step in the team.
+    #[serde(default)]
+    pub skills: Vec<String>,
     pub steps: Vec<TeamStepInput>,
 }
 
 #[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateTeamRunRequest {
+    /// Optional run-specific task. Falls back to the team instruction.
+    #[serde(default)]
     pub task: String,
     #[serde(default)]
     pub payload: serde_json::Value,
@@ -50,16 +56,17 @@ pub struct TeamRunDetail {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamDefinition {
+    #[serde(default)]
+    pub instructions: String,
+    #[serde(default)]
+    pub skills: Vec<String>,
     pub steps: Vec<TeamStepDefinition>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamStepDefinition {
-    pub name: String,
     pub agent_id: Uuid,
-    #[serde(default)]
-    pub skills: Vec<String>,
 }
 
 fn parse_definition(team: &AgentTeam) -> Result<TeamDefinition, ApiError> {
@@ -80,15 +87,12 @@ pub async fn create_team(
         ]));
     }
     let mut issues = Vec::new();
-    let mut names = std::collections::BTreeSet::new();
+    let mut agent_ids = std::collections::BTreeSet::new();
     for step in &body.steps {
-        if step.name.trim().is_empty() {
-            issues.push(ValidationIssue::new("steps.name", "step name is required"));
-        }
-        if !names.insert(step.name.trim().to_string()) {
+        if !agent_ids.insert(step.agent_id) {
             issues.push(ValidationIssue::new(
-                "steps.name",
-                format!("duplicate step name '{}'", step.name),
+                "steps.agentId",
+                "the same agent cannot appear twice in one team",
             ));
         }
         if state
@@ -102,28 +106,28 @@ pub async fn create_team(
                 format!("unknown agent '{}'", step.agent_id),
             ));
         }
-        for slug in &step.skills {
-            if state
-                .store
-                .get_skill_by_slug(auth.org_id, slug)
-                .await?
-                .is_none()
-            {
-                issues.push(ValidationIssue::new(
-                    "steps.skills",
-                    format!("unknown skill '{slug}'"),
-                ));
-            }
+    }
+    for slug in &body.skills {
+        if state
+            .store
+            .get_skill_by_slug(auth.org_id, slug)
+            .await?
+            .is_none()
+        {
+            issues.push(ValidationIssue::new(
+                "skills",
+                format!("unknown skill '{slug}'"),
+            ));
         }
     }
     if !issues.is_empty() {
         return Err(ApiError::validation(issues));
     }
     let definition = serde_json::json!({
+        "instructions": body.instructions.trim(),
+        "skills": body.skills,
         "steps": body.steps.iter().map(|step| serde_json::json!({
-            "name": step.name.trim(),
             "agentId": step.agent_id,
-            "skills": step.skills,
         })).collect::<Vec<_>>()
     });
     let team = state
@@ -188,15 +192,28 @@ pub(crate) async fn start_step(
         .get("task")
         .and_then(|value| value.as_str())
         .unwrap_or("Team run");
+    let instructions = run
+        .input
+        .get("instructions")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
     let previous = previous_output
         .map(|value| value.to_string())
         .unwrap_or_else(|| "null".into());
+    let task_text = if previous_output.is_none() {
+        format!("Team goal: {instructions}\n\n{task}")
+    } else {
+        format!(
+            "Team goal: {instructions}\n\nRole: {}\n\nOriginal task: {task}\n\nPrevious step output:\n{previous}",
+            agent.name
+        )
+    };
     let input = serde_json::json!({
-        "task": format!("Team step '{}' of '{}'.\n\n{}", step.name, team_task(run), task),
+        "task": task_text,
         "payload": {
             "teamRunId": run.id,
             "stepIndex": step_index,
-            "stepName": step.name,
+            "agentName": agent.name,
             "previous": previous_output,
             "repository": run.input.get("payload").and_then(|value| value.get("repository")).cloned(),
             "branch": run.input.get("payload").and_then(|value| value.get("branch")).cloned(),
@@ -209,7 +226,8 @@ pub(crate) async fn start_step(
         },
         "team": {
             "runId": run.id,
-            "step": step.name,
+            "goal": instructions,
+            "agent": agent.name,
             "previous": previous,
         }
     });
@@ -225,7 +243,7 @@ pub(crate) async fn start_step(
             placement: spec.harness.placement.as_str(),
             trigger_id: None,
             input,
-            skills: &step.skills,
+            skills: &definition.skills,
             timeout_seconds: spec.resources.timeout_seconds,
             requested_by: run.requested_by,
             idempotency_key: Some(&format!("team:{}:{}", run.id, step_index)),
@@ -237,22 +255,15 @@ pub(crate) async fn start_step(
             run.id,
             run.org_id,
             step_index as i32,
-            &step.name,
+            &agent.name,
             agent.id,
             version.id,
-            &step.skills,
+            &definition.skills,
             &execution.input,
             Some(execution.id),
         )
         .await?;
     Ok(created)
-}
-
-fn team_task(run: &TeamRun) -> &str {
-    run.input
-        .get("task")
-        .and_then(|value| value.as_str())
-        .unwrap_or("Team run")
 }
 
 pub async fn create_run(
@@ -262,15 +273,24 @@ pub async fn create_run(
     crate::extract::ApiJson(body): crate::extract::ApiJson<CreateTeamRunRequest>,
 ) -> Result<(StatusCode, Json<TeamRunDetail>), ApiError> {
     auth.require(Permission::ExecutionsCreate)?;
-    if body.task.trim().is_empty() {
-        return Err(ApiError::validation(vec![ValidationIssue::new(
-            "task",
-            "task is required",
-        )]));
-    }
     let team = state.store.get_agent_team(auth.org_id, team_id).await?;
     let definition = parse_definition(&team)?;
-    let input = serde_json::json!({ "task": body.task.trim(), "payload": body.payload });
+    let task = if body.task.trim().is_empty() {
+        definition.instructions.trim()
+    } else {
+        body.task.trim()
+    };
+    if task.is_empty() {
+        return Err(ApiError::validation(vec![ValidationIssue::new(
+            "task",
+            "task or team instructions are required",
+        )]));
+    }
+    let input = serde_json::json!({
+        "task": task,
+        "instructions": definition.instructions,
+        "payload": body.payload,
+    });
     let run = state
         .store
         .create_team_run(auth.org_id, team.id, &input, Some(auth.user_id))

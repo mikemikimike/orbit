@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Plus, Play, Trash2, Users } from "lucide-react";
+import { ChevronRight, Plus, Play, Trash2, Users, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -26,9 +26,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import {
   queryKeys,
-  unwrap,
   useAgents,
   useAgentTeams,
   useSkills,
@@ -45,7 +45,7 @@ import {
 import type { AgentTeam, TeamRunDetail } from "@/lib/types";
 import { relativeTime } from "@/lib/utils";
 
-export default function TeamsPage() {
+export default function AgentTeamsPage() {
   const teams = useAgentTeams();
   const runs = useTeamRuns();
   const agents = useAgents({ limit: 100 });
@@ -54,26 +54,47 @@ export default function TeamsPage() {
 
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("Coding team");
-  const [description, setDescription] = useState("Architect, builder, tester and reviewer.");
+  const [description, setDescription] = useState(
+    "Primary coding agent with specialist agents for implementation and review.",
+  );
+  const [instructions, setInstructions] = useState(
+    "Pick up the next GitHub issue labelled agent-ready, implement it, test it and request review. Repeat until no ready issues remain.",
+  );
+  const [teamSkills, setTeamSkills] = useState<string[]>([]);
   const [steps, setSteps] = useState<TeamStepInput[]>([
-    { name: "architect", agentId: "", skills: [] },
-    { name: "builder", agentId: "", skills: [] },
-    { name: "tester", agentId: "", skills: [] },
-    { name: "reviewer", agentId: "", skills: [] },
+    { agentId: "" },
+    { agentId: "" },
   ]);
   const [runTeam, setRunTeam] = useState<AgentTeam | null>(null);
-  const [task, setTask] = useState("Pick up the next ready GitHub issue and implement it.");
+  const [task, setTask] = useState("");
   const [detail, setDetail] = useState<TeamRunDetail | null>(null);
 
   const agentOptions = agents.data?.items ?? [];
   const skillOptions = skills.data ?? [];
-  const canCreate = name.trim() && steps.every((step) => step.name.trim() && step.agentId);
+  const canCreate =
+    name.trim() &&
+    steps.length > 0 &&
+    steps.every((step) => step.agentId) &&
+    new Set(steps.map((step) => step.agentId)).size === steps.length;
+
+  const agentLabel = useMemo(() => {
+    const map = new Map(
+      agentOptions.map((agent) => [agent.id, `${agent.name} · ${agent.harness}`]),
+    );
+    return (id: string) => map.get(id) ?? id.slice(0, 8);
+  }, [agentOptions]);
 
   const create = useMutation({
     mutationFn: () =>
-      createAgentTeam({ name: name.trim(), description, steps }),
+      createAgentTeam({
+        name: name.trim(),
+        description,
+        instructions,
+        skills: teamSkills,
+        steps,
+      }),
     onSuccess: () => {
-      toast.success("Team created");
+      toast.success("Agent team created");
       setOpen(false);
       void queryClient.invalidateQueries({ queryKey: queryKeys.agentTeams });
     },
@@ -83,7 +104,7 @@ export default function TeamsPage() {
   const remove = useMutation({
     mutationFn: deleteAgentTeam,
     onSuccess: () => {
-      toast.success("Team deleted");
+      toast.success("Agent team deleted");
       void queryClient.invalidateQueries({ queryKey: queryKeys.agentTeams });
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -92,7 +113,7 @@ export default function TeamsPage() {
   const run = useMutation({
     mutationFn: () => startTeamRun(runTeam!.id, task.trim()),
     onSuccess: (result) => {
-      toast.success("Team run started");
+      toast.success("Agent team run started");
       setRunTeam(null);
       setDetail(result);
       void queryClient.invalidateQueries({ queryKey: queryKeys.teamRuns });
@@ -109,20 +130,15 @@ export default function TeamsPage() {
     }
   }
 
-  const stepLabel = useMemo(() => {
-    const map = new Map(agentOptions.map((agent) => [agent.id, `${agent.name} (${agent.harness})`]));
-    return (id: string) => map.get(id) ?? id.slice(0, 8);
-  }, [agentOptions]);
-
   return (
     <div className="space-y-5 animate-fade-in">
       <PageHeader
         eyebrow="Orchestration"
-        title="Teams"
-        description="Sequential role handoffs. Every step is a normal execution with its own agent, skills, connectors and approvals."
+        title="Agent Teams"
+        description="Ordered primary and specialist agents. Every step is a normal execution with its own connector grants and approvals; skills and the team goal are shared."
         actions={
           <Button onClick={() => setOpen(true)}>
-            <Plus /> New team
+            <Plus /> New agent team
           </Button>
         }
       />
@@ -135,35 +151,42 @@ export default function TeamsPage() {
         <EmptyState
           icon={<Users className="h-6 w-6" />}
           title="No agent teams"
-          description="Create an architect → builder → tester → reviewer team."
-          action={<Button onClick={() => setOpen(true)}><Plus /> Create team</Button>}
+          description="Create a primary coding agent followed by builder, tester and reviewer agents."
+          action={<Button onClick={() => setOpen(true)}><Plus /> Create agent team</Button>}
         />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {teams.data.map((team) => {
-            const definitionSteps = team.definition.steps ?? [];
+            const steps = team.definition.steps ?? [];
             return (
               <Card key={team.id}>
                 <CardHeader className="pb-2">
                   <CardTitle className="truncate">{team.name}</CardTitle>
                   <p className="text-[11px] text-muted-foreground">
-                    {definitionSteps.length} steps · updated {relativeTime(team.updatedAt)}
+                    {steps.length} agents · {team.definition.skills?.length ?? 0} skills · updated{" "}
+                    {relativeTime(team.updatedAt)}
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex flex-wrap gap-1">
-                    {definitionSteps.map((step) => (
-                      <Badge key={step.name} variant="secondary">
-                        {step.name}
+                    {steps.map((step, index) => (
+                      <Badge key={`${step.agentId}-${index}`} variant={index === 0 ? "default" : "secondary"}>
+                        {index === 0 ? "primary · " : ""}
+                        {agentLabel(step.agentId)}
                       </Badge>
                     ))}
                   </div>
+                  {team.definition.skills?.length ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      team skills: {team.definition.skills.join(", ")}
+                    </p>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
                     <Button
                       size="sm"
                       onClick={() => {
                         setRunTeam(team);
-                        setTask("Pick up the next ready GitHub issue and implement it.");
+                        setTask(team.definition.instructions ?? "");
                       }}
                     >
                       <Play /> Run
@@ -173,7 +196,7 @@ export default function TeamsPage() {
                       variant="ghost"
                       className="text-destructive"
                       onClick={() => {
-                        if (window.confirm(`Delete team ${team.name}?`)) remove.mutate(team.id);
+                        if (window.confirm(`Delete agent team ${team.name}?`)) remove.mutate(team.id);
                       }}
                     >
                       <Trash2 /> Delete
@@ -187,12 +210,17 @@ export default function TeamsPage() {
       )}
 
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold">Team runs</h2>
+        <div>
+          <h2 className="text-sm font-semibold">Agent team runs</h2>
+          <p className="text-[11px] text-muted-foreground">
+            Sequential handoffs; each step is recorded as a normal execution.
+          </p>
+        </div>
         {runs.isLoading ? (
           <Skeleton className="h-20 rounded-xl" />
         ) : !runs.data?.length ? (
           <p className="rounded-xl border border-dashed p-4 text-xs text-muted-foreground">
-            No team runs yet.
+            No agent team runs yet.
           </p>
         ) : (
           <div className="space-y-2">
@@ -201,7 +229,7 @@ export default function TeamsPage() {
                 <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">
-                      {String(item.input.task ?? "Team run")}
+                      {String(item.input.task ?? "Agent team run")}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
                       {relativeTime(item.createdAt)} · {item.status}
@@ -236,7 +264,8 @@ export default function TeamsPage() {
           <DialogHeader>
             <DialogTitle>New agent team</DialogTitle>
             <DialogDescription>
-              Steps run in order. The previous step output is passed as context to the next.
+              The first agent is the primary agent. Its agent instructions define its role;
+              the team instruction defines the shared goal.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -250,104 +279,123 @@ export default function TeamsPage() {
                 <Input value={description} onChange={(event) => setDescription(event.target.value)} />
               </div>
             </div>
-            {steps.map((step, index) => (
-              <div key={index} className="rounded-lg border p-3">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label>Role</Label>
-                    <Input
-                      value={step.name}
-                      onChange={(event) =>
-                        setSteps((current) =>
-                          current.map((item, i) =>
-                            i === index ? { ...item, name: event.target.value } : item,
-                          ),
-                        )
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Agent</Label>
-                    <select
-                      className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                      value={step.agentId}
-                      onChange={(event) =>
-                        setSteps((current) =>
-                          current.map((item, i) =>
-                            i === index ? { ...item, agentId: event.target.value } : item,
-                          ),
-                        )
-                      }
-                    >
-                      <option value="">Select agent…</option>
-                      {agentOptions.map((agent) => (
-                        <option key={agent.id} value={agent.id}>
-                          {agent.name} ({agent.harness})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="mt-2 space-y-1">
-                  <Label>Skills for this step</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {skillOptions.map((skill) => {
-                      const checked = step.skills.includes(skill.slug);
-                      return (
-                        <label key={skill.slug} className="flex items-center gap-1 text-xs">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(event) =>
-                              setSteps((current) =>
-                                current.map((item, i) =>
-                                  i === index
-                                    ? {
-                                        ...item,
-                                        skills: event.target.checked
-                                          ? [...item.skills, skill.slug]
-                                          : item.skills.filter((slug) => slug !== skill.slug),
-                                      }
-                                    : item,
-                                ),
-                              )
-                            }
-                          />
-                          {skill.name}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
+            <div className="space-y-1.5">
+              <Label>Team instruction / goal</Label>
+              <Textarea
+                className="min-h-20"
+                value={instructions}
+                onChange={(event) => setInstructions(event.target.value)}
+                placeholder="Pick up issues labelled agent-ready, fix them in a loop, and stop when none remain."
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Passed to the primary agent and included in every later step with the previous output.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Team skills</Label>
+              <div className="flex flex-wrap gap-2 rounded-lg border p-3">
+                {skillOptions.length ? skillOptions.map((skill) => {
+                  const checked = teamSkills.includes(skill.slug);
+                  return (
+                    <label key={skill.slug} className="flex items-center gap-1 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) =>
+                          setTeamSkills((current) =>
+                            event.target.checked
+                              ? [...current, skill.slug]
+                              : current.filter((slug) => slug !== skill.slug),
+                          )
+                        }
+                      />
+                      {skill.name}
+                    </label>
+                  );
+                }) : <span className="text-[11px] text-muted-foreground">No skills configured.</span>}
               </div>
-            ))}
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Agents in order</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSteps((current) => [...current, { agentId: "" }])}
+                >
+                  <Plus /> Add agent
+                </Button>
+              </div>
+              {steps.map((step, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <span className="w-16 text-[11px] text-muted-foreground">
+                    {index === 0 ? "primary" : `step ${index + 1}`}
+                  </span>
+                  <select
+                    className="flex h-9 flex-1 rounded-lg border border-input bg-card px-3 text-sm"
+                    value={step.agentId}
+                    onChange={(event) =>
+                      setSteps((current) =>
+                        current.map((item, i) =>
+                          i === index ? { ...item, agentId: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="">Select agent…</option>
+                    {agentOptions.map((agent) => (
+                      <option key={agent.id} value={agent.id}>
+                        {agent.name} · {agent.harness}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    disabled={steps.length <= 1}
+                    onClick={() => setSteps((current) => current.filter((_, i) => i !== index))}
+                  >
+                    <X />
+                  </Button>
+                </div>
+              ))}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button
-              onClick={() => create.mutate()}
-              loading={create.isPending}
-              disabled={!canCreate}
-            >
-              Create team
+            <Button onClick={() => create.mutate()} loading={create.isPending} disabled={!canCreate}>
+              Create agent team
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(runTeam)} onOpenChange={(next) => !next && setRunTeam(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Run {runTeam?.name}</DialogTitle>
-            <DialogDescription>Starts the first role; the rest run after each success.</DialogDescription>
+            <DialogDescription>
+              The primary agent receives this task. Later agents receive the previous output.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label>Task</Label>
-            <Input value={task} onChange={(event) => setTask(event.target.value)} />
+            <Label>Task for this run</Label>
+            <Textarea
+              className="min-h-24"
+              value={task}
+              onChange={(event) => setTask(event.target.value)}
+              placeholder={runTeam?.definition.instructions || "Team goal"}
+            />
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setRunTeam(null)}>Cancel</Button>
-            <Button onClick={() => run.mutate()} loading={run.isPending} disabled={!task.trim()}>
+            <Button
+              onClick={() => run.mutate()}
+              loading={run.isPending}
+              disabled={!task.trim() && !runTeam?.definition.instructions}
+            >
               Start run
             </Button>
           </DialogFooter>
@@ -357,7 +405,7 @@ export default function TeamsPage() {
       <Dialog open={Boolean(detail)} onOpenChange={(next) => !next && setDetail(null)}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Team run</DialogTitle>
+            <DialogTitle>Agent team run</DialogTitle>
             <DialogDescription>{detail?.run.status}</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -365,10 +413,11 @@ export default function TeamsPage() {
               <div key={step.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
                 <div>
                   <p className="text-sm font-medium">
-                    {step.stepIndex + 1}. {step.name}
+                    {step.stepIndex === 0 ? "primary · " : `${step.stepIndex + 1}. `}
+                    {step.name}
                   </p>
                   <p className="text-[11px] text-muted-foreground">
-                    {stepLabel(step.agentId)} · {step.skills.join(", ") || "agent skills"}
+                    {step.skills.join(", ") || "no team skills"}
                   </p>
                   {step.error ? <p className="text-[11px] text-destructive">{step.error}</p> : null}
                 </div>

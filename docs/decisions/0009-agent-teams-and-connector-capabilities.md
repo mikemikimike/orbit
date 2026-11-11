@@ -25,10 +25,16 @@ issues, so a coding agent could not complete a repository loop.
 
 ### Agent teams
 
-- An `AgentTeam` is an ordered list of roles, each pointing at a normal agent and optional
-  execution skills.
-- A `TeamRun` creates one normal execution per step, sequentially. The previous step
-  output is passed as context to the next step.
+- An `AgentTeam` is an ordered list of normal agents. The first agent is the primary
+  agent; the agent's own name/instructions define its role.
+- Skills belong to the team, not to individual steps, and are materialized for every
+  step. There are no separate role records.
+- A team has an `instructions` goal. The first step receives it with the run task;
+  later steps receive it with the original task and the previous step output.
+- A `TeamRun` creates one normal execution per step, sequentially.
+- OpenCode/Pi native primary/subagent features are harness-internal and run inside one
+  execution. ORBIT Agent Teams are harness-agnostic and use separate executions so each
+  step has its own policy, approvals, events and audit.
 - `orbit-api` advances team runs as a coordinator. It does not reason or call model APIs;
   it only creates executions, records state and publishes events. Agent loops remain in
   the execution plane.

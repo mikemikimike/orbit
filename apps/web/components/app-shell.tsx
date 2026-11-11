@@ -31,7 +31,7 @@ const NAV = [
   { href: "/harnesses", label: "Harnesses", icon: Cpu },
   { href: "/models", label: "Providers", icon: Boxes },
   { href: "/skills", label: "Skills", icon: BookOpen },
-  { href: "/teams", label: "Teams", icon: Users },
+  { href: "/agent-teams", label: "Agent Teams", icon: Users },
   { href: "/workers", label: "Workers", icon: Server },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -40,7 +40,7 @@ const MOBILE_NAV = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/executions", label: "Runs", icon: Activity },
-  { href: "/teams", label: "Teams", icon: Users },
+  { href: "/agent-teams", label: "Agent Teams", icon: Users },
   { href: "/approvals", label: "Approvals", icon: ShieldCheck },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

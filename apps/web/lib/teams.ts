@@ -23,7 +23,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export type TeamStepInput = { name: string; agentId: string; skills: string[] };
+export type TeamStepInput = { agentId: string };
 
 export function listAgentTeams(): Promise<AgentTeam[]> {
   return request<AgentTeam[]>("/api/v1/agent-teams");
@@ -32,6 +32,8 @@ export function listAgentTeams(): Promise<AgentTeam[]> {
 export function createAgentTeam(input: {
   name: string;
   description: string;
+  instructions: string;
+  skills: string[];
   steps: TeamStepInput[];
 }): Promise<AgentTeam> {
   return request<AgentTeam>("/api/v1/agent-teams", {

@@ -56,9 +56,10 @@ project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- Agent teams with sequential role steps; each step is a normal execution with its own
-  agent, skills, connectors and approvals.
-- Execution-level skills (`skills` on create-execution and team steps), unioned with
+- Agent Teams with sequential agents; the first agent is primary and its own name defines
+  its role. Team-level skills and a team instruction are shared by every step; each step
+  is a normal execution with its own connectors and approvals.
+- Execution-level skills (`skills` on create-execution and team runs), unioned with
   agent spec skills and optional profile defaults.
 - Worker materializes execution-level skills into Pi/OpenCode workspaces.
 - GitHub connector capabilities: issue update/labels/state, pull list/get/create, checks
