@@ -240,6 +240,9 @@ export default function ExecutionDetailPage() {
             </CardTitle>
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
               <span>{visibleEvents.length} events</span>
+              {events.at(-1) ? (
+                <span>last activity {relativeTime(events.at(-1)!.createdAt)}</span>
+              ) : null}
               {hiddenCount > 0 ? (
                 <button
                   type="button"
@@ -413,16 +416,9 @@ function isImportantEvent(event: ExecutionEventRecord): boolean {
   if (event.kind === "error" || event.kind === "status") return true;
   if (event.kind === "log") return event.level === "warn" || event.level === "error";
   if (event.kind === "tool_call") {
-    const capability =
-      event.data && typeof event.data === "object"
-        ? (event.data as { capability?: string }).capability
-        : undefined;
-    return (
-      event.level === "error" ||
-      event.level === "warn" ||
-      Boolean(capability) ||
-      /approval/i.test(event.message)
-    );
+    // Show harness tool activity (read/grep/shell/glob) as well as connector calls.
+    // Users otherwise see a silent gap while a coding agent is inspecting the repo.
+    return true;
   }
   // output deltas, metrics and debug logs are verbose-only
   return false;

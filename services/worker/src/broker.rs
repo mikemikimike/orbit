@@ -261,7 +261,8 @@ pub async fn start(
         .cloned()
         .collect();
     if allowed.is_empty() {
-        anyhow::bail!("GitHub binding has no valid capabilities");
+        // A binding may only request pre-execution capabilities such as repo.checkout.
+        return Ok(None);
     }
     let tools = tool_specs(&allowed, &effects);
 

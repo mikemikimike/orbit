@@ -20,8 +20,8 @@ fn which(binary: &str) -> bool {
         .unwrap_or(false)
 }
 
-async fn write_askpass(workspace: &Path) -> anyhow::Result<std::path::PathBuf> {
-    let path = workspace.join(".orbit-git-askpass.sh");
+async fn write_askpass() -> anyhow::Result<std::path::PathBuf> {
+    let path = std::env::temp_dir().join(format!(".orbit-git-askpass-{}.sh", uuid::Uuid::now_v7()));
     tokio::fs::write(
         &path,
         "#!/bin/sh\ncase \"$1\" in\n  Username*) printf '%s' \"${ORBIT_GIT_USERNAME:-x-access-token}\" ;;\n  Password*) printf '%s' \"$ORBIT_GIT_TOKEN\" ;;\nesac\n",
@@ -44,19 +44,29 @@ fn apply_git_auth(command: &mut Command, askpass: &Path) {
         .env("GIT_USERNAME", "x-access-token");
 }
 
-fn repo_name(connection: &WorkerConnection, input: &Value) -> Option<String> {
+fn input_string(input: &Value, key: &str) -> Option<String> {
     input
-        .get("repository")
+        .get(key)
         .and_then(Value::as_str)
         .map(str::to_string)
         .or_else(|| {
-            connection
-                .connection
-                .config
-                .get("defaultRepository")
+            input
+                .get("payload")
+                .and_then(|payload| payload.get(key))
                 .and_then(Value::as_str)
                 .map(str::to_string)
         })
+}
+
+fn repo_name(connection: &WorkerConnection, input: &Value) -> Option<String> {
+    input_string(input, "repository").or_else(|| {
+        connection
+            .connection
+            .config
+            .get("defaultRepository")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    })
 }
 
 fn validate_repo(connection: &WorkerConnection, repo: &str) -> anyhow::Result<()> {
@@ -120,7 +130,7 @@ pub async fn checkout(
         .as_ref()
         .map(|secret| secret.value.clone());
     let askpass = match &token {
-        Some(_) => Some(write_askpass(workspace).await?),
+        Some(_) => Some(write_askpass().await?),
         None => None,
     };
     let clone_base = connection
@@ -130,13 +140,13 @@ pub async fn checkout(
         .and_then(Value::as_str)
         .unwrap_or("https://github.com")
         .trim_end_matches('/');
-    let branch = input.get("branch").and_then(Value::as_str);
+    let branch = input_string(input, "branch");
     let mut command = Command::new("git");
     command
         .current_dir(workspace)
         .args(["clone", "--depth", "1"]);
     if let Some(branch) = branch {
-        command.args(["--branch", branch]);
+        command.args(["--branch", &branch]);
     }
     command.arg(format!("{clone_base}/{repo}.git")).arg(".");
     if let Some(token) = &token {
@@ -172,7 +182,7 @@ pub async fn commit(
         .as_ref()
         .map(|secret| secret.value.clone())
         .ok_or_else(|| anyhow::anyhow!("GitHub connection has no token"))?;
-    let askpass = write_askpass(workspace).await?;
+    let askpass = write_askpass().await?;
     let add = Command::new("git")
         .current_dir(workspace)
         .args(["add", "-A"])
@@ -232,7 +242,7 @@ pub async fn push(
         .as_ref()
         .map(|secret| secret.value.clone())
         .ok_or_else(|| anyhow::anyhow!("GitHub connection has no token"))?;
-    let askpass = write_askpass(workspace).await?;
+    let askpass = write_askpass().await?;
     let mut command = Command::new("git");
     command
         .current_dir(workspace)
