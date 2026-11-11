@@ -203,6 +203,24 @@ pub async fn run_execution(
         }
     }
 
+    match crate::subagents::materialize(&execution.input, &workspace).await {
+        Ok(names) if !names.is_empty() => {
+            append_event(
+                &state,
+                &execution,
+                ExecutionEventKind::Status,
+                LogLevel::Info,
+                &format!("materialized {} native subagent(s)", names.len()),
+                serde_json::json!({ "subagents": names }),
+            )
+            .await;
+        }
+        Ok(_) => {}
+        Err(error) => {
+            tracing::warn!(error = %error, "could not materialize native subagents");
+        }
+    }
+
     // Policy-enforcing tool broker: only for harnesses that can consume MCP today
     // (OpenCode). It is execution-scoped and dropped at the end of this function.
     let broker = if matches!(harness_kind, HarnessKind::OpenCode | HarnessKind::Pi) {
@@ -326,13 +344,20 @@ pub async fn run_execution(
     }
 
     let autonomy = AutonomyLevel::from_level(spec.autonomy.level).unwrap_or(AutonomyLevel::OBSERVE);
+    let mut system_instructions = spec.instructions.system.clone();
+    if let Some(extra) = crate::subagents::system_instruction(&execution.input) {
+        if !system_instructions.is_empty() {
+            system_instructions.push_str("\n\n");
+        }
+        system_instructions.push_str(&extra);
+    }
     let request = ExecutionRequest {
         execution_id,
         agent_id: execution.agent_id,
         agent_version_id: execution.agent_version_id,
         agent_name: execution.agent_name.clone(),
         instructions: InstructionsBlock {
-            system: spec.instructions.system.clone(),
+            system: system_instructions,
             constraints: spec.instructions.constraints.clone(),
         },
         input,

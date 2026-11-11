@@ -7,6 +7,7 @@ mod github;
 mod liveness;
 mod runner;
 mod skills;
+mod subagents;
 
 use std::sync::Arc;
 use std::time::Duration;

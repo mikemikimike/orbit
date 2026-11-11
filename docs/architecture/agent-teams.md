@@ -18,6 +18,12 @@ Agent Team ──ordered agents───────────────┘
   connections and capabilities of its agent.
 - **Team skills and instruction**: shared by every step. Agent-level instructions define
   the role. The first agent is the primary agent; later agents are subagents.
+- **Execution mode**:
+  - `pipeline`: one ORBIT execution per agent, sequential.
+  - `native`: one OpenCode execution; later team agents are materialized as
+    `.opencode/agents/*.md` subagents and the primary delegates to them. This supports
+    OpenCode's internal feedback loop and shared workspace. Subagent dispatches are not
+    separate ORBIT executions.
 
 ## Attaching a connection
 
@@ -64,11 +70,27 @@ The GitHub connection should set `defaultRepository` (and optionally
    output, clones the repository, makes changes, commits and pushes.
 7. Approve any write action according to the agents' autonomy settings.
 
+## Native OpenCode team
+
+A native team is created with `mode: "native"`. The primary agent is the first agent;
+the remaining agents become OpenCode subagents. ORBIT materializes their instructions,
+model and description into the execution workspace. The primary is instructed to use the
+task/subagent tool.
+
+The example loop skill lives at
+`docs/examples/skills/github-issue-loop/SKILL.md`. It covers issue selection, builder
+feedback, tests, commit/push, PR creation, checks and issue labels.
+
+Native mode currently requires an OpenCode primary agent. Subagent tool calls are
+visible as one ORBIT execution; connector policy is enforced against the primary agent's
+binding for the whole native team.
+
 ## Current limitations
 
 - Connections are **not** attached to an Agent Team. Attach them to each agent.
-- A team run executes each agent **once**. A loop over many issues is either inside the
-  primary agent/skill or multiple team runs; there is no team-level loop/queue yet.
+- A pipeline team run executes each agent **once**. Native mode supports an internal
+  coordinator/subagent loop within one execution. A queue of many issues still requires
+  multiple runs or a future dispatcher.
 - The run UI does not yet accept a repository override. Set `defaultRepository` on the
   connection.
 - GitLab invocation, automatic per-execution worker launch and parallel subagents are

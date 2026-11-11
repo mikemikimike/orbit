@@ -55,6 +55,7 @@ export default function AgentTeamsPage() {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AgentTeam | null>(null);
+  const [mode, setMode] = useState<"pipeline" | "native">("native");
   const [name, setName] = useState("Coding team");
   const [description, setDescription] = useState(
     "Primary coding agent with specialist agents for implementation and review.",
@@ -91,6 +92,7 @@ export default function AgentTeamsPage() {
       const payload = {
         name: name.trim(),
         description,
+        mode,
         instructions,
         skills: teamSkills,
         steps,
@@ -110,6 +112,7 @@ export default function AgentTeamsPage() {
 
   function openCreate() {
     setEditing(null);
+    setMode("native");
     setName("Coding team");
     setDescription("Primary coding agent with specialist agents for implementation and review.");
     setInstructions(
@@ -122,6 +125,7 @@ export default function AgentTeamsPage() {
 
   function openEdit(team: AgentTeam) {
     setEditing(team);
+    setMode(team.definition.mode ?? "pipeline");
     setName(team.name);
     setDescription(team.description);
     setInstructions(team.definition.instructions ?? "");
@@ -198,6 +202,7 @@ export default function AgentTeamsPage() {
                 <CardHeader className="pb-2">
                   <CardTitle className="truncate">{team.name}</CardTitle>
                   <p className="text-[11px] text-muted-foreground">
+                    {(team.definition.mode ?? "pipeline") === "native" ? "native subagents" : "pipeline"} ·{" "}
                     {steps.length} agents · {team.definition.skills?.length ?? 0} skills · updated{" "}
                     {relativeTime(team.updatedAt)}
                   </p>
@@ -206,7 +211,11 @@ export default function AgentTeamsPage() {
                   <div className="flex flex-wrap gap-1">
                     {steps.map((step, index) => (
                       <Badge key={`${step.agentId}-${index}`} variant={index === 0 ? "default" : "secondary"}>
-                        {index === 0 ? "primary · " : ""}
+                        {index === 0
+                          ? "primary · "
+                          : (team.definition.mode ?? "pipeline") === "native"
+                            ? "subagent · "
+                            : ""}
                         {agentLabel(step.agentId)}
                       </Badge>
                     ))}
@@ -322,6 +331,21 @@ export default function AgentTeamsPage() {
               </div>
             </div>
             <div className="space-y-1.5">
+              <Label>Execution mode</Label>
+              <select
+                className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+                value={mode}
+                onChange={(event) => setMode(event.target.value as "pipeline" | "native")}
+              >
+                <option value="native">Native subagents — one OpenCode execution</option>
+                <option value="pipeline">Pipeline — one execution per agent</option>
+              </select>
+              <p className="text-[11px] text-muted-foreground">
+                Native mode runs the primary agent once and exposes later agents as OpenCode
+                subagents. Pipeline mode gives every agent a separate ORBIT execution.
+              </p>
+            </div>
+            <div className="space-y-1.5">
               <Label>Team instruction / goal</Label>
               <Textarea
                 className="min-h-20"
@@ -372,7 +396,7 @@ export default function AgentTeamsPage() {
               {steps.map((step, index) => (
                 <div key={index} className="flex items-center gap-2">
                   <span className="w-16 text-[11px] text-muted-foreground">
-                    {index === 0 ? "primary" : `step ${index + 1}`}
+                    {index === 0 ? "primary" : mode === "native" ? "subagent" : `step ${index + 1}`}
                   </span>
                   <select
                     className="flex h-9 flex-1 rounded-lg border border-input bg-card px-3 text-sm"
@@ -455,7 +479,7 @@ export default function AgentTeamsPage() {
               <div key={step.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
                 <div>
                   <p className="text-sm font-medium">
-                    {step.stepIndex === 0 ? "primary · " : `${step.stepIndex + 1}. `}
+                    {step.stepIndex === 0 ? "primary · " : ""}
                     {step.name}
                   </p>
                   <p className="text-[11px] text-muted-foreground">

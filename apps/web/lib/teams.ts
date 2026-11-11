@@ -29,13 +29,16 @@ export function listAgentTeams(): Promise<AgentTeam[]> {
   return request<AgentTeam[]>("/api/v1/agent-teams");
 }
 
-export function createAgentTeam(input: {
+type TeamInput = {
   name: string;
   description: string;
+  mode: "pipeline" | "native";
   instructions: string;
   skills: string[];
   steps: TeamStepInput[];
-}): Promise<AgentTeam> {
+};
+
+export function createAgentTeam(input: TeamInput): Promise<AgentTeam> {
   return request<AgentTeam>("/api/v1/agent-teams", {
     method: "POST",
     body: JSON.stringify(input),
@@ -44,13 +47,7 @@ export function createAgentTeam(input: {
 
 export function updateAgentTeam(
   teamId: string,
-  input: {
-    name: string;
-    description: string;
-    instructions: string;
-    skills: string[];
-    steps: TeamStepInput[];
-  },
+  input: TeamInput,
 ): Promise<AgentTeam> {
   return request<AgentTeam>(`/api/v1/agent-teams/${teamId}`, {
     method: "PATCH",

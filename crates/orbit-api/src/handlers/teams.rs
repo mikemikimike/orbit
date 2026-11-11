@@ -7,7 +7,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use orbit_domain::{TriggerSource, ValidationIssue};
+use orbit_domain::{HarnessKind, TriggerSource, ValidationIssue};
 use orbit_security::{AuthContext, Permission};
 use orbit_store::{AgentTeam, TeamRun, TeamStep};
 
@@ -26,6 +26,10 @@ pub struct CreateTeamRequest {
     pub name: String,
     #[serde(default)]
     pub description: String,
+    /// `pipeline` runs each agent once in order. `native` runs the primary agent only
+    /// and materializes the remaining agents as harness-native subagents.
+    #[serde(default = "default_mode")]
+    pub mode: String,
     /// Shared goal/instruction for the team. The first step receives it as its task;
     /// later steps receive it together with the previous step output.
     #[serde(default)]
@@ -56,6 +60,8 @@ pub struct TeamRunDetail {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamDefinition {
+    #[serde(default = "default_mode")]
+    pub mode: String,
     #[serde(default)]
     pub instructions: String,
     #[serde(default)]
@@ -67,6 +73,10 @@ pub struct TeamDefinition {
 #[serde(rename_all = "camelCase")]
 pub struct TeamStepDefinition {
     pub agent_id: Uuid,
+}
+
+fn default_mode() -> String {
+    "pipeline".into()
 }
 
 fn parse_definition(team: &AgentTeam) -> Result<TeamDefinition, ApiError> {
@@ -85,6 +95,12 @@ pub async fn create_team(
             ValidationIssue::new("name", "name is required"),
             ValidationIssue::new("steps", "at least one step is required"),
         ]));
+    }
+    if !matches!(body.mode.as_str(), "pipeline" | "native") {
+        return Err(ApiError::validation(vec![ValidationIssue::new(
+            "mode",
+            "mode must be pipeline or native",
+        )]));
     }
     let mut issues = Vec::new();
     let mut agent_ids = std::collections::BTreeSet::new();
@@ -124,6 +140,7 @@ pub async fn create_team(
         return Err(ApiError::validation(issues));
     }
     let definition = serde_json::json!({
+        "mode": body.mode,
         "instructions": body.instructions.trim(),
         "skills": body.skills,
         "steps": body.steps.iter().map(|step| serde_json::json!({
@@ -156,6 +173,12 @@ pub async fn update_team(
             ValidationIssue::new("steps", "at least one step is required"),
         ]));
     }
+    if !matches!(body.mode.as_str(), "pipeline" | "native") {
+        return Err(ApiError::validation(vec![ValidationIssue::new(
+            "mode",
+            "mode must be pipeline or native",
+        )]));
+    }
     let mut issues = Vec::new();
     let mut agent_ids = std::collections::BTreeSet::new();
     for step in &body.steps {
@@ -194,6 +217,7 @@ pub async fn update_team(
         return Err(ApiError::validation(issues));
     }
     let definition = serde_json::json!({
+        "mode": body.mode,
         "instructions": body.instructions.trim(),
         "skills": body.skills,
         "steps": body.steps.iter().map(|step| serde_json::json!({
@@ -243,6 +267,44 @@ pub async fn delete_team(
     Ok(StatusCode::NO_CONTENT)
 }
 
+async fn native_subagents(
+    state: &AppState,
+    org_id: Uuid,
+    definition: &TeamDefinition,
+) -> Result<Vec<serde_json::Value>, ApiError> {
+    let mut subagents = Vec::new();
+    for step in definition.steps.iter().skip(1) {
+        let agent = state.store.get_agent(org_id, step.agent_id).await?;
+        let version = state.store.get_current_version(org_id, &agent).await?;
+        let spec: orbit_domain::AgentSpec =
+            serde_json::from_value(version.spec.clone()).map_err(|error| {
+                ApiError::internal(format!("stored agent spec is invalid: {error}"))
+            })?;
+        let mut instructions = spec.instructions.system.clone();
+        if !spec.instructions.constraints.is_empty() {
+            instructions.push_str("\n\nConstraints:\n");
+            for constraint in &spec.instructions.constraints {
+                instructions.push_str(&format!("- {constraint}\n"));
+            }
+        }
+        let model = match (&spec.model.provider, &spec.model.model) {
+            (Some(provider), Some(model)) if !model.contains('/') => {
+                Some(format!("{provider}/{model}"))
+            }
+            (_, Some(model)) => Some(model.clone()),
+            _ => None,
+        };
+        subagents.push(serde_json::json!({
+            "name": agent.name,
+            "slug": agent.slug,
+            "description": agent.description,
+            "instructions": instructions,
+            "model": model,
+        }));
+    }
+    Ok(subagents)
+}
+
 pub(crate) async fn start_step(
     state: &AppState,
     run: &TeamRun,
@@ -279,6 +341,23 @@ pub(crate) async fn start_step(
             agent.name
         )
     };
+    let native = definition.mode == "native";
+    if native && spec.harness.kind != HarnessKind::OpenCode {
+        return Err(ApiError::conflict(
+            "native Agent Teams currently require an OpenCode primary agent",
+        ));
+    }
+    let mut team_payload = serde_json::json!({
+        "runId": run.id,
+        "mode": definition.mode,
+        "goal": instructions,
+        "agent": agent.name,
+        "previous": previous,
+    });
+    if native {
+        team_payload["subagents"] =
+            serde_json::Value::Array(native_subagents(state, run.org_id, definition).await?);
+    }
     let input = serde_json::json!({
         "task": task_text,
         "payload": {
@@ -295,12 +374,7 @@ pub(crate) async fn start_step(
             "subject": run.id,
             "receivedAt": chrono::Utc::now(),
         },
-        "team": {
-            "runId": run.id,
-            "goal": instructions,
-            "agent": agent.name,
-            "previous": previous,
-        }
+        "team": team_payload
     });
     let execution = state
         .store
@@ -438,6 +512,13 @@ pub(crate) async fn advance(state: &AppState, run: TeamRun) -> anyhow::Result<()
             .store
             .finish_team_step(current.id, "succeeded", execution.output.as_ref(), None)
             .await?;
+        if definition.mode == "native" {
+            state
+                .store
+                .update_team_run(run.id, "succeeded", execution.output.as_ref(), None)
+                .await?;
+            return Ok(());
+        }
         let next = (current.step_index as usize) + 1;
         if next < definition.steps.len() {
             let run_for_step = state.store.get_team_run(run.org_id, run.id).await?;
