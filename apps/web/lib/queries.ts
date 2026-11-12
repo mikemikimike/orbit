@@ -36,6 +36,9 @@ export function unwrap<T>(result: {
   response: Response;
 }): T {
   if (result.error) throw result.error;
+  // DELETE and other no-content endpoints legitimately return no JSON body.
+  // Treat a successful 204 as a resolved void instead of an error.
+  if (result.response.status === 204) return undefined as T;
   if (result.data === undefined) {
     throw new Error(`HTTP ${result.response.status} ${result.response.statusText}`);
   }
