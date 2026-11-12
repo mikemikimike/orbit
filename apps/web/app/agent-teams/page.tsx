@@ -133,6 +133,19 @@ export default function AgentTeamsPage() {
     finally { setQueueBusy(false); }
   }
 
+  async function runPendingQueue() {
+    if (!queueTeam) return;
+    setQueueBusy(true);
+    try {
+      for (const item of queueItems.filter((entry) => entry.status === "pending")) {
+        setDetail(await runTeamQueueItem(queueTeam.id, item.id));
+      }
+      setQueueItems(await listTeamQueue(queueTeam.id));
+      toast.success("Pending queue items started");
+    } catch (error) { toast.error(errorMessage(error)); }
+    finally { setQueueBusy(false); }
+  }
+
   async function runQueueItem(item: TeamQueueItem) {
     if (!queueTeam) return;
     setQueueBusy(true);
@@ -641,9 +654,14 @@ export default function AgentTeamsPage() {
               onChange={(event) => setQueueText(event.target.value)}
               placeholder={"opsifyhq/orbit#6|opsifyhq/orbit\nopsifyhq/orbit#7|opsifyhq/orbit"}
             />
-            <Button size="sm" onClick={() => void enqueueQueue()} loading={queueBusy}>
-              <Plus /> Add to queue
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => void enqueueQueue()} loading={queueBusy}>
+                <Plus /> Add to queue
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => void runPendingQueue()} loading={queueBusy}>
+                <Play /> Run pending
+              </Button>
+            </div>
             <div className="max-h-80 space-y-2 overflow-y-auto">
               {queueItems.length === 0 ? <p className="text-xs text-muted-foreground">Queue is empty.</p> : queueItems.map((item) => (
                 <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
