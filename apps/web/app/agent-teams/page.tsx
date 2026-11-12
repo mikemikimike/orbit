@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Pencil, Plus, Play, Trash2, Users, X } from "lucide-react";
+import { ChevronRight, ListTodo, Pencil, Plus, Play, Trash2, Users, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +42,10 @@ import {
   getTeamRun,
   startTeamRun,
   updateAgentTeam,
+  enqueueTeamItems,
+  listTeamQueue,
+  runTeamQueueItem,
+  type TeamQueueItem,
   type TeamStepInput,
 } from "@/lib/teams";
 import type { AgentTeam, TeamRunDetail } from "@/lib/types";
@@ -79,6 +83,10 @@ export default function AgentTeamsPage() {
   const [repository, setRepository] = useState("");
   const [autoApprove, setAutoApprove] = useState(false);
   const [detail, setDetail] = useState<TeamRunDetail | null>(null);
+  const [queueTeam, setQueueTeam] = useState<AgentTeam | null>(null);
+  const [queueItems, setQueueItems] = useState<TeamQueueItem[]>([]);
+  const [queueText, setQueueText] = useState("");
+  const [queueBusy, setQueueBusy] = useState(false);
 
   const agentOptions = agents.data?.items ?? [];
   const skillOptions = skills.data ?? [];
@@ -98,6 +106,43 @@ export default function AgentTeamsPage() {
     );
     return (id: string) => map.get(id) ?? id.slice(0, 8);
   }, [agentOptions]);
+
+  async function openQueue(team: AgentTeam) {
+    setQueueTeam(team);
+    setQueueText("");
+    setQueueBusy(true);
+    try { setQueueItems(await listTeamQueue(team.id)); }
+    catch (error) { toast.error(errorMessage(error)); }
+    finally { setQueueBusy(false); }
+  }
+
+  async function enqueueQueue() {
+    if (!queueTeam) return;
+    const items = queueText.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => {
+      const [externalKey, repository] = line.split("|").map((value) => value.trim());
+      return { externalKey, repository: repository || undefined, payload: {} };
+    });
+    if (!items.length) return;
+    setQueueBusy(true);
+    try {
+      await enqueueTeamItems(queueTeam.id, items);
+      setQueueItems(await listTeamQueue(queueTeam.id));
+      setQueueText("");
+      toast.success("Queue updated");
+    } catch (error) { toast.error(errorMessage(error)); }
+    finally { setQueueBusy(false); }
+  }
+
+  async function runQueueItem(item: TeamQueueItem) {
+    if (!queueTeam) return;
+    setQueueBusy(true);
+    try {
+      setDetail(await runTeamQueueItem(queueTeam.id, item.id));
+      setQueueItems(await listTeamQueue(queueTeam.id));
+      toast.success("Queue item started");
+    } catch (error) { toast.error(errorMessage(error)); }
+    finally { setQueueBusy(false); }
+  }
 
   const save = useMutation({
     mutationFn: () => {
@@ -270,11 +315,10 @@ export default function AgentTeamsPage() {
                     >
                       <Play /> Run
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => openEdit(team)}
-                    >
+                    <Button size="sm" variant="outline" onClick={() => void openQueue(team)}>
+                      <ListTodo /> Queue
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(team)}>
                       <Pencil /> Edit
                     </Button>
                     <Button
@@ -581,6 +625,40 @@ export default function AgentTeamsPage() {
               Start run
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(queueTeam)} onOpenChange={(next) => !next && setQueueTeam(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Queue · {queueTeam?.name}</DialogTitle>
+            <DialogDescription>One line per item: externalKey|repository. Items are deduplicated by key.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <textarea
+              className="min-h-24 w-full rounded-lg border bg-card p-2 font-mono text-xs"
+              value={queueText}
+              onChange={(event) => setQueueText(event.target.value)}
+              placeholder={"opsifyhq/orbit#6|opsifyhq/orbit\nopsifyhq/orbit#7|opsifyhq/orbit"}
+            />
+            <Button size="sm" onClick={() => void enqueueQueue()} loading={queueBusy}>
+              <Plus /> Add to queue
+            </Button>
+            <div className="max-h-80 space-y-2 overflow-y-auto">
+              {queueItems.length === 0 ? <p className="text-xs text-muted-foreground">Queue is empty.</p> : queueItems.map((item) => (
+                <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
+                  <div>
+                    <p className="font-mono text-xs">{item.externalKey}</p>
+                    <p className="text-[11px] text-muted-foreground">{item.repository ?? "team repository"} · {item.status}</p>
+                    {item.error ? <p className="text-[11px] text-destructive">{item.error}</p> : null}
+                  </div>
+                  <Button size="sm" variant="outline" disabled={item.status === "running" || queueBusy} onClick={() => void runQueueItem(item)}>
+                    <Play /> Run
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

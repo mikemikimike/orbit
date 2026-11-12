@@ -86,3 +86,41 @@ export function listTeamRuns(): Promise<TeamRun[]> {
 export function getTeamRun(runId: string): Promise<TeamRunDetail> {
   return request<TeamRunDetail>(`/api/v1/team-runs/${runId}`);
 }
+
+export type TeamQueueItem = {
+  id: string;
+  orgId: string;
+  teamId: string;
+  externalKey: string;
+  repository?: string | null;
+  payload: Record<string, unknown>;
+  status: string;
+  teamRunId?: string | null;
+  error?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function listTeamQueue(teamId: string): Promise<TeamQueueItem[]> {
+  return request<TeamQueueItem[]>(`/api/v1/agent-teams/${teamId}/queue`);
+}
+
+export function enqueueTeamItems(
+  teamId: string,
+  items: Array<{ externalKey: string; repository?: string; payload?: Record<string, unknown> }>,
+): Promise<TeamQueueItem[]> {
+  return request<TeamQueueItem[]>(`/api/v1/agent-teams/${teamId}/queue`, {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  });
+}
+
+export function runTeamQueueItem(
+  teamId: string,
+  itemId: string,
+): Promise<TeamRunDetail> {
+  return request<TeamRunDetail>(
+    `/api/v1/agent-teams/${teamId}/queue/${itemId}/run`,
+    { method: "POST", body: "{}" },
+  );
+}
