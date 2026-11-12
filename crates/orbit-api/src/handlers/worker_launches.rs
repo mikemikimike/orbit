@@ -35,6 +35,8 @@ struct LauncherRequest {
     api_url: String,
     worker_token: String,
     worker_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    single_execution_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -183,6 +185,7 @@ pub(crate) async fn launch_profile_internal(
     state: &AppState,
     auth: &AuthContext,
     profile_id: Uuid,
+    single_execution_id: Option<Uuid>,
 ) -> Result<WorkerLaunch, ApiError> {
     launcher(state)?;
     let profile = state
@@ -195,18 +198,20 @@ pub(crate) async fn launch_profile_internal(
         ));
     }
     // Reuse an existing live launch for this profile instead of creating a new worker
-    // for every TeamRun.
-    if let Some(existing) = state
-        .store
-        .list_worker_launches(auth.org_id)
-        .await?
-        .into_iter()
-        .find(|launch| {
-            launch.profile_id == profile.id
-                && matches!(launch.status.as_str(), "pending" | "starting" | "running")
-        })
-    {
-        return Ok(existing);
+    // for every TeamRun. Single-execution launches are always isolated.
+    if single_execution_id.is_none() {
+        if let Some(existing) = state
+            .store
+            .list_worker_launches(auth.org_id)
+            .await?
+            .into_iter()
+            .find(|launch| {
+                launch.profile_id == profile.id
+                    && matches!(launch.status.as_str(), "pending" | "starting" | "running")
+            })
+        {
+            return Ok(existing);
+        }
     }
     let issued =
         crate::handlers::worker_profiles::issue_profile_token(state, auth.org_id, &profile, false)
@@ -225,6 +230,13 @@ pub(crate) async fn launch_profile_internal(
         )
         .await?;
     let worker_id = format!("worker-{}", &launch.id.to_string()[..8]);
+    if let Some(execution_id) = single_execution_id {
+        state
+            .store
+            .claim_execution(execution_id, &worker_id)
+            .await?
+            .ok_or_else(|| ApiError::conflict("execution is no longer queued for this launch"))?;
+    }
     let request = LauncherRequest {
         launch_id: launch.id,
         profile_id: profile.id,
@@ -240,6 +252,7 @@ pub(crate) async fn launch_profile_internal(
         api_url: state.worker_api_url.clone(),
         worker_token: issued.token,
         worker_id: worker_id.clone(),
+        single_execution_id,
     };
     let result: LauncherStatus = match call_launcher(
         state,
@@ -268,6 +281,22 @@ pub(crate) async fn launch_profile_internal(
                     true,
                 )
                 .await;
+            if let Some(execution_id) = single_execution_id {
+                let _ = state
+                    .store
+                    .finish_execution(
+                        execution_id,
+                        orbit_domain::ExecutionStatus::Failed,
+                        None,
+                        Some(&serde_json::json!({
+                            "code": "launch_failed",
+                            "message": error.message
+                        })),
+                        None,
+                        None,
+                    )
+                    .await;
+            }
             return Err(error);
         }
     };
@@ -296,7 +325,7 @@ pub async fn launch_profile(
     auth.require(Permission::SettingsWrite)?;
     Ok((
         StatusCode::CREATED,
-        Json(launch_profile_internal(&state, &auth, profile_id).await?),
+        Json(launch_profile_internal(&state, &auth, profile_id, None).await?),
     ))
 }
 

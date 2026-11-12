@@ -558,12 +558,6 @@ pub async fn create_run(
         .store
         .create_team_run(auth.org_id, team.id, &input, Some(auth.user_id))
         .await?;
-    if definition.auto_launch {
-        if let Some(profile_id) = definition.worker_profile_id {
-            crate::handlers::worker_launches::launch_profile_internal(&state, &auth, profile_id)
-                .await?;
-        }
-    }
     let step = match start_step(&state, &run, &definition, 0, None).await {
         Ok(step) => step,
         Err(error) => {
@@ -574,6 +568,19 @@ pub async fn create_run(
             return Err(error);
         }
     };
+    if definition.auto_launch {
+        if let (Some(profile_id), Some(execution_id)) =
+            (definition.worker_profile_id, step.execution_id)
+        {
+            crate::handlers::worker_launches::launch_profile_internal(
+                &state,
+                &auth,
+                profile_id,
+                Some(execution_id),
+            )
+            .await?;
+        }
+    }
     Ok((
         StatusCode::CREATED,
         Json(TeamRunDetail {
@@ -643,7 +650,7 @@ pub(crate) async fn advance(state: &AppState, run: TeamRun) -> anyhow::Result<()
         let next = (current.step_index as usize) + 1;
         if next < definition.steps.len() {
             let run_for_step = state.store.get_team_run(run.org_id, run.id).await?;
-            start_step(
+            let created = start_step(
                 state,
                 &run_for_step,
                 &definition,
@@ -652,6 +659,30 @@ pub(crate) async fn advance(state: &AppState, run: TeamRun) -> anyhow::Result<()
             )
             .await
             .map_err(|error| anyhow::anyhow!(error.message))?;
+            if definition.auto_launch {
+                if let (Some(profile_id), Some(execution_id)) =
+                    (definition.worker_profile_id, created.execution_id)
+                {
+                    let auth = AuthContext {
+                        user_id: run.requested_by.unwrap_or(Uuid::nil()),
+                        org_id: run.org_id,
+                        email: String::new(),
+                        display_name: "Agent Team".into(),
+                        role: orbit_domain::UserRole::Operator,
+                        method: orbit_security::AuthMethod::ApiToken,
+                        scopes: vec![],
+                        token_id: None,
+                    };
+                    crate::handlers::worker_launches::launch_profile_internal(
+                        state,
+                        &auth,
+                        profile_id,
+                        Some(execution_id),
+                    )
+                    .await
+                    .map_err(|error| anyhow::anyhow!(error.message))?;
+                }
+            }
         } else {
             state
                 .store

@@ -50,6 +50,8 @@ struct LaunchRequest {
     api_url: String,
     worker_token: String,
     worker_id: String,
+    #[serde(default)]
+    single_execution_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -253,6 +255,10 @@ async fn launch_docker(state: &AppState, request: &LaunchRequest) -> anyhow::Res
             args.push(format!("{key}={value}"));
         }
     }
+    if let Some(execution_id) = request.single_execution_id {
+        args.push("--env".into());
+        args.push(format!("ORBIT_SINGLE_EXECUTION_ID={execution_id}"));
+    }
     let command = "mkdir -p \"$HOME/.local/share/opencode\"; \
          if command -v opencode >/dev/null 2>&1 && [ -f /seed/auth-export.json ]; then \
            opencode auth import --standalone /seed/auth-export.json || true; \
@@ -383,6 +389,12 @@ async fn launch_kubernetes(
         for (key, value) in extra {
             env.push(json!({ "name": key, "value": value }));
         }
+    }
+    if let Some(execution_id) = request.single_execution_id {
+        env.push(json!({
+            "name": "ORBIT_SINGLE_EXECUTION_ID",
+            "value": execution_id.to_string()
+        }));
     }
     let mut command = vec!["/usr/local/bin/orbit-worker".to_string()];
     let mut mounts = vec![json!({ "name": "tmp", "mountPath": "/tmp" })];
