@@ -279,6 +279,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/readyz", get(handlers::health::readyz))
         .route("/metrics", get(handlers::health::metrics))
         .route("/api/v1/meta", get(handlers::health::meta))
+        .route("/api/v1/auth/oidc/config", get(handlers::auth_oidc::config))
+        .route("/api/v1/auth/oidc/token", post(handlers::auth_oidc::token))
         .merge(SwaggerUi::new("/docs").url("/api/v1/openapi.json", ApiDoc::openapi()));
 
     Router::new()

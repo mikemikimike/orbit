@@ -107,6 +107,17 @@ spec:
               value: {{ .Values.auth.oidc.issuer | quote }}
             - name: ORBIT_OIDC_AUDIENCE
               value: {{ .Values.auth.oidc.audience | quote }}
+            - name: ORBIT_OIDC_CLIENT_ID
+              value: {{ default .Values.auth.oidc.audience .Values.auth.oidc.clientId | quote }}
+            - name: ORBIT_OIDC_REDIRECT_URI
+              value: {{ default (printf "%s/auth/callback" .Values.platform.publicBaseUrl) .Values.auth.oidc.redirectUri | quote }}
+            {{- if .Values.secrets.oidcClientSecret }}
+            - name: ORBIT_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orbit.secretName" . }}
+                  key: oidc-client-secret
+            {{- end }}
             - name: ORBIT_OIDC_JWKS_URL
               value: {{ .Values.auth.oidc.jwksUrl | quote }}
             - name: ORBIT_OIDC_SCOPES

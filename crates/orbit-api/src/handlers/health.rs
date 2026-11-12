@@ -63,9 +63,9 @@ pub async fn meta(State(state): State<AppState>) -> Json<MetaResponse> {
         events_driver: state.events_driver.clone(),
         features: MetaFeatures {
             harness_execution: true,
-            connectors_invocation: false,
-            approvals: false,
-            scheduled_triggers: false,
+            connectors_invocation: true,
+            approvals: true,
+            scheduled_triggers: true,
             webhook_triggers: false,
             oidc: state.auth.oidc.is_some(),
             api_tokens: state.auth.allow_api_tokens,

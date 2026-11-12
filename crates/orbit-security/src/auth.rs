@@ -60,6 +60,10 @@ pub struct OidcConfig {
     pub issuer: String,
     pub audience: String,
     pub jwks_url: String,
+    /// OAuth/OIDC client id used by the web app. Defaults to the audience.
+    pub client_id: String,
+    pub client_secret: Option<String>,
+    pub redirect_uri: String,
     pub scopes: Vec<String>,
     pub auto_provision: bool,
     pub default_role: UserRole,
@@ -113,10 +117,20 @@ impl AuthConfig {
                 let jwks_url = std::env::var("ORBIT_OIDC_JWKS_URL").map_err(|_| {
                     SecurityError::Config("ORBIT_OIDC_JWKS_URL is required in oidc mode".into())
                 })?;
+                let client_id = env_or("ORBIT_OIDC_CLIENT_ID", &audience);
+                let redirect_uri = env_or(
+                    "ORBIT_OIDC_REDIRECT_URI",
+                    "http://localhost:3000/auth/callback",
+                );
                 Some(OidcConfig {
                     issuer,
                     audience,
                     jwks_url,
+                    client_id,
+                    client_secret: std::env::var("ORBIT_OIDC_CLIENT_SECRET")
+                        .ok()
+                        .filter(|value| !value.trim().is_empty()),
+                    redirect_uri,
                     scopes: env_or("ORBIT_OIDC_SCOPES", "openid profile email")
                         .split_whitespace()
                         .map(str::to_string)

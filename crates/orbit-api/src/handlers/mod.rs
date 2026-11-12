@@ -1,6 +1,7 @@
 pub mod account;
 pub mod agents;
 pub mod approvals;
+pub mod auth_oidc;
 pub mod catalog;
 pub mod dashboard;
 pub mod executions;

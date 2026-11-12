@@ -10,7 +10,7 @@ import { createOrbitClient } from "@orbit/api-client";
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_ORBIT_API_URL?.replace(/\/$/, "") ?? "";
 
-const DEV_TOKEN = process.env.NEXT_PUBLIC_ORBIT_DEV_TOKEN ?? "orbit-dev-token";
+const DEV_TOKEN = process.env.NEXT_PUBLIC_ORBIT_DEV_TOKEN ?? null;
 
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return DEV_TOKEN;

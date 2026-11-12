@@ -122,6 +122,10 @@ auth:
   oidc:
     issuer: ""
     audience: ""
+    # OAuth client used by the web login. Defaults to audience.
+    clientId: ""
+    # Must match the web callback URL registered in Dex/Keycloak.
+    redirectUri: ""
     jwksUrl: ""
     scopes: "openid profile email"
     autoProvision: true

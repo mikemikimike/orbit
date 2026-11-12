@@ -175,7 +175,8 @@ pub fn oidc_public_config(state: &AppState) -> serde_json::Value {
         Some(oidc) => serde_json::json!({
             "mode": "oidc",
             "issuer": oidc.issuer,
-            "clientId": oidc.audience,
+            "clientId": oidc.client_id,
+            "redirectUri": oidc.redirect_uri,
             "scopes": oidc.scopes,
         }),
         None => serde_json::json!({

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
   Bot,
@@ -20,7 +21,8 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useDashboard } from "@/lib/queries";
+import { getAccessToken } from "@/lib/api";
+import { useDashboard, useMeta } from "@/lib/queries";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -61,10 +63,21 @@ function BrandMark() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/";
+  const router = useRouter();
+  const meta = useMeta();
   const dashboard = useDashboard();
   const pendingApprovals = dashboard.data?.summary.pendingApprovals ?? 0;
   const hideNewAgent = pathname.startsWith("/agents/new");
   const current = NAV.filter((item) => isActive(pathname, item.href)).at(-1);
+
+  useEffect(() => {
+    const auth = (meta.data?.auth ?? {}) as { mode?: string };
+    const publicPath = pathname.startsWith("/login") || pathname.startsWith("/auth/");
+    if (auth.mode === "oidc" && !publicPath && !getAccessToken()) {
+      const next = pathname === "/" ? "/" : pathname;
+      router.replace(`/login?next=${encodeURIComponent(next)}`);
+    }
+  }, [meta.data?.auth, pathname, router]);
 
   return (
     <div className="min-h-dvh bg-background">

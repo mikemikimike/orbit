@@ -27,10 +27,11 @@ export async function streamExecutionEvents(
   const url = `${eventStreamUrl(executionId)}${query ? `?${query}` : ""}`;
 
   try {
+    const token = getAccessToken();
     const response = await fetch(url, {
       headers: {
         accept: "text/event-stream",
-        authorization: `Bearer ${getAccessToken() ?? ""}`,
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
         ...(options.lastEventId ? { "last-event-id": options.lastEventId } : {}),
       },
       signal: options.signal,
