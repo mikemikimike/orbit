@@ -353,6 +353,20 @@ pub struct CreateConnectionRequest {
     pub scopes: Vec<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateConnectionRequest {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub config: Option<serde_json::Value>,
+    #[serde(default)]
+    pub scopes: Option<Vec<String>>,
+    /// Replacement credential. Omit to keep the current secret.
+    #[serde(default)]
+    pub credential: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionView {

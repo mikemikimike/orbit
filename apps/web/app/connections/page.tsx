@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Cable, KeyRound, Plus, Trash2, Webhook } from "lucide-react";
+import { Cable, KeyRound, Pencil, Plus, Trash2, Webhook } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -25,12 +25,14 @@ import { api } from "@/lib/api";
 import { queryKeys, unwrap, useConnections, useConnectors } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 import { formatDate, relativeTime, titleCase } from "@/lib/utils";
+import type { ConnectionView } from "@/lib/types";
 
 export default function ConnectionsPage() {
   const connections = useConnections();
   const connectors = useConnectors();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<{ id: string; connectorSlug: string } | null>(null);
   const [connectorSlug, setConnectorSlug] = useState("telegram");
   const [name, setName] = useState("");
   const [credential, setCredential] = useState("");
@@ -44,13 +46,26 @@ export default function ConnectionsPage() {
     effect: string;
   }>;
 
-  const create = useMutation({
+  const save = useMutation({
     mutationFn: async () => {
       let config: unknown = {};
       try {
         config = configText.trim() ? JSON.parse(configText) : {};
       } catch {
         throw new Error("Connection config must be valid JSON");
+      }
+      if (editing) {
+        return unwrap(
+          await api.PATCH("/api/v1/connections/{connection_id}", {
+            params: { path: { connection_id: editing.id } },
+            body: {
+              name: name.trim(),
+              scopes,
+              config: config as never,
+              ...(credential ? { credential } : {}),
+            },
+          }),
+        );
       }
       return unwrap(
         await api.POST("/api/v1/connections", {
@@ -65,16 +80,38 @@ export default function ConnectionsPage() {
       );
     },
     onSuccess: () => {
-      toast.success("Connection created");
+      toast.success(editing ? "Connection updated" : "Connection created");
       setOpen(false);
+      setEditing(null);
       setName("");
       setCredential("");
       setScopes([]);
       setConfigText("{}");
       void queryClient.invalidateQueries({ queryKey: queryKeys.connections });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.connectors });
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
+
+  function openCreate() {
+    setEditing(null);
+    setConnectorSlug("telegram");
+    setName("");
+    setCredential("");
+    setScopes([]);
+    setConfigText("{}");
+    setOpen(true);
+  }
+
+  function openEdit(connection: ConnectionView) {
+    setEditing({ id: connection.id, connectorSlug: connection.connectorSlug });
+    setConnectorSlug(connection.connectorSlug);
+    setName(connection.name);
+    setCredential("");
+    setScopes(connection.scopes);
+    setConfigText(JSON.stringify(connection.config ?? {}, null, 2));
+    setOpen(true);
+  }
 
   const remove = useMutation({
     mutationFn: async (id: string) =>
@@ -97,22 +134,11 @@ export default function ConnectionsPage() {
         title="Connections"
         description="Authorized accounts for external services. Credentials are encrypted at rest and capabilities are enforced by ORBIT."
         actions={
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={openCreate}>
             <Plus /> New connection
           </Button>
         }
       />
-
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="p-4 text-sm">
-          <p className="font-medium">Connector capabilities arrive in the connected-agents phase</p>
-          <p className="mt-1 text-muted-foreground">
-            Phase 0 stores connections and credentials securely and exposes the connector catalog.
-            Capability invocation, OAuth flows and inbound webhook verification are implemented in
-            Phase 2. No external service is called yet.
-          </p>
-        </CardContent>
-      </Card>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -132,7 +158,7 @@ export default function ConnectionsPage() {
             title="No connections yet"
             description="Connect a Telegram bot, GitLab account or generic webhook. An agent can then be granted specific capabilities."
             action={
-              <Button onClick={() => setOpen(true)}>
+              <Button onClick={openCreate}>
                 <Plus /> New connection
               </Button>
             }
@@ -168,6 +194,14 @@ export default function ConnectionsPage() {
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                     <span>created {formatDate(connection.createdAt)}</span>
+                    <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => openEdit(connection)}
+                    >
+                      <Pencil /> Edit
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -180,6 +214,7 @@ export default function ConnectionsPage() {
                     >
                       <Trash2 /> Remove
                     </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -229,9 +264,10 @@ export default function ConnectionsPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>New connection</DialogTitle>
+            <DialogTitle>{editing ? "Edit connection" : "New connection"}</DialogTitle>
             <DialogDescription>
               Credentials are sent over the API and encrypted at rest with AES-256-GCM.
+              {editing ? " Leave the credential blank to keep the current secret." : ""}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -240,6 +276,7 @@ export default function ConnectionsPage() {
               <select
                 className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
                 value={connectorSlug}
+                disabled={Boolean(editing)}
                 onChange={(event) => {
                   setConnectorSlug(event.target.value);
                   setScopes([]);
@@ -267,7 +304,7 @@ export default function ConnectionsPage() {
               <Input
                 type="password"
                 value={credential}
-                placeholder="token / bot token"
+                placeholder={editing ? "leave blank to keep current credential" : "token / bot token"}
                 autoComplete="new-password"
                 onChange={(event) => setCredential(event.target.value)}
               />
@@ -314,11 +351,11 @@ export default function ConnectionsPage() {
               Cancel
             </Button>
             <Button
-              onClick={() => create.mutate()}
-              loading={create.isPending}
+              onClick={() => save.mutate()}
+              loading={save.isPending}
               disabled={!name.trim()}
             >
-              Create connection
+              {editing ? "Save changes" : "Create connection"}
             </Button>
           </DialogFooter>
         </DialogContent>

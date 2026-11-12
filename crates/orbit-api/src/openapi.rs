@@ -67,6 +67,7 @@ use crate::handlers;
         handlers::catalog::list_connectors,
         handlers::catalog::list_connections,
         handlers::catalog::create_connection,
+        handlers::catalog::update_connection,
         handlers::catalog::delete_connection,
         handlers::triggers::list_triggers,
         handlers::triggers::create_trigger,

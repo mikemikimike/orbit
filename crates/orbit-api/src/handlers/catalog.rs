@@ -12,7 +12,7 @@ use crate::audit;
 use crate::dto::{
     parse_provider_kind, ConnectionView, ConnectorView, CreateConnectionRequest,
     CreateProviderRequest, HarnessHealthView, HarnessView, ProviderProbeResponse, ProviderView,
-    UpdateProviderRequest,
+    UpdateConnectionRequest, UpdateProviderRequest,
 };
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -499,6 +499,76 @@ pub async fn create_connection(
     )
     .await;
     Ok((StatusCode::CREATED, Json(ConnectionView::from(row))))
+}
+
+#[utoipa::path(patch, path = "/api/v1/connections/{connection_id}", tag = "connectors", request_body = UpdateConnectionRequest, responses((status = 200, body = ConnectionView)))]
+pub async fn update_connection(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(connection_id): Path<Uuid>,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<UpdateConnectionRequest>,
+) -> Result<Json<ConnectionView>, ApiError> {
+    auth.require(Permission::ConnectionsWrite)?;
+    let existing = state
+        .store
+        .get_connection(auth.org_id, connection_id)
+        .await?;
+    let name = body
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let mut secret_ref: Option<String> = None;
+    if let Some(credential) = &body.credential {
+        if credential.trim().is_empty() {
+            return Err(ApiError::validation(vec![
+                orbit_domain::ValidationIssue::new("credential", "credential must not be empty"),
+            ]));
+        }
+        let reference = new_secret_ref("connection");
+        state
+            .store
+            .put_secret(
+                Some(auth.org_id),
+                &reference,
+                &SecretValue::new(credential.trim()),
+                &format!("connection:{}", name.unwrap_or(&existing.name)),
+            )
+            .await?;
+        secret_ref = Some(reference);
+    }
+    let updated = state
+        .store
+        .update_connection(
+            auth.org_id,
+            connection_id,
+            name,
+            body.config.as_ref(),
+            body.scopes.as_deref(),
+            secret_ref.as_deref(),
+        )
+        .await?;
+    if let Some(reference) = &secret_ref {
+        if let Some(old) = &existing.credential_ref {
+            if old != reference {
+                let _ = state.store.delete_secret(old).await;
+            }
+        }
+    }
+    let row = state
+        .store
+        .get_connection_with_connector(auth.org_id, updated.id)
+        .await?;
+    audit::record(
+        &state,
+        &auth,
+        "connection.updated",
+        Some("connection"),
+        Some(updated.id),
+        serde_json::json!({ "credentialRotated": secret_ref.is_some() }),
+    )
+    .await;
+    Ok(Json(ConnectionView::from(row)))
 }
 
 #[utoipa::path(delete, path = "/api/v1/connections/{connection_id}", tag = "connectors", responses((status = 204)))]

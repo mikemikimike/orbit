@@ -198,7 +198,8 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route(
             "/api/v1/connections/{connection_id}",
-            delete(handlers::catalog::delete_connection),
+            patch(handlers::catalog::update_connection)
+                .delete(handlers::catalog::delete_connection),
         )
         .route(
             "/api/v1/triggers",

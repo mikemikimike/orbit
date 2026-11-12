@@ -258,7 +258,7 @@ export interface paths {
         delete: operations["delete_connection"];
         options?: never;
         head?: never;
-        patch?: never;
+        patch: operations["update_connection"];
         trace?: never;
     };
     "/api/v1/connectors": {
@@ -1503,6 +1503,13 @@ export interface components {
             labels?: unknown;
             name?: string | null;
         };
+        UpdateConnectionRequest: {
+            config?: unknown;
+            /** @description Replacement credential. Omit to keep the current secret. */
+            credential?: string | null;
+            name?: string | null;
+            scopes?: string[] | null;
+        };
         UpdateProviderRequest: {
             config?: unknown;
             credential?: string | null;
@@ -2088,6 +2095,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    update_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateConnectionRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionView"];
+                };
             };
         };
     };

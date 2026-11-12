@@ -361,6 +361,39 @@ impl Store {
         .await?)
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub async fn update_connection(
+        &self,
+        org_id: Uuid,
+        connection_id: Uuid,
+        name: Option<&str>,
+        config: Option<&Value>,
+        scopes: Option<&[String]>,
+        credential_ref: Option<&str>,
+    ) -> StoreResult<Connection> {
+        sqlx::query_as::<_, Connection>(
+            r#"
+            UPDATE connections
+            SET name = COALESCE($3, name),
+                config = COALESCE($4, config),
+                scopes = COALESCE($5, scopes),
+                credential_ref = COALESCE($6, credential_ref),
+                updated_at = now()
+            WHERE org_id = $1 AND id = $2
+            RETURNING *
+            "#,
+        )
+        .bind(org_id)
+        .bind(connection_id)
+        .bind(name)
+        .bind(config)
+        .bind(scopes)
+        .bind(credential_ref)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("connection".into()))
+    }
+
     pub async fn get_connection(
         &self,
         org_id: Uuid,
