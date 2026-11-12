@@ -107,6 +107,14 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/agent-teams/{team_id}/runs",
             post(handlers::teams::create_run),
         )
+        .route(
+            "/api/v1/agent-teams/{team_id}/queue",
+            get(handlers::team_queue::list).post(handlers::team_queue::enqueue),
+        )
+        .route(
+            "/api/v1/agent-teams/{team_id}/queue/{item_id}/run",
+            post(handlers::team_queue::run_item),
+        )
         .route("/api/v1/team-runs", get(handlers::teams::list_runs))
         .route("/api/v1/team-runs/{run_id}", get(handlers::teams::get_run))
         .route("/api/v1/harnesses", get(handlers::catalog::list_harnesses))

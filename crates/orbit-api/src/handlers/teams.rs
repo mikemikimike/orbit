@@ -102,7 +102,7 @@ fn default_mode() -> String {
     "pipeline".into()
 }
 
-fn parse_definition(team: &AgentTeam) -> Result<TeamDefinition, ApiError> {
+pub(crate) fn parse_definition(team: &AgentTeam) -> Result<TeamDefinition, ApiError> {
     serde_json::from_value(team.definition.clone())
         .map_err(|error| ApiError::internal(format!("team definition is invalid: {error}")))
 }
@@ -645,6 +645,10 @@ pub(crate) async fn advance(state: &AppState, run: TeamRun) -> anyhow::Result<()
                 .store
                 .update_team_run(run.id, "succeeded", execution.output.as_ref(), None)
                 .await?;
+            let _ = state
+                .store
+                .set_team_queue_status_by_run(run.id, "succeeded", None)
+                .await;
             return Ok(());
         }
         let next = (current.step_index as usize) + 1;

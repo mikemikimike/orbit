@@ -7,6 +7,7 @@ pub mod dashboard;
 pub mod executions;
 pub mod health;
 pub mod skills;
+pub mod team_queue;
 pub mod teams;
 pub mod triggers;
 pub mod worker_api;

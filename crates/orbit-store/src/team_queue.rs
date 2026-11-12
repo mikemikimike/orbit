@@ -64,6 +64,21 @@ impl Store {
         .map_err(Into::into)
     }
 
+    pub async fn get_team_queue_item(
+        &self,
+        org_id: Uuid,
+        item_id: Uuid,
+    ) -> StoreResult<TeamQueueItem> {
+        sqlx::query_as::<_, TeamQueueItem>(
+            "SELECT * FROM team_queue_items WHERE org_id = $1 AND id = $2",
+        )
+        .bind(org_id)
+        .bind(item_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("team queue item".into()))
+    }
+
     pub async fn set_team_queue_run(
         &self,
         org_id: Uuid,
@@ -78,6 +93,23 @@ impl Store {
         .bind(item_id)
         .bind(team_run_id)
         .bind(status)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn set_team_queue_status_by_run(
+        &self,
+        team_run_id: Uuid,
+        status: &str,
+        error: Option<&str>,
+    ) -> StoreResult<()> {
+        sqlx::query(
+            "UPDATE team_queue_items SET status = $2, error = $3, updated_at = now() WHERE team_run_id = $1",
+        )
+        .bind(team_run_id)
+        .bind(status)
+        .bind(error)
         .execute(&self.pool)
         .await?;
         Ok(())
