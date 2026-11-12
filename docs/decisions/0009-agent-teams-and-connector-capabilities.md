@@ -60,7 +60,10 @@ issues, so a coding agent could not complete a repository loop.
   - pulls: list/get/create
   - checks: list
   - repository: checkout before the harness, commit and push through the tool broker
-- GitLab will follow the same pattern; it is not implemented yet.
+- GitLab follows the same pattern and now covers projects, group issues/boards, project
+  issues, comments/updates, merge requests, pipelines and repository checkout/commit/
+  push. Group boards may span projects; a run still has one checked-out repository, so
+  multi-project board items need repository selection per item.
 
 ### Worker provisioning
 

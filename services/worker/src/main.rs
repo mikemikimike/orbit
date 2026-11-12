@@ -4,6 +4,7 @@ mod connectors;
 mod dispatch;
 mod git;
 mod github;
+mod gitlab;
 mod liveness;
 mod runner;
 mod skills;

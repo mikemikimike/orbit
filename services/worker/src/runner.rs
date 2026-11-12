@@ -171,7 +171,7 @@ pub async fn run_execution(
         .connectors
         .iter()
         .find(|binding| {
-            binding.connector == "github"
+            matches!(binding.connector.as_str(), "github" | "gitlab")
                 && binding
                     .capabilities
                     .iter()

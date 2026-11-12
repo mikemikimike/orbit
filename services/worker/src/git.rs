@@ -37,11 +37,27 @@ async fn write_askpass() -> anyhow::Result<std::path::PathBuf> {
     Ok(path)
 }
 
-fn apply_git_auth(command: &mut Command, askpass: &Path) {
+fn apply_git_auth(command: &mut Command, askpass: &Path, username: &str) {
     command
         .env("GIT_ASKPASS", askpass)
         .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_USERNAME", "x-access-token");
+        .env("ORBIT_GIT_USERNAME", username);
+}
+
+fn git_username(connection: &WorkerConnection) -> String {
+    connection
+        .connection
+        .config
+        .get("gitUsername")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            if connection.connector.slug == "gitlab" {
+                "oauth2".into()
+            } else {
+                "x-access-token".into()
+            }
+        })
 }
 
 fn input_string(input: &Value, key: &str) -> Option<String> {
@@ -64,6 +80,7 @@ fn repo_name(connection: &WorkerConnection, input: &Value) -> Option<String> {
             .connection
             .config
             .get("defaultRepository")
+            .or_else(|| connection.connection.config.get("defaultProject"))
             .and_then(Value::as_str)
             .map(str::to_string)
     })
@@ -90,6 +107,7 @@ fn validate_repo(connection: &WorkerConnection, repo: &str) -> anyhow::Result<()
         .connection
         .config
         .get("allowedRepositories")
+        .or_else(|| connection.connection.config.get("allowedProjects"))
         .and_then(Value::as_array)
     {
         if !allowed.is_empty()
@@ -143,8 +161,15 @@ pub async fn checkout(
         .config
         .get("cloneBaseUrl")
         .and_then(Value::as_str)
-        .unwrap_or("https://github.com")
+        .unwrap_or_else(|| {
+            if connection.connector.slug == "gitlab" {
+                "https://gitlab.com"
+            } else {
+                "https://github.com"
+            }
+        })
         .trim_end_matches('/');
+    let username = git_username(&connection);
     let branch = input_string(input, "branch");
     let mut command = Command::new("git");
     command
@@ -158,7 +183,7 @@ pub async fn checkout(
         command.env("ORBIT_GIT_TOKEN", token);
     }
     if let Some(askpass) = &askpass {
-        apply_git_auth(&mut command, askpass);
+        apply_git_auth(&mut command, askpass, &username);
     }
     let output = command.output().await?;
     if let Some(askpass) = &askpass {
@@ -182,11 +207,12 @@ pub async fn commit(
     message: &str,
 ) -> anyhow::Result<Value> {
     let connection = client.connection(execution_id, connection_id).await?;
+    let username = git_username(&connection);
     let token = connection
         .credential
         .as_ref()
         .map(|secret| secret.value.clone())
-        .ok_or_else(|| anyhow::anyhow!("GitHub connection has no token"))?;
+        .ok_or_else(|| anyhow::anyhow!("connection has no token"))?;
     let askpass = write_askpass().await?;
     let add = Command::new("git")
         .current_dir(workspace)
@@ -208,7 +234,7 @@ pub async fn commit(
         message,
     ]);
     command.env("ORBIT_GIT_TOKEN", &token);
-    apply_git_auth(&mut command, &askpass);
+    apply_git_auth(&mut command, &askpass, &username);
     let output = command.output().await?;
     let _ = tokio::fs::remove_file(&askpass).await;
     if !output.status.success() {
@@ -242,18 +268,19 @@ pub async fn push(
         anyhow::bail!("invalid branch name");
     }
     let connection = client.connection(execution_id, connection_id).await?;
+    let username = git_username(&connection);
     let token = connection
         .credential
         .as_ref()
         .map(|secret| secret.value.clone())
-        .ok_or_else(|| anyhow::anyhow!("GitHub connection has no token"))?;
+        .ok_or_else(|| anyhow::anyhow!("connection has no token"))?;
     let askpass = write_askpass().await?;
     let mut command = Command::new("git");
     command
         .current_dir(workspace)
         .args(["push", "origin", &format!("HEAD:refs/heads/{branch}")]);
     command.env("ORBIT_GIT_TOKEN", &token);
-    apply_git_auth(&mut command, &askpass);
+    apply_git_auth(&mut command, &askpass, &username);
     let output = command.output().await?;
     let _ = tokio::fs::remove_file(&askpass).await;
     if !output.status.success() {

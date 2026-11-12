@@ -26,6 +26,7 @@ use orbit_store::{Approval, Connection, ExecutionRecord};
 
 use crate::client::WorkerClient;
 use crate::github::{self, GitHubClientConfig};
+use crate::gitlab::{self, GitLabClientConfig};
 
 #[derive(Debug, Clone)]
 struct ToolSpec {
@@ -43,10 +44,16 @@ struct BrokerState {
     autonomy: AutonomyLevel,
     approval_mode: ApprovalMode,
     connection: Connection,
-    github: GitHubClientConfig,
+    connector_slug: String,
+    connector_client: ConnectorClient,
     tools: Vec<ToolSpec>,
     token: String,
     http: reqwest::Client,
+}
+
+enum ConnectorClient {
+    Github(GitHubClientConfig),
+    Gitlab(GitLabClientConfig),
 }
 
 pub struct BrokerHandle {
@@ -69,7 +76,7 @@ impl Drop for BrokerHandle {
     }
 }
 
-fn tool_specs(
+fn github_tool_specs(
     capabilities: &[String],
     effects: &std::collections::BTreeMap<String, CapabilityEffect>,
 ) -> Vec<ToolSpec> {
@@ -215,6 +222,187 @@ fn tool_specs(
         .collect()
 }
 
+fn gitlab_tool_specs(
+    capabilities: &[String],
+    effects: &std::collections::BTreeMap<String, CapabilityEffect>,
+) -> Vec<ToolSpec> {
+    capabilities
+        .iter()
+        .map(|capability| {
+            let tool = format!("gitlab_{}", capability.replace('.', "_"));
+            let effect = effects
+                .get(capability)
+                .copied()
+                .unwrap_or(CapabilityEffect::Read);
+            let input_schema = match capability.as_str() {
+                "projects.list" => json!({ "type": "object", "properties": {} }),
+                "group_issues.list" => json!({
+                    "type": "object",
+                    "properties": {
+                        "group": { "type": "string" },
+                        "state": { "type": "string" },
+                        "labels": { "type": "string" },
+                        "search": { "type": "string" }
+                    }
+                }),
+                "boards.list" => json!({
+                    "type": "object",
+                    "properties": { "group": { "type": "string" } }
+                }),
+                "issues.list" => json!({
+                    "type": "object",
+                    "properties": {
+                        "project": { "type": "string" },
+                        "state": { "type": "string" },
+                        "labels": { "type": "string" },
+                        "search": { "type": "string" }
+                    }
+                }),
+                "issues.get" => json!({
+                    "type": "object",
+                    "properties": {
+                        "project": { "type": "string" },
+                        "iid": { "type": "integer", "minimum": 1 }
+                    },
+                    "required": ["iid"]
+                }),
+                "issues.create" => json!({
+                    "type": "object",
+                    "properties": {
+                        "project": { "type": "string" },
+                        "title": { "type": "string" },
+                        "description": { "type": "string" },
+                        "labels": { "type": "array", "items": { "type": "string" } },
+                        "confidential": { "type": "boolean" }
+                    },
+                    "required": ["title"]
+                }),
+                "issues.update" => json!({
+                    "type": "object",
+                    "properties": {
+                        "project": { "type": "string" },
+                        "iid": { "type": "integer", "minimum": 1 },
+                        "title": { "type": "string" },
+                        "description": { "type": "string" },
+                        "labels": { "type": "array", "items": { "type": "string" } },
+                        "state_event": { "type": "string", "enum": ["close", "reopen"] },
+                        "assigneeIds": { "type": "array", "items": { "type": "integer" } }
+                    },
+                    "required": ["iid"]
+                }),
+                "issues.comment" => json!({
+                    "type": "object",
+                    "properties": {
+                        "project": { "type": "string" },
+                        "iid": { "type": "integer", "minimum": 1 },
+                        "body": { "type": "string" }
+                    },
+                    "required": ["iid", "body"]
+                }),
+                "merge_requests.list" => json!({
+                    "type": "object",
+                    "properties": {
+                        "project": { "type": "string" },
+                        "state": { "type": "string" }
+                    }
+                }),
+                "merge_requests.get" => json!({
+                    "type": "object",
+                    "properties": {
+                        "project": { "type": "string" },
+                        "iid": { "type": "integer", "minimum": 1 }
+                    },
+                    "required": ["iid"]
+                }),
+                "merge_requests.create" => json!({
+                    "type": "object",
+                    "properties": {
+                        "project": { "type": "string" },
+                        "title": { "type": "string" },
+                        "sourceBranch": { "type": "string" },
+                        "targetBranch": { "type": "string" },
+                        "description": { "type": "string" },
+                        "draft": { "type": "boolean" }
+                    },
+                    "required": ["title", "sourceBranch"]
+                }),
+                "merge_requests.comment" => json!({
+                    "type": "object",
+                    "properties": {
+                        "project": { "type": "string" },
+                        "iid": { "type": "integer", "minimum": 1 },
+                        "body": { "type": "string" }
+                    },
+                    "required": ["iid", "body"]
+                }),
+                "merge_requests.approve" => json!({
+                    "type": "object",
+                    "properties": {
+                        "project": { "type": "string" },
+                        "iid": { "type": "integer", "minimum": 1 }
+                    },
+                    "required": ["iid"]
+                }),
+                "merge_requests.merge" => json!({
+                    "type": "object",
+                    "properties": {
+                        "project": { "type": "string" },
+                        "iid": { "type": "integer", "minimum": 1 },
+                        "sha": { "type": "string" },
+                        "mergeCommitMessage": { "type": "string" }
+                    },
+                    "required": ["iid"]
+                }),
+                "pipelines.status" => json!({
+                    "type": "object",
+                    "properties": {
+                        "project": { "type": "string" },
+                        "ref": { "type": "string" }
+                    }
+                }),
+                "repo.commit" => json!({
+                    "type": "object",
+                    "properties": { "message": { "type": "string" } },
+                    "required": ["message"]
+                }),
+                "repo.push" => json!({
+                    "type": "object",
+                    "properties": { "branch": { "type": "string" } },
+                    "required": ["branch"]
+                }),
+                _ => json!({ "type": "object", "properties": {} }),
+            };
+            let description = match capability.as_str() {
+                "projects.list" => "List accessible GitLab projects.",
+                "group_issues.list" => "List issues across a GitLab group or group board.",
+                "boards.list" => "List issue boards for a GitLab group.",
+                "issues.list" => "List issues in a GitLab project.",
+                "issues.get" => "Read one GitLab issue.",
+                "issues.create" => "Create a GitLab issue.",
+                "issues.update" => "Update a GitLab issue, labels or state.",
+                "issues.comment" => "Post a note on a GitLab issue.",
+                "merge_requests.list" => "List GitLab merge requests.",
+                "merge_requests.get" => "Read one GitLab merge request.",
+                "merge_requests.create" => "Create a GitLab merge request.",
+                "merge_requests.comment" => "Post a note on a GitLab merge request.",
+                "merge_requests.approve" => "Approve a GitLab merge request.",
+                "merge_requests.merge" => "Merge a GitLab merge request.",
+                "pipelines.status" => "Read the latest GitLab pipeline status.",
+                "repo.commit" => "Commit workspace changes.",
+                "repo.push" => "Push the workspace branch to GitLab.",
+                _ => "GitLab capability.",
+            };
+            ToolSpec {
+                capability: capability.clone(),
+                name: tool,
+                description: description.to_string(),
+                effect,
+                input_schema,
+            }
+        })
+        .collect()
+}
+
 /// Start the broker for one execution. Returns `None` when the agent has no GitHub binding.
 pub async fn start(
     client: WorkerClient,
@@ -222,22 +410,22 @@ pub async fn start(
     execution: &ExecutionRecord,
     workspace: &std::path::Path,
 ) -> anyhow::Result<Option<BrokerHandle>> {
-    let Some(binding) = spec.connectors.iter().find(|b| b.connector == "github") else {
+    let Some(binding) = spec.connectors.iter().find(|b| {
+        matches!(b.connector.as_str(), "github" | "gitlab") && !b.capabilities.is_empty()
+    }) else {
         return Ok(None);
     };
-    if binding.capabilities.is_empty() {
-        return Ok(None);
-    }
+    let connector_slug = binding.connector.clone();
     let Some(connection_id) = binding.connection_id else {
         anyhow::bail!(
-            "GitHub connector is bound without a connection; select a connection in Agent Studio"
+            "Connector '{connector_slug}' is bound without a connection; select a connection in Agent Studio"
         );
     };
     let worker_connection = client.connection(execution.id, connection_id).await?;
     let connection = worker_connection.connection;
     let connector = worker_connection.connector;
     if connection.status != "active" {
-        anyhow::bail!("GitHub connection is not active");
+        anyhow::bail!("{connector_slug} connection is not active");
     }
 
     let mut effects = std::collections::BTreeMap::new();
@@ -264,13 +452,27 @@ pub async fn start(
         // A binding may only request pre-execution capabilities such as repo.checkout.
         return Ok(None);
     }
-    let tools = tool_specs(&allowed, &effects);
+    let tools = if connector_slug == "gitlab" {
+        gitlab_tool_specs(&allowed, &effects)
+    } else {
+        github_tool_specs(&allowed, &effects)
+    };
 
     let token = worker_connection
         .credential
         .as_ref()
         .map(|credential| credential.value.clone());
-    let github = GitHubClientConfig::from_connection(&connection.config, token);
+    let connector_client = if connector_slug == "gitlab" {
+        ConnectorClient::Gitlab(GitLabClientConfig::from_connection(
+            &connection.config,
+            token,
+        ))
+    } else {
+        ConnectorClient::Github(GitHubClientConfig::from_connection(
+            &connection.config,
+            token,
+        ))
+    };
 
     let autonomy = AutonomyLevel::from_level(spec.autonomy.level).unwrap_or(AutonomyLevel::OBSERVE);
     let state = Arc::new(BrokerState {
@@ -280,7 +482,8 @@ pub async fn start(
         autonomy,
         approval_mode: spec.autonomy.approval_mode,
         connection,
-        github,
+        connector_slug,
+        connector_client,
         tools,
         token: format!("{}{}", Uuid::now_v7().simple(), Uuid::now_v7().simple()),
         http: reqwest::Client::builder()
@@ -370,7 +573,7 @@ async fn call_tool(
         .iter()
         .map(|tool| GrantedCapability {
             connection_id: state.connection.id,
-            connector: "github".into(),
+            connector: state.connector_slug.clone(),
             capability: tool.capability.clone(),
             effect: tool.effect,
         })
@@ -444,13 +647,14 @@ async fn call_tool(
         };
         outcome.map_err(|error| error.to_string())
     } else {
-        github::invoke(
-            &state.http,
-            &state.github,
-            &tool.capability,
-            &call.arguments,
-        )
-        .await
+        match &state.connector_client {
+            ConnectorClient::Github(config) => {
+                github::invoke(&state.http, config, &tool.capability, &call.arguments).await
+            }
+            ConnectorClient::Gitlab(config) => {
+                gitlab::invoke(&state.http, config, &tool.capability, &call.arguments).await
+            }
+        }
     };
 
     match result {
@@ -534,7 +738,7 @@ async fn request_approval(
             state.execution.id,
             json!({
                 "capability": tool.capability,
-                "connector": "github",
+                "connector": state.connector_slug,
                 "connectionId": state.connection.id,
                 "connectionName": state.connection.name,
                 "effect": tool.effect.as_str(),
@@ -717,7 +921,7 @@ mod tests {
             ("issues.list".to_string(), CapabilityEffect::Read),
             ("issues.comment".to_string(), CapabilityEffect::Write),
         ]);
-        let tools = tool_specs(
+        let tools = github_tool_specs(
             &["issues.list".to_string(), "issues.comment".to_string()],
             &effects,
         );
