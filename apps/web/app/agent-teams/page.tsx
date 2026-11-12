@@ -33,6 +33,7 @@ import {
   useAgentTeams,
   useSkills,
   useTeamRuns,
+  useWorkerProfiles,
 } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 import {
@@ -51,6 +52,7 @@ export default function AgentTeamsPage() {
   const runs = useTeamRuns();
   const agents = useAgents({ limit: 100 });
   const skills = useSkills();
+  const workerProfiles = useWorkerProfiles();
   const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
@@ -65,6 +67,8 @@ export default function AgentTeamsPage() {
   );
   const [teamRepository, setTeamRepository] = useState("mkluiver/orbit");
   const [teamBranch, setTeamBranch] = useState("");
+  const [workerProfileId, setWorkerProfileId] = useState("");
+  const [autoLaunch, setAutoLaunch] = useState(false);
   const [teamSkills, setTeamSkills] = useState<string[]>([]);
   const [steps, setSteps] = useState<TeamStepInput[]>([
     { agentId: "" },
@@ -104,6 +108,8 @@ export default function AgentTeamsPage() {
         instructions,
         repository: teamRepository.trim() || undefined,
         branch: teamBranch.trim() || undefined,
+        workerProfileId: workerProfileId || undefined,
+        autoLaunch,
         skills: teamSkills,
         steps,
       };
@@ -130,6 +136,8 @@ export default function AgentTeamsPage() {
     );
     setTeamRepository("mkluiver/orbit");
     setTeamBranch("");
+    setWorkerProfileId("");
+    setAutoLaunch(false);
     setTeamSkills([]);
     setSteps([{ agentId: "" }, { agentId: "" }]);
     setOpen(true);
@@ -143,6 +151,8 @@ export default function AgentTeamsPage() {
     setInstructions(team.definition.instructions ?? "");
     setTeamRepository(team.definition.repository ?? "");
     setTeamBranch(team.definition.branch ?? "");
+    setWorkerProfileId(team.definition.workerProfileId ?? "");
+    setAutoLaunch(team.definition.autoLaunch ?? false);
     setTeamSkills(team.definition.skills ?? []);
     setSteps((team.definition.steps ?? []).map((step) => ({ agentId: step.agentId })));
     setOpen(true);
@@ -239,6 +249,9 @@ export default function AgentTeamsPage() {
                       repository: <span className="font-mono">{team.definition.repository}</span>
                       {team.definition.branch ? ` · ${team.definition.branch}` : ""}
                     </p>
+                  ) : null}
+                  {team.definition.autoLaunch ? (
+                    <p className="text-[11px] text-muted-foreground">auto-launch worker enabled</p>
                   ) : null}
                   {team.definition.skills?.length ? (
                     <p className="text-[11px] text-muted-foreground">
@@ -374,6 +387,38 @@ export default function AgentTeamsPage() {
               Used as the structured checkout target. A run can override it. Putting a
               repository only in the instruction does not affect checkout.
             </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Worker profile (optional)</Label>
+                <select
+                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+                  value={workerProfileId}
+                  onChange={(event) => setWorkerProfileId(event.target.value)}
+                >
+                  <option value="">No automatic worker launch</option>
+                  {(workerProfiles.data ?? []).filter((profile) => profile.enabled).map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name} · {profile.harnessKind} · {profile.target}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <label className="flex items-start gap-2 rounded-lg border p-3 text-xs">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={autoLaunch}
+                  onChange={(event) => setAutoLaunch(event.target.checked)}
+                />
+                <span>
+                  <span className="font-medium">Auto-launch worker</span>
+                  <span className="mt-0.5 block text-muted-foreground">
+                    Starts the selected profile before the first step. The profile allowlist
+                    must include the team agents.
+                  </span>
+                </span>
+              </label>
+            </div>
             <div className="space-y-1.5">
               <Label>Execution mode</Label>
               <select

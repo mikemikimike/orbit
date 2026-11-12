@@ -179,13 +179,12 @@ pub async fn get_launch(
 }
 
 #[utoipa::path(post, path = "/api/v1/worker-profiles/{profile_id}/launch", tag = "workers", responses((status = 201, body = WorkerLaunch)))]
-pub async fn launch_profile(
-    State(state): State<AppState>,
-    Extension(auth): Extension<AuthContext>,
-    Path(profile_id): Path<Uuid>,
-) -> Result<(StatusCode, Json<WorkerLaunch>), ApiError> {
-    auth.require(Permission::SettingsWrite)?;
-    launcher(&state)?;
+pub(crate) async fn launch_profile_internal(
+    state: &AppState,
+    auth: &AuthContext,
+    profile_id: Uuid,
+) -> Result<WorkerLaunch, ApiError> {
+    launcher(state)?;
     let profile = state
         .store
         .get_worker_profile(auth.org_id, profile_id)
@@ -195,8 +194,22 @@ pub async fn launch_profile(
             "enable the worker profile before launching it",
         ));
     }
+    // Reuse an existing live launch for this profile instead of creating a new worker
+    // for every TeamRun.
+    if let Some(existing) = state
+        .store
+        .list_worker_launches(auth.org_id)
+        .await?
+        .into_iter()
+        .find(|launch| {
+            launch.profile_id == profile.id
+                && matches!(launch.status.as_str(), "pending" | "starting" | "running")
+        })
+    {
+        return Ok(existing);
+    }
     let issued =
-        crate::handlers::worker_profiles::issue_profile_token(&state, auth.org_id, &profile, false)
+        crate::handlers::worker_profiles::issue_profile_token(state, auth.org_id, &profile, false)
             .await?;
     let image = format!("{}:{}", profile.image, profile.image_tag);
     let launch = state
@@ -229,7 +242,7 @@ pub async fn launch_profile(
         worker_id: worker_id.clone(),
     };
     let result: LauncherStatus = match call_launcher(
-        &state,
+        state,
         reqwest::Method::POST,
         "/launches",
         Some(serde_json::to_value(&request).unwrap_or_default()),
@@ -242,7 +255,7 @@ pub async fn launch_profile(
                 .store
                 .revoke_worker_token(auth.org_id, issued.token_id)
                 .await;
-            let failed = state
+            let _ = state
                 .store
                 .update_worker_launch(
                     auth.org_id,
@@ -254,12 +267,11 @@ pub async fn launch_profile(
                     false,
                     true,
                 )
-                .await?;
-            let _ = failed;
+                .await;
             return Err(error);
         }
     };
-    let launch = state
+    state
         .store
         .update_worker_launch(
             auth.org_id,
@@ -271,8 +283,21 @@ pub async fn launch_profile(
             true,
             false,
         )
-        .await?;
-    Ok((StatusCode::CREATED, Json(launch)))
+        .await
+        .map_err(Into::into)
+}
+
+#[utoipa::path(post, path = "/api/v1/worker-profiles/{profile_id}/launch", tag = "workers", responses((status = 201, body = WorkerLaunch)))]
+pub async fn launch_profile(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(profile_id): Path<Uuid>,
+) -> Result<(StatusCode, Json<WorkerLaunch>), ApiError> {
+    auth.require(Permission::SettingsWrite)?;
+    Ok((
+        StatusCode::CREATED,
+        Json(launch_profile_internal(&state, &auth, profile_id).await?),
+    ))
 }
 
 #[utoipa::path(post, path = "/api/v1/worker-launches/{launch_id}/stop", tag = "workers", responses((status = 200, body = WorkerLaunch)))]

@@ -36,6 +36,8 @@ type TeamInput = {
   instructions: string;
   repository?: string;
   branch?: string;
+  workerProfileId?: string;
+  autoLaunch?: boolean;
   skills: string[];
   steps: TeamStepInput[];
 };

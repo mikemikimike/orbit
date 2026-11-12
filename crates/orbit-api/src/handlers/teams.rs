@@ -41,6 +41,11 @@ pub struct CreateTeamRequest {
     /// Optional base/working branch for repository checkout.
     #[serde(default)]
     pub branch: Option<String>,
+    /// Worker profile used for automatic launch.
+    #[serde(default)]
+    pub worker_profile_id: Option<Uuid>,
+    #[serde(default)]
+    pub auto_launch: bool,
     /// Skills materialized for every step in the team.
     #[serde(default)]
     pub skills: Vec<String>,
@@ -78,6 +83,10 @@ pub struct TeamDefinition {
     pub repository: Option<String>,
     #[serde(default)]
     pub branch: Option<String>,
+    #[serde(default)]
+    pub worker_profile_id: Option<Uuid>,
+    #[serde(default)]
+    pub auto_launch: bool,
     #[serde(default)]
     pub skills: Vec<String>,
     pub steps: Vec<TeamStepDefinition>,
@@ -204,6 +213,8 @@ pub async fn create_team(
         "instructions": body.instructions.trim(),
         "repository": body.repository.as_deref().map(str::trim).filter(|value| !value.is_empty()),
         "branch": body.branch.as_deref().map(str::trim).filter(|value| !value.is_empty()),
+        "workerProfileId": body.worker_profile_id,
+        "autoLaunch": body.auto_launch,
         "skills": body.skills,
         "steps": body.steps.iter().map(|step| serde_json::json!({
             "agentId": step.agent_id,
@@ -297,6 +308,8 @@ pub async fn update_team(
         "instructions": body.instructions.trim(),
         "repository": body.repository.as_deref().map(str::trim).filter(|value| !value.is_empty()),
         "branch": body.branch.as_deref().map(str::trim).filter(|value| !value.is_empty()),
+        "workerProfileId": body.worker_profile_id,
+        "autoLaunch": body.auto_launch,
         "skills": body.skills,
         "steps": body.steps.iter().map(|step| serde_json::json!({
             "agentId": step.agent_id,
@@ -545,6 +558,12 @@ pub async fn create_run(
         .store
         .create_team_run(auth.org_id, team.id, &input, Some(auth.user_id))
         .await?;
+    if definition.auto_launch {
+        if let Some(profile_id) = definition.worker_profile_id {
+            crate::handlers::worker_launches::launch_profile_internal(&state, &auth, profile_id)
+                .await?;
+        }
+    }
     let step = match start_step(&state, &run, &definition, 0, None).await {
         Ok(step) => step,
         Err(error) => {

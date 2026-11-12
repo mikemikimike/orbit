@@ -53,6 +53,26 @@ project adheres to [Semantic Versioning](https://semver.org/).
 - X connector call returns a clear 401 with an invalid token (real API request path).
 - Existing mock-runtime smoke test and SSE through ingress continue to pass.
 
+## [0.6.0] — agent teams, GitLab, OIDC and launcher
+
+### Added
+- Native OpenCode Agent Teams and execution-level skills.
+- GitHub coding capabilities: repo checkout/commit/push, PRs, checks, issue updates.
+- GitLab connector: projects, group issues/boards, issues, merge requests, pipelines,
+  repo checkout/commit/push.
+- Worker launcher and single-profile launch reuse.
+- Connection editing and credential rotation.
+- Worker profile editing.
+- OIDC web login (Authorization Code + PKCE) for Dex and Keycloak.
+- Agent Team repository/branch and automatic worker launch settings.
+- Per-run L4 auto-approve override.
+- Execution grouping by Agent Team run.
+
+### Changed
+- Connection capability descriptions and write approvals are human-readable.
+- Native Agent Teams are restricted to OpenCode; Pi uses pipeline mode.
+- Repository checkout is skipped when no repository is configured.
+
 ## [Unreleased]
 
 ### Added
@@ -220,6 +240,26 @@ project adheres to [Semantic Versioning](https://semver.org/).
   approvals UI are implemented, and the approval UI was verified with a real pending
   approval record.
 - Orphaned executions are failed, not automatically retried (idempotent retries next).
+
+## [0.6.0] — agent teams, GitLab, OIDC and launcher
+
+### Added
+- Native OpenCode Agent Teams and execution-level skills.
+- GitHub coding capabilities: repo checkout/commit/push, PRs, checks, issue updates.
+- GitLab connector: projects, group issues/boards, issues, merge requests, pipelines,
+  repo checkout/commit/push.
+- Worker launcher and single-profile launch reuse.
+- Connection editing and credential rotation.
+- Worker profile editing.
+- OIDC web login (Authorization Code + PKCE) for Dex and Keycloak.
+- Agent Team repository/branch and automatic worker launch settings.
+- Per-run L4 auto-approve override.
+- Execution grouping by Agent Team run.
+
+### Changed
+- Connection capability descriptions and write approvals are human-readable.
+- Native Agent Teams are restricted to OpenCode; Pi uses pipeline mode.
+- Repository checkout is skipped when no repository is configured.
 
 ## [Unreleased]
 
