@@ -9,9 +9,9 @@ keywords:
   - ai
   - control-plane
   - self-hosted
-home: https://github.com/mkluiver/orbit
+home: https://github.com/opsifyhq/orbit
 sources:
-  - https://github.com/mkluiver/orbit
+  - https://github.com/opsifyhq/orbit
 maintainers:
   - name: mkluiver
     url: https://github.com/mkluiver

@@ -65,7 +65,7 @@ export default function AgentTeamsPage() {
   const [instructions, setInstructions] = useState(
     "Pick up the next GitHub issue labelled agent-ready, implement it, test it and request review. Repeat until no ready issues remain.",
   );
-  const [teamRepository, setTeamRepository] = useState("mkluiver/orbit");
+  const [teamRepository, setTeamRepository] = useState("opsifyhq/orbit");
   const [teamBranch, setTeamBranch] = useState("");
   const [workerProfileId, setWorkerProfileId] = useState("");
   const [autoLaunch, setAutoLaunch] = useState(false);
@@ -134,7 +134,7 @@ export default function AgentTeamsPage() {
     setInstructions(
       "Pick up the next GitHub issue labelled agent-ready, implement it, test it and request review. Repeat until no ready issues remain.",
     );
-    setTeamRepository("mkluiver/orbit");
+    setTeamRepository("opsifyhq/orbit");
     setTeamBranch("");
     setWorkerProfileId("");
     setAutoLaunch(false);
