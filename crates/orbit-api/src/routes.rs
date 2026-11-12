@@ -129,6 +129,7 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/worker-profiles/{profile_id}",
             get(handlers::worker_profiles::get_profile)
+                .patch(handlers::worker_profiles::update_profile)
                 .delete(handlers::worker_profiles::delete_profile),
         )
         .route(

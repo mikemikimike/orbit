@@ -333,6 +333,92 @@ pub async fn create_profile(
     Ok((StatusCode::CREATED, Json(profile)))
 }
 
+#[utoipa::path(patch, path = "/api/v1/worker-profiles/{profile_id}", tag = "workers", request_body = CreateWorkerProfileRequest, responses((status = 200, body = WorkerProfile)))]
+pub async fn update_profile(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(profile_id): Path<Uuid>,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<CreateWorkerProfileRequest>,
+) -> Result<Json<WorkerProfile>, ApiError> {
+    auth.require(Permission::SettingsWrite)?;
+    let harness = HarnessKind::from_str_compat(&body.harness_kind)?;
+    if !matches!(body.target.as_str(), "local" | "docker" | "kubernetes") {
+        return Err(ApiError::validation(vec![ValidationIssue::new(
+            "target",
+            "must be local, docker or kubernetes",
+        )]));
+    }
+    if !matches!(body.execution_driver.as_str(), "process" | "docker") {
+        return Err(ApiError::validation(vec![ValidationIssue::new(
+            "executionDriver",
+            "must be process or docker",
+        )]));
+    }
+    let mut issues = Vec::new();
+    if body.name.trim().is_empty() {
+        issues.push(ValidationIssue::new("name", "name is required"));
+    }
+    for slug in &body.skill_slugs {
+        if state
+            .store
+            .get_skill_by_slug(auth.org_id, slug)
+            .await?
+            .is_none()
+        {
+            issues.push(ValidationIssue::new(
+                "skillSlugs",
+                format!("unknown skill '{slug}'"),
+            ));
+        }
+    }
+    for agent_id in &body.agent_ids {
+        if state.store.get_agent(auth.org_id, *agent_id).await.is_err() {
+            issues.push(ValidationIssue::new(
+                "agentIds",
+                format!("unknown agent '{agent_id}'"),
+            ));
+        }
+    }
+    if !issues.is_empty() {
+        return Err(ApiError::validation(issues));
+    }
+    let image = if body.image.trim().is_empty() {
+        default_image(harness)
+    } else {
+        body.image.trim().to_string()
+    };
+    let profile = state
+        .store
+        .update_worker_profile(
+            auth.org_id,
+            profile_id,
+            body.name.trim(),
+            harness.as_str(),
+            &body.target,
+            &body.execution_driver,
+            &image,
+            body.image_tag.trim(),
+            &body.agent_ids,
+            &body.skill_slugs,
+            body.provider.as_deref(),
+            body.model.as_deref(),
+            body.auth_secret_name.as_deref(),
+            &body.env,
+            &body.resources,
+        )
+        .await?;
+    audit::record(
+        &state,
+        &auth,
+        "worker_profile.updated",
+        Some("worker_profile"),
+        Some(profile.id),
+        serde_json::json!({ "harness": profile.harness_kind, "target": profile.target }),
+    )
+    .await;
+    Ok(Json(profile))
+}
+
 #[utoipa::path(get, path = "/api/v1/worker-profiles/{profile_id}", tag = "workers", responses((status = 200, body = WorkerProfile)))]
 pub async fn get_profile(
     State(state): State<AppState>,

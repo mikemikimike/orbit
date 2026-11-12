@@ -88,6 +88,56 @@ impl Store {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub async fn update_worker_profile(
+        &self,
+        org_id: Uuid,
+        profile_id: Uuid,
+        name: &str,
+        harness_kind: &str,
+        target: &str,
+        execution_driver: &str,
+        image: &str,
+        image_tag: &str,
+        agent_ids: &[Uuid],
+        skill_slugs: &[String],
+        provider: Option<&str>,
+        model: Option<&str>,
+        auth_secret_name: Option<&str>,
+        env: &serde_json::Value,
+        resources: &serde_json::Value,
+    ) -> StoreResult<WorkerProfile> {
+        sqlx::query_as::<_, WorkerProfile>(
+            r#"
+            UPDATE worker_profiles
+            SET name = $3, harness_kind = $4, target = $5, execution_driver = $6,
+                image = $7, image_tag = $8, agent_ids = $9, skill_slugs = $10,
+                provider = $11, model = $12, auth_secret_name = $13, env = $14,
+                resources = $15, updated_at = now()
+            WHERE org_id = $1 AND id = $2
+            RETURNING *
+            "#,
+        )
+        .bind(org_id)
+        .bind(profile_id)
+        .bind(name)
+        .bind(harness_kind)
+        .bind(target)
+        .bind(execution_driver)
+        .bind(image)
+        .bind(image_tag)
+        .bind(agent_ids)
+        .bind(skill_slugs)
+        .bind(provider)
+        .bind(model)
+        .bind(auth_secret_name)
+        .bind(env)
+        .bind(resources)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("worker profile".into()))
+    }
+
     pub async fn set_worker_profile_enabled(
         &self,
         org_id: Uuid,

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Boxes, Copy, Plus, Rocket, ScrollText, Server, Square, Trash2 } from "lucide-react";
+import { Boxes, Copy, Pencil, Plus, Rocket, ScrollText, Server, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +57,7 @@ export default function WorkersPage() {
   const skills = useSkills();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<WorkerProfile | null>(null);
   const [bootstrapProfile, setBootstrapProfile] = useState<WorkerProfile | null>(null);
   const [logsLaunch, setLogsLaunch] = useState<{ id: string; name: string } | null>(null);
   const [logs, setLogs] = useState("");
@@ -89,35 +90,74 @@ export default function WorkersPage() {
     return Array.isArray(settings?.models) ? (settings?.models as string[]) : [];
   })();
 
-  const create = useMutation({
-    mutationFn: async () =>
-      unwrap(
-        await api.POST("/api/v1/worker-profiles", {
-          body: {
-            name,
-            harnessKind: harness,
-            target,
-            executionDriver: driver,
-            image,
-            imageTag: tag,
-            agentIds,
-            skillSlugs,
-            provider: provider || undefined,
-            model: model || undefined,
-            authSecretName: authSecret || undefined,
-            env: {},
-            resources: {},
-          } as never,
-        }),
-      ),
+  const save = useMutation({
+    mutationFn: async () => {
+      const body = {
+        name,
+        harnessKind: harness,
+        target,
+        executionDriver: driver,
+        image,
+        imageTag: tag,
+        agentIds,
+        skillSlugs,
+        provider: provider || undefined,
+        model: model || undefined,
+        authSecretName: authSecret || undefined,
+        env: editing?.env ?? {},
+        resources: editing?.resources ?? {},
+      } as never;
+      if (editing) {
+        return unwrap(
+          await api.PATCH("/api/v1/worker-profiles/{profile_id}", {
+            params: { path: { profile_id: editing.id } },
+            body,
+          }),
+        );
+      }
+      return unwrap(await api.POST("/api/v1/worker-profiles", { body }));
+    },
     onSuccess: (profile) => {
-      toast.success("Worker profile created");
+      toast.success(editing ? "Worker profile updated" : "Worker profile created");
       setOpen(false);
+      setEditing(null);
       void queryClient.invalidateQueries({ queryKey: queryKeys.workerProfiles });
-      setBootstrapProfile(profile as WorkerProfile);
+      if (!editing) setBootstrapProfile(profile as WorkerProfile);
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
+
+  function openCreate() {
+    setEditing(null);
+    setName("OpenCode production");
+    setHarness("opencode");
+    setTarget("docker");
+    setDriver("process");
+    setImage(DEFAULT_IMAGES.opencode);
+    setTag("0.5.1");
+    setProvider("opencode-go");
+    setModel("deepseek-v4-pro");
+    setAuthSecret("");
+    setAgentIds([]);
+    setSkillSlugs([]);
+    setOpen(true);
+  }
+
+  function openEdit(profile: WorkerProfile) {
+    setEditing(profile);
+    setName(profile.name);
+    setHarness(profile.harnessKind);
+    setTarget(profile.target);
+    setDriver(profile.executionDriver);
+    setImage(profile.image);
+    setTag(profile.imageTag);
+    setProvider(profile.provider ?? "");
+    setModel(profile.model ?? "");
+    setAuthSecret(profile.authSecretName ?? "");
+    setAgentIds(profile.agentIds);
+    setSkillSlugs(profile.skillSlugs);
+    setOpen(true);
+  }
 
   const launch = useMutation({
     mutationFn: launchWorkerProfile,
@@ -190,7 +230,7 @@ export default function WorkersPage() {
         title="Workers"
         description="Bootstrap profiles: one image, one target, a fixed set of agents, skills and harness auth. Generate Docker, Compose or Kubernetes output."
         actions={
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={openCreate}>
             <Plus /> New worker profile
           </Button>
         }
@@ -206,7 +246,7 @@ export default function WorkersPage() {
           title="No worker profiles"
           description="A profile pins the harness, image, target, agents, skills and auth secret. Workers start with ORBIT_WORKER_PROFILE_ID."
           action={
-            <Button onClick={() => setOpen(true)}>
+            <Button onClick={openCreate}>
               <Plus /> Create profile
             </Button>
           }
@@ -249,6 +289,13 @@ export default function WorkersPage() {
                   </Button>
                   <Button size="sm" onClick={() => setBootstrapProfile(profile)}>
                     <Boxes /> Bootstrap
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => openEdit(profile)}
+                  >
+                    <Pencil /> Edit
                   </Button>
                   <Button
                     size="sm"
@@ -372,7 +419,7 @@ export default function WorkersPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>New worker profile</DialogTitle>
+            <DialogTitle>{editing ? "Edit worker profile" : "New worker profile"}</DialogTitle>
             <DialogDescription>
               The worker loads this profile at startup, claims only its agents and
               materializes its skills. Secrets stay external.
@@ -566,8 +613,8 @@ export default function WorkersPage() {
             <Button variant="ghost" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => create.mutate()} loading={create.isPending} disabled={!name.trim()}>
-              Create profile
+            <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!name.trim()}>
+              {editing ? "Save changes" : "Create profile"}
             </Button>
           </DialogFooter>
         </DialogContent>

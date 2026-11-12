@@ -612,7 +612,7 @@ export interface paths {
         delete: operations["delete_profile"];
         options?: never;
         head?: never;
-        patch?: never;
+        patch: operations["update_profile"];
         trace?: never;
     };
     "/api/v1/worker-profiles/{profile_id}/bootstrap": {
@@ -2778,6 +2778,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    update_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWorkerProfileRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerProfile"];
+                };
             };
         };
     };

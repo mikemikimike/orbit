@@ -55,6 +55,7 @@ use crate::handlers;
         handlers::worker_profiles::list_profiles,
         handlers::worker_profiles::create_profile,
         handlers::worker_profiles::get_profile,
+        handlers::worker_profiles::update_profile,
         handlers::worker_profiles::enable_profile,
         handlers::worker_profiles::disable_profile,
         handlers::worker_profiles::delete_profile,
