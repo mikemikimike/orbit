@@ -23,6 +23,7 @@ pub mod identity;
 pub mod models;
 pub mod secrets;
 pub mod skills;
+pub mod team_queue;
 pub mod triggers;
 pub mod worker_launches;
 pub mod worker_profiles;
