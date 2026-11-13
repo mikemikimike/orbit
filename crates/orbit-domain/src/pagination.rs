@@ -75,7 +75,11 @@ mod tests {
 
     #[test]
     fn cursor_roundtrip() {
-        let cursor = Cursor::new(Utc::now(), Uuid::now_v7());
+        let now = Utc::now();
+        let cursor = Cursor::new(
+            DateTime::<Utc>::from_timestamp_micros(now.timestamp_micros()).unwrap(),
+            Uuid::now_v7(),
+        );
         let encoded = cursor.encode();
         let decoded = Cursor::decode(&encoded).expect("decodable");
         assert_eq!(decoded.id, cursor.id);
