@@ -89,6 +89,12 @@
   <text x="928" y="281" class="box-line">per-execution workspace</text>
   <text x="928" y="297" class="box-muted">AGENTS.md · NDJSON events · cancel</text>
 
+  <rect x="910" y="324" width="226" height="86" rx="10" class="card-teal"/>
+  <text x="928" y="344" class="box-title">orbit-worker-pi</text>
+  <text x="928" y="361" class="box-line">Pi CLI v1.5.2</text>
+  <text x="928" y="377" class="box-line">per-execution workspace</text>
+  <text x="928" y="393" class="box-muted">.pi/mcp.json · JSON events · read-only tools</text>
+
   <rect x="664" y="334" width="472" height="86" rx="10" class="card-warm"/>
   <text x="682" y="354" class="box-title">Policy-enforcing tool broker</text>
   <text x="682" y="371" class="box-line">execution token · capability allowlist · autonomy L1–L4</text>
@@ -96,7 +102,7 @@
   <text x="682" y="407" class="box-muted">Harness calls MCP tools; provider credentials never leave the broker</text>
 
   <text x="664" y="450" class="box-line">Harness adapters:</text>
-  <text x="664" y="466" class="box-muted">OpenCode (available) · Claude Code · Pi · generic (planned)</text>
+  <text x="664" y="466" class="box-muted">OpenCode (available) · Pi (available) · Claude Code · generic (planned)</text>
   <text x="664" y="482" class="box-muted">mock harness for local development and contract tests</text>
 
   <!-- External -->

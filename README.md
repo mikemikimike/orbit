@@ -65,56 +65,6 @@ deployment topology): [`docs/architecture/diagram.md`](docs/architecture/diagram
 | **What** | A task, repository, connectors, and skills |
 | **Then** | Succeed, fail, retry, or stay running as a 24/7 agent |
 
-## Status
-
-Phase 0 foundation is implemented and validated:
-
-- Rust workspace: domain, contracts, store, events, security, harness adapters, HTTP API,
-  worker.
-- PostgreSQL schema with migrations (18 tables), encrypted secrets, audit trail.
-- Agent CRUD with immutable versions, import/export YAML, activation lifecycle.
-- Manual executions with idempotency, concurrency/rate limits, persisted events and live
-  SSE streaming with replay.
-- Mock harness executed **in the worker**, with cancellation and timeouts.
-- **OpenCode harness executes real tasks** in a separate worker image, tested against
-  OpenCode v2.3.0: NDJSON event streaming, tool events, session capture, cancellation,
-  usage tokens and `AGENTS.md` instruction isolation.
-- **Pi harness executes real tasks** in a separate worker image, tested against Pi v1.5.2:
-  JSON event streaming, session capture/resume, read-only tool allowlist.
-- **X read connector**: X recent-search posts are hydrated into the harness input as
-  untrusted context (bearer token from an encrypted connection).
-- **GitHub read/write via the policy-enforcing tool broker** (OpenCode/Pi → MCP → broker → GitHub),
-  verified end-to-end; write capabilities are approval-gated.
-- **Agent Teams**: pipeline + native subagent modes, durable work queue, dispatcher with
-  auto-claim, close-the-loop (labels/comments), multi-repo workspace.
-- **Approvals UI**, worker heartbeats + orphaned-execution reaper, and opt-in
-  **per-execution Docker containers** for local/single-user deployments.
-- **Kubernetes Jobs mode**: per-execution container isolation via K8s Jobs.
-- **Memory**: short-term and summary memory for persistent agents.
-- **OIDC**: configurable from the Settings UI, JWT validation against provider JWKS.
-- **Custom CA certificates**: Helm chart support for private CAs.
-- **Dark/light mode**: theme toggle in the web app.
-- Providers (custom OpenAI-compatible endpoints, harness-managed), connectors,
-  connections, triggers, dashboard, API tokens, health/readiness/metrics, OpenAPI 3.1 +
-  Swagger UI.
-- Next.js mobile-first web app (dashboard, Agent Studio, executions with live logs,
-  harnesses, models, connectors, skills, workers, settings, work wizard) with PWA assets.
-- Docker images (non-root, reproducible) and a Helm chart deployed and smoke-tested on a
-  local Kubernetes cluster with ingress host `orbit.example.com`.
-- **GitHub Actions CI**: tests, lint, security scan (Trivy, cargo audit, pnpm audit,
-  gitleaks), SBOM generation, container image builds.
-
-Not yet implemented — do not assume otherwise:
-
-- GitHub **writes** still need live end-to-end verification (approvals UI is in place).
-- Claude Code adapter (registered descriptor only, fail closed).
-- X posting, OAuth flows, webhook verification (Phase 2).
-- Enterprise RBAC, shared connections, quotas, marketplace (Phase 4).
-- Agent workflow branching/parallel execution (issue #9).
-- Large-scale agent simulation with result aggregation (issue #11).
-
-See `CHANGELOG.md` for the detailed list and `docs/` for architecture and decisions.
-
 ## Quick start (Docker Compose)
 
 ```bash
