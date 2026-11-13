@@ -101,9 +101,9 @@
   <text x="928" y="483" class="box-line">per-execution workspace</text>
   <text x="928" y="499" class="box-muted">.pi/mcp.json · JSON events · read-only tools</text>
 
-  <text x="664" y="450" class="box-line">Harness adapters:</text>
-  <text x="664" y="466" class="box-muted">OpenCode (available) · Pi (available) · Claude Code · generic (planned)</text>
-  <text x="664" y="482" class="box-muted">mock harness for local development and contract tests</text>
+  <text x="664" y="526" class="box-line">Harness adapters:</text>
+  <text x="664" y="542" class="box-muted">OpenCode (available) · Pi (available) · Claude Code · generic (planned)</text>
+  <text x="664" y="546" class="box-muted">mock harness for local development and contract tests</text>
 
   <!-- External -->
   <rect x="40" y="556" width="1120" height="176" rx="14" class="layer"/>

@@ -4,7 +4,6 @@
 
 [![CI](https://github.com/opsifyhq/orbit/actions/workflows/ci.yml/badge.svg)](https://github.com/opsifyhq/orbit/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
-[![Release](https://img.shields.io/github/v/release/opsifyhq/orbit?include_prereleases)](https://github.com/opsifyhq/orbit/releases)
 [![Rust](https://img.shields.io/badge/Rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org/)
 
