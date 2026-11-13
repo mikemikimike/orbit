@@ -4,386 +4,309 @@ All notable changes to ORBIT are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the
 project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.1.4] — Secure-context fix for plain HTTP deployments
-
-### Added
-- Architecture drawings: `docs/architecture/orbit-overview.svg` / `.png` and detailed
-  Mermaid diagrams for context, execution sequence, broker policy path, domain model and
-  deployment topology (`docs/architecture/diagram.md`).
-
-### Fixed
-- Agent pages crashed with `crypto.randomUUID is not a function` when ORBIT is served over
-  plain HTTP on a LAN hostname (Web Crypto UUIDs and the async clipboard API require a
-  secure context). Added secure-context-safe `randomId()` and `copyText()` helpers with
-  fallbacks, so the UI works over HTTP until TLS is configured. TLS is still recommended
-  for PWA/service-worker, clipboard and browser security.
-
-## [0.1.3] — Real OpenCode runtime + X read connector
-
-### Added
-- **OpenCode runtime execution** (`opencode run --standalone --format json`): NDJSON
-  event mapping (text, tool calls, usage, errors), session capture/resume, cancellation
-  via process-group termination, timeouts, per-execution workspace, and trusted
-  instructions written to `AGENTS.md`. Tested against OpenCode v2.2.5 with a real
-  integration test (`ORBIT_OPENCODE_E2E=1`).
-- Separate `orbit-worker-opencode` image and Helm Deployment; workers now claim only the
-  runtimes in `ORBIT_WORKER_RUNTIMES` (`mock` for the base worker, `opencode` for this
-  one). OpenCode credentials are imported from an `opencode auth export` Secret by an
-  init container.
-- **X (Twitter) read connector**: `posts.search` hydration before execution using the
-  encrypted connection bearer token; posts are injected as untrusted `externalContext`
-  and a query can come from payload/connection config. API failures fail the execution
-  with an actionable message.
-- Agent Studio connection picker per connector binding and an execution payload/query
-  field in the Run dialog.
-
-### Fixed
-- Agent detail page crashed when an agent had connector bindings because the API
-  serialized `connectionId: null` and the shared Zod schema rejected null. The API now
-  omits null IDs, the schema accepts nullish values, and the page renders a validation
-  fallback instead of crashing.
-- OpenCode worker needs writable XDG data/state/config directories; the chart mounts
-  writable emptyDirs and imports auth before start.
-- Worker startup message no longer claims OpenCode is only scaffolded.
-
-### Verified on microk8s (`http://orbit.mdk.local`)
-- Real OpenCode execution in-cluster: `succeeded`, session captured, 6.1k input / 10
-  output tokens, streamed events.
-- Cancellation of a long OpenCode execution: `cancelled`, process terminated.
-- X connector call returns a clear 401 with an invalid token (real API request path).
-- Existing mock-runtime smoke test and SSE through ingress continue to pass.
-
-## [0.6.0] — agent teams, GitLab, OIDC and launcher
-
-### Added
-- Native OpenCode Agent Teams and execution-level skills.
-- GitHub coding capabilities: repo checkout/commit/push, PRs, checks, issue updates.
-- GitLab connector: projects, group issues/boards, issues, merge requests, pipelines,
-  repo checkout/commit/push.
-- Worker launcher and single-profile launch reuse.
-- Connection editing and credential rotation.
-- Worker profile editing.
-- OIDC web login (Authorization Code + PKCE) for Dex and Keycloak.
-- Agent Team repository/branch and automatic worker launch settings.
-- Per-run L4 auto-approve override.
-- Execution grouping by Agent Team run.
-
-### Changed
-- Connection capability descriptions and write approvals are human-readable.
-- Native Agent Teams are restricted to OpenCode; Pi uses pipeline mode.
-- Repository checkout is skipped when no repository is configured.
+Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-11-13
+
+The release that turns ORBIT into a usable self-hosted platform: guided work creation,
+automatic issue dispatch, multi-repository teams, memory, and a hardened release
+pipeline.
+
 ### Added
-- Agent Teams with sequential agents; the first agent is primary and its own name defines
-  its role. Team-level skills and a team instruction are shared by every step; each step
-  is a normal execution with its own connectors and approvals.
-- Execution-level skills (`skills` on create-execution and team runs), unioned with
-  agent spec skills and optional profile defaults.
-- Worker materializes execution-level skills into Pi/OpenCode workspaces.
-- GitHub connector capabilities: issue update/labels/state, pull list/get/create, checks
-  list, repository checkout, commit and push through the tool broker.
-- Teams UI and API, including editing a team and grouping executions by Agent Team run.
+
+**Work creation**
+- New **Work** wizard (`/work`) that walks through *When → Where → Who → What → Then →
+  Summary* and reads the choices back before creating anything.
+- Optional work name, shown as the title of the execution instead of the agent name.
+- Harness selection is honoured: choosing a harness filters the agents to that harness
+  and is passed to the execution as a harness override.
+- When no worker profile exists for the chosen harness, one is created, enabled and
+  launched automatically.
+
+**Agent Teams**
+- Durable work queue with deduplication per `(teamId, externalKey)`.
+- Background **dispatcher** in the API: per-team Postgres advisory lock, GitHub/GitLab
+  issue listing, label-based claiming, max items per poll, `autoRun`, and last
+  poll/error tracking.
+- **Close the loop**: on success the issue gets a comment with PR/MR links and the done
+  label; failures apply the failed label or release the claim for a retry.
+- Retry / requeue / cancel actions for queue items (API + UI) and an attempts policy.
+- **Multi-repository workspace**: `repositories[]` with `connectionId`, `path`,
+  `primary` and `branch`, checked out sequentially with path-traversal validation and a
+  manifest in the prompt. Git tools accept a `repository` argument.
+- **Model selection per agent**: a team-level model override plus a per-step override;
+  each agent otherwise uses its own model.
+- Work source configuration (provider, connection, repository/project/group, labels,
+  max items/attempts, poll interval, auto-run).
+
+**Harnesses and providers**
+- Platform-managed OpenAI-compatible providers now work with **OpenCode** (written into
+  `opencode.json` with base URL, headers and a leased credential) and **Pi**
+  (`OPENAI_API_KEY` / `OPENAI_BASE_URL` plus `--provider openai`).
+- Harness override per execution (agent teams and the Work wizard).
+- OpenCode bumped to **v2.3.0**, Pi to **v1.5.2**.
+- Dedicated **`orbit-worker-pi`** image and Helm `piWorker` deployment.
+
+**Skills and memory**
+- Skill scripts are materialized executable (`chmod +x`) and validated by extension
+  (`.sh`, `.bash`, `.py`, `.js`, `.ts`, `.rb`, `.pl`, `.go`) with per-file (100 KB) and
+  total (1 MB) limits.
+- Skills page supports uploading files and editing the bundled-file map.
+- **Agent memory**: short-term and summary memory stored per agent, injected into the
+  execution payload, and pruned hourly.
+
+**Workers and execution plane**
+- **Environment variable mappings** on worker profiles: map ORBIT connections/secrets to
+  environment variables, resolved by the API and injected at worker start.
+- Select-all / clear for profile agents and skills; image tags default to `latest`.
+- Kubernetes **Job-per-execution**: single-execution launches run as a Job with
+  `restartPolicy: Never`, `backoffLimit: 0` and a 300s TTL; long-lived profiles stay Pods.
+- `orbit-worker` is a single binary; the MCP stdio bridge is the `mcp-broker`
+  subcommand, so custom images only need one executable.
+- Custom worker image guide, with binaries published per GitHub release.
+
+**Platform**
+- **OIDC configurable in Settings**, merged over environment values and applied at API
+  startup.
+- **Custom CA certificates**: the Helm chart mounts a CA bundle into every workload and
+  sets `SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE` / `NODE_EXTRA_CA_CERTS`; all Rust HTTP
+  clients trust the bundle.
+- **Dark/light theme** with a sidebar toggle, persisted and applied before hydration.
+- Execution history filtering (active/archived/all) for executions, team runs and worker
+  launches; terminal records can be archived and old runs pruned by age.
+- Human-readable execution timeline (event-kind badges) and input/output panels that
+  render text with a **Show raw JSON** toggle.
+- Navigation grouped into Work / Library / Operations; Skills promoted to the top level;
+  Connections renamed to **Connectors**.
+- Unified provider picker in Agent Studio: one grouped dropdown that sets harness-managed
+  or platform management automatically.
+- Long-running execution mode selectable for agents (24/7).
+
+**Delivery**
+- GitHub Actions CI on push/PR/tags: rustfmt, clippy, tests (with PostgreSQL), cargo
+  audit, pnpm audit, trufflehog, container builds for all six images, and release
+  binaries for tagged versions.
+- Helm chart image tags default to `.Chart.AppVersion`, matching the images CI builds for
+  a release; the stale `api.tag` was removed.
+- Docs rewritten and genericized (no environment-specific hosts or registry addresses);
+  added a threat model, a documentation index, an architecture diagram that includes the
+  Pi worker, and a release guide.
 
 ### Changed
-- Worker profiles should be treated as infrastructure only; agent/skill fields remain as
-  legacy defaults.
-- Team runs are advanced by the control plane by creating ordinary executions, never by
-  running an agent loop in `orbit-api`.
+- Workers consolidated to one binary (`orbit-worker` + `mcp-broker` subcommand).
+- Container images are published to GHCR; Dockerfiles run `apt-get upgrade` and build for
+  `linux/amd64`.
+- Chart defaults now target local/test clusters (`platform.environment=development`,
+  bundled PostgreSQL/NATS, dev auth) and generic registry/host names.
 
-## [0.5.1] — worker launcher
+### Fixed
+- Archiving an already-archived agent is idempotent instead of returning
+  `cannot transition agent from archived to archived`.
+- Archived agents are hidden from the default list and the dashboard, and can be restored
+  or deleted permanently.
+- Cursor round-trip test no longer fails on timestamp precision.
+- Hard delete blocked by a foreign key now returns a clear conflict instead of a generic
+  storage error.
+- Stale service-worker caching removed so UI updates appear after a deploy.
+- `deploy.sh` reuses existing worker/launcher tokens and sets the CORS and public base URL
+  from the ingress host.
+
+### Known limitations
+- GitHub/GitLab **writes** still need live end-to-end verification.
+- Claude Code and generic harness adapters are registered but fail closed.
+- Inbound webhook verification and X posting are not implemented.
+- Parallel subagents and conditional workflow branching are not implemented.
+- Enterprise RBAC, quotas, shared connections and the marketplace are not started.
+
+## [0.6.0] — 2026-11-10
 
 ### Added
-- Optional `orb-launcher` service with Docker and Kubernetes Pod drivers, protected by
-  an internal launcher token. The API never receives Docker socket or workload RBAC.
+- Native OpenCode **Agent Teams** (primary + native subagents) and execution-level
+  skills.
+- GitHub coding capabilities through the tool broker: repo checkout/commit/push, pull
+  requests, checks, issue updates.
+- **GitLab** connector: projects, group issues, boards, issues, merge requests,
+  pipelines, repository actions.
+- **Worker launcher** (`orbit-launcher`) for Docker and Kubernetes, with single-profile
+  launch reuse and namespaced Pod RBAC; the control plane never receives cluster or
+  Docker credentials.
+- Connection editing with credential rotation, and worker profile editing.
+- **OIDC web login** (Authorization Code + PKCE) for Dex and Keycloak.
+- Agent Team repository/branch settings and automatic worker launch.
+- Per-run L4 auto-approve override and execution grouping by Agent Team run.
+
+### Changed
+- Native Agent Teams are restricted to OpenCode; Pi uses pipeline mode.
+- Repository checkout is skipped when no repository is configured.
+- Connection capabilities and write approvals are presented in human-readable form.
+
+## [0.5.1] — 2026-11-09
+
+### Added
+- Optional launcher service with Docker and Kubernetes drivers, protected by an internal
+  launcher token.
 - Durable `worker_launches` records with status, runtime id, worker id and errors.
 - Workers UI: Launch, Stop, status and last-200-lines logs.
-- Helm launcher Deployment, namespaced Pod RBAC and launcher token plumbing; Compose
-  launcher with Docker socket.
-- API endpoints for launching profiles and listing/stopping/inspecting launches.
+- Helm launcher Deployment, namespaced Pod RBAC and launcher token plumbing.
 
 ### Changed
-- Worker launches use profile-scoped, per-launch tokens that are revoked on stop.
-- Launcher is opt-in; without it the API returns a clear `launcher_unavailable` error.
+- Worker launches use profile-scoped, per-launch tokens revoked on stop.
+- The launcher is opt-in; without it the API returns `launcher_unavailable`.
 
-## [0.5.0] — worker tokens and token-only bootstrap
+## [0.5.0] — 2026-11-08
 
 ### Added
-- Scoped worker tokens (`orbit_wk_`), stored as SHA-256 hashes with org/profile/harness
-  scoping, revocation and last-used tracking.
+- Scoped **worker tokens** (`orbit_wk_…`), stored as SHA-256 hashes with
+  organization/profile/harness scoping, revocation and last-used tracking.
 - Worker API: session, heartbeat, claim, execution context, running, events, completion,
   cancellation, approvals, audit and connector credential leases.
-- Worker profiles issue/rotate a token when generating bootstrap output.
-- Worker token administration endpoints: list, create, revoke.
-- Scheduled triggers and orphaned-execution reaping moved into `orbit-api`.
+- Worker token administration endpoints (list, create, revoke).
 
 ### Changed
 - Workers no longer receive `ORBIT_DATABASE_URL`, `ORBIT_NATS_URL` or
-  `ORBIT_MASTER_KEY`. They use `ORBIT_API_URL` + `ORBIT_WORKER_TOKEN`.
+  `ORBIT_MASTER_KEY`; they use `ORBIT_API_URL` + `ORBIT_WORKER_TOKEN`.
+- Scheduled triggers and orphaned-execution reaping moved into `orbit-api`.
 - Per-execution containers inherit the worker token instead of database credentials.
-- Helm and Compose now take worker tokens (`worker.token`, `opencodeWorker.token`,
-  `ORBIT_WORKER_TOKEN`).
-- Model resolution, connector credentials, skills and approvals are served by the
-  control plane.
-- Worker bootstrap manifests contain the token and no database/master-key placeholders.
 
 ### Removed
 - Worker-side scheduler, reaper and direct PostgreSQL/NATS event publishing.
 
-### Known limitations
-- Token rotation in Bootstrap invalidates existing workers using the old token.
-- Per-execution Kubernetes Jobs remain pending.
-
-## [0.4.0] — Harness rename
+## [0.4.0] — 2026-11-07
 
 ### Changed (breaking)
 - Renamed the agent-framework concept from **runtime** to **harness** across domain,
   database, API, worker, profiles, UI and docs.
-- DB: `runtimes` → `harnesses`, `runtime_kind` → `harness_kind`, `runtime_id` →
+- Database: `runtimes` → `harnesses`, `runtime_kind` → `harness_kind`, `runtime_id` →
   `harness_id`, `worker_heartbeats.runtimes` → `harnesses`; agent specs
   `spec.runtime` → `spec.harness`; provider kind `runtime_managed` →
   `harness_managed`.
-- API: `/api/v1/harnesses` (was `/runtimes`); `runtime`/`runtimeKind` →
-  `harness`/`harnessKind`; permission `harnesses:read`; regenerated TypeScript client.
-- Env: `ORBIT_WORKER_HARNESSES`, `ORBIT_EXECUTION_IMAGE_<HARNESS>`; worker profile field
+- API: `/api/v1/harnesses`; `runtime`/`runtimeKind` → `harness`/`harnessKind`;
+  `harnesses:read` permission; regenerated TypeScript client.
+- Env: `ORBIT_WORKER_HARNESSES`, `ORBIT_EXECUTION_IMAGE_<HARNESS>`; profile field
   `harnessKind`.
-- UI: Harnesses and Providers navigation; Agent Studio "Harness & model".
 
 ### Added
 - ADR-0008 defining harness/worker/sandbox/provider/model terminology and the
   worker-token + launcher design.
 
-### Known limitations
-- Worker token/API mode and the UI launcher are the next milestone; workers still use
-  the database in 0.4.0.
-- Worker bootstrap output still uses DB/NATS/master key until that API exists.
-
-## [0.3.0] — skills, worker profiles and Pi runtime
+## [0.3.0] — 2026-11-05
 
 ### Added
-- **Skills library**: org-scoped `SKILL.md` packages with supporting files, versioning,
-  CRUD API/UI and audit. Attach skills to agents in Agent Studio.
-- Worker materializes attached + profile-level skills into `.pi/skills/<slug>` and
-  `.opencode/skills/<slug>` before execution.
-- **Worker profiles**: pin runtime, image/tag, target, execution driver, one or more
-  agents, shared skills, provider/model metadata and an external auth secret reference.
-  Workers load `ORBIT_WORKER_PROFILE_ID`, claim only their agent allowlist and materialize
-  profile skills.
-- Bootstrap generator in the UI/API (`/worker-profiles/{id}/bootstrap`) for Docker,
-  Compose and Kubernetes output, including runtime auth mount guidance.
-- **Pi runtime adapter** tested against Pi 1.5.0: headless JSON, sessions, read-only tools
-  at L1/L2, cancellation/timeout and `.pi/mcp.json` broker bridge generation.
-- Pi worker image (`worker-pi.Dockerfile`, Node 22 + Pi 1.5.0) and `make worker-pi` host
-  runner.
-- `GET /api/v1/workers` and Active workers UI; queued-execution diagnostics.
+- **Skills library**: organization-scoped `SKILL.md` packages with supporting files,
+  versioning, CRUD API/UI and audit; attachable to agents in Agent Studio.
+- Skill materialization into `.pi/skills/<slug>` and `.opencode/skills/<slug>`.
+- **Worker profiles**: pin harness, image/tag, target, execution driver, agents, skills,
+  provider/model and an external auth secret reference; workers claim only their agent
+  allowlist and materialize profile skills.
+- Bootstrap generator (`/worker-profiles/{id}/bootstrap`) for Docker, Compose and
+  Kubernetes.
+- **Pi harness adapter** (tested against Pi 1.5.0): headless JSON, sessions, read-only
+  tools at L1/L2, cancellation/timeout and `.pi/mcp.json` broker bridge generation.
+- Pi worker image and `make worker-pi` host runner.
+- `GET /api/v1/workers` and the Active workers view.
 
 ### Changed
-- Version 0.3.0.
 - Skills are validated (slug, required SKILL.md, safe relative files) before persistence.
 
-### Known limitations
-- Pi worker Helm Deployment and Pi ↔ broker MCP parity are not yet verified end-to-end.
-- Worker profile output is a starting manifest; it does not yet launch containers from
-  the control plane.
-- OpenCode skill discovery depends on its project skill directory; verify per runtime
-  version. Agent presets/runtime-native subagents remain runtime-config JSON.
-
-## [0.2.1] — explicit placement and queued-execution diagnostics
+## [0.2.1] — 2026-11-03
 
 ### Added
-- `runtime.placement` on agents (`auto`, `local`, `docker`, `kubernetes`), editable in
-  Agent Studio and shown on the agent/execution detail. Workers advertise a target in
-  their heartbeat; the claim query only takes `auto` or matching-target executions.
-- `GET /api/v1/workers` and an “Active workers” section on Runtimes showing runtimes,
-  target, hostname and liveness.
-- Queued executions now get a timeline event and an in-UI diagnostic that checks for a
-  matching live worker, with instructions for starting one.
-- Worker target env defaults: host native `local`, Compose/Docker dispatcher `docker`,
-  Kubernetes workers `kubernetes`.
+- `harness.placement` on agents (`auto`, `local`, `docker`, `kubernetes`), editable in
+  Agent Studio; workers advertise a target so the claim query only takes `auto` or
+  matching-target executions.
+- `GET /api/v1/workers` with target, hostname and liveness.
+- Queued executions get a timeline event and an in-UI diagnostic about matching workers.
+- Worker target defaults: host native `local`, Compose/Docker `docker`, Kubernetes
+  `kubernetes`.
 
 ### Fixed
-- Reaper grace now uses claim time (`started_at`) instead of creation time, so retrying an
-  older queued execution cannot be reaped before its worker writes the first heartbeat.
-- `/api/v1/workers` route was missing from the router.
+- Reaper grace uses claim time instead of creation time, so retried queued executions are
+  not reaped before their worker writes a heartbeat.
+- `/api/v1/workers` was missing from the router.
 
-## [0.2.0] — approvals, worker recovery, per-execution containers
+## [0.2.0] — 2026-11-02
 
 ### Added
 - **Approvals UI**: pending queue with agent/execution context, argument preview,
   approve/reject with comment, recent decisions, navigation badge and dashboard banner.
-  Backend decisions are audited; pending approvals expire when their execution reaps.
-- **Worker lease/reaper**: `worker_heartbeats` table; workers heartbeat every 10s; a
-  periodic reaper fails executions whose worker heartbeat is stale (15s grace + threshold)
-  and expires their pending approvals. Fixes stuck `running` rows after crashes/restarts.
-- **Per-execution Docker containers** (host dispatcher): `ORBIT_EXECUTION_DRIVER=docker`
-  starts a short-lived container per execution running `orbit-worker` in
-  `ORBIT_SINGLE_EXECUTION_ID` mode. The container has its own tool broker/MCP bridge,
-  workspace and heartbeat; the parent holds a concurrency permit and waits for exit.
-  Verified locally with mock and OpenCode + GitHub read in a spawned container.
-- `make worker-docker`, `scripts/dev-worker-docker.sh`, `make compose-build-opencode` and
-  host-architecture OpenCode image builds (`OPENCODE_ARCH`).
-- Real GitHub read verified end-to-end: OpenCode → MCP → broker → GitHub `issues.list`
-  → summarized output, including inside a per-execution Docker container.
+- **Worker lease and reaper**: `worker_heartbeats`; stale running executions fail with a
+  diagnostic and their pending approvals expire.
+- **Per-execution Docker containers** (`ORBIT_EXECUTION_DRIVER=docker`) running the worker
+  in single-execution mode with its own workspace, broker and heartbeat.
+- Real GitHub read verified end-to-end: OpenCode → MCP → broker → GitHub `issues.list`.
 
 ### Changed
-- Execution timeline hides reasoning, step and usage noise by default; generic internal
-  tools are debug-only. “Show verbose” reveals the raw stream.
-- OpenCode `PWD` is pinned to the per-execution workspace; verified `pwd` isolation.
-- OpenCode stderr diagnostics gated behind `debugLogs` (off by default).
+- Execution timelines hide reasoning, step and usage noise by default; "show verbose"
+  reveals the raw stream.
+- OpenCode `PWD` is pinned to the per-execution workspace; stderr diagnostics are gated
+  behind `debugLogs`.
 
-### Known limitations
-- Kubernetes still runs the worker in process mode; Job-per-execution dispatch is the
-  next isolation milestone. Docker dispatch requires Docker socket/CLI access and is for
-  single-user/homelab deployments.
-- GitHub write/approval E2E against a real repository still needs a PAT; the broker and
-  approvals UI are implemented, and the approval UI was verified with a real pending
-  approval record.
-- Orphaned executions are failed, not automatically retried (idempotent retries next).
-
-## [0.6.0] — agent teams, GitLab, OIDC and launcher
+## [0.1.4] — 2026-11-01
 
 ### Added
-- Native OpenCode Agent Teams and execution-level skills.
-- GitHub coding capabilities: repo checkout/commit/push, PRs, checks, issue updates.
-- GitLab connector: projects, group issues/boards, issues, merge requests, pipelines,
-  repo checkout/commit/push.
-- Worker launcher and single-profile launch reuse.
-- Connection editing and credential rotation.
-- Worker profile editing.
-- OIDC web login (Authorization Code + PKCE) for Dex and Keycloak.
-- Agent Team repository/branch and automatic worker launch settings.
-- Per-run L4 auto-approve override.
-- Execution grouping by Agent Team run.
-
-### Changed
-- Connection capability descriptions and write approvals are human-readable.
-- Native Agent Teams are restricted to OpenCode; Pi uses pipeline mode.
-- Repository checkout is skipped when no repository is configured.
-
-## [Unreleased]
-
-### Added
-- **Pi runtime adapter** (tested against Pi 1.5.0): headless JSON mode, session capture,
-  cancellation/timeout, trusted system append, `.pi/mcp.json` broker bridge generation,
-  and a platform-enforced read-only tool allowlist at autonomy L1/L2.
-- `make worker-pi` / `scripts/dev-worker-pi.sh` for local host execution.
-- Pi config accepts `skills` paths and passes them via `--skill`.
-- Note: Pi worker container image/Helm deployment and full MCP tool parity are not yet
-  verified; the UI skill/agent registry remains pending.
-
-### Added
-- Real GitHub read flow verified end-to-end locally: OpenCode → MCP bridge → tool broker
-  → GitHub REST (`issues.list` on a public repo) → summarized output, no mock runtime.
-- Execution timeline noise reduction: reasoning/step/usage events are not shown by
-  default; generic internal tool calls are debug-only; GitHub/approval/error tool calls
-  stay visible; “show verbose” reveals the raw stream.
-- `debugLogs` runtime setting for OpenCode stderr diagnostics (off by default).
+- Architecture drawings (SVG/PNG) and Mermaid diagrams for context, execution sequence,
+  broker policy path, domain model and deployment topology.
 
 ### Fixed
-- OpenCode ran in the worker's working directory instead of the per-execution workspace
-  on some hosts (inherited `PWD`). The adapter now sets `PWD` to the workspace; verified
-  with `pwd` and process cwd inspection.
-- `step_start`/usage events no longer spam execution timelines (usage is aggregated).
+- Agent pages crashed with `crypto.randomUUID is not a function` when served over plain
+  HTTP. Added secure-context-safe `randomId()` / `copyText()` helpers with fallbacks.
 
-### Known limitation
-- Executions still run inside a long-lived worker container/host process, not a fresh
-  container per execution. Stale `running` rows after a worker crash need a lease/reaper
-  (next reliability milestone).
+## [0.1.3] — 2026-10-31
 
 ### Added
-- Documented and verified full local Docker Compose stack (db, NATS, API, mock worker,
-  web) with health checks, same-origin API proxy, demo seeding and fast restart workflow.
-- `make compose-logs`, `make compose-reset`, `make worker-opencode` and
-  `scripts/dev-worker-opencode.sh` for running a host OpenCode worker against Compose.
-- Execution-scoped tool broker foundation: policy/autonomy checks, approvals store + API,
-  GitHub connector (read + approval-gated writes), MCP stdio bridge and worker wiring
-  (approvals UI and deployment verification still pending).
+- **OpenCode runtime execution** (`opencode run --standalone --format json`): NDJSON event
+  mapping, session capture/resume, cancellation via process-group termination, per-
+  execution workspace and `AGENTS.md` instructions. Tested against OpenCode v2.2.5.
+- Separate `orbit-worker-opencode` image and Helm Deployment; credentials imported from an
+  `opencode auth export` Secret by an init container.
+- **X read connector**: `posts.search` hydration with untrusted `externalContext`.
+- Agent Studio connection picker and an execution payload/query field.
+
+### Fixed
+- Agent detail no longer crashes when a connector binding has a null `connectionId`.
+- OpenCode worker gets writable XDG directories and imports auth before start.
+
+## [0.1.0] — 2026-10-29
 
 ### Added
-- Responsive web experience: dashboard, agents list, Agent Studio, agent detail,
-  executions list, live execution timeline (SSE via fetch + auth header), runtimes,
-  models/providers, connections and settings.
-- Docker images (multi-stage, non-root, `linux/amd64`) for API, worker and web, plus a
-  full Compose stack and an infrastructure-only Compose file.
-- Helm chart with bundled or external PostgreSQL/NATS, API/worker/web deployments,
-  Services, SSE-friendly nginx ingress at `orbit.mdk.local`, probes, resources,
-  ServiceAccount, secret references, optional Vault env wiring and a production example.
-- Deployment scripts: image build/push to the private registry, Helm deploy and an
-  end-to-end Kubernetes smoke test.
-- Web container API proxy (same-origin `/api/*`) with runtime `ORBIT_API_INTERNAL_URL`.
-
-### Changed
-- Idempotency keys for executions are scoped per organization (migration `0002`).
-- Ingress host corrected to `orbit.mdk.local`.
-- `/api` is routed through the web container's API proxy so dev auth tokens are injected
-  server-side and OIDC/API bearer headers pass through transparently. `/readyz` is
-  routed to the API alongside `/healthz`.
-- Worker waits up to 90s for the API to bootstrap/migrate on fresh installs instead of
-  crash-looping (Helm install ordering).
-
-### Verified
-- Helm lint/template for default and production values.
-- Kubernetes deployment on a local cluster: all pods ready; web proxy → API → Postgres →
-  worker → mock runtime → SSE smoke test passed.
-- Private registry push of amd64 images to `192.168.1.201:5000`.
-- Live microk8s deployment at `http://orbit.mdk.local` (ingress address
-  `192.168.1.200`): ingress → web proxy → API → PostgreSQL → worker → mock runtime,
-  smoke test passed, SSE verified through the ingress.
-
-## [0.1.0] — Phase 0 foundation
-
-### Added
-- **Monorepo** with a Rust workspace (`crates/*`, `services/*`), pnpm workspaces
-  (`apps/*`, `packages/*`) and shared OpenAPI-generated TypeScript client.
-- **Domain model** (`orbit-domain`): versioned `orbit.io/v1` agent definitions with
-  semantic validation, runtime-agnostic specs, autonomy levels 1–4, capability
-  evaluation, execution state machine, keyset pagination cursors.
-- **Contracts** (`orbit-contracts`): `RuntimeAdapter` trait with capabilities, lifecycle,
-  execute/resume, streaming events, cancellation and typed errors; provider contracts for
-  OpenAI-compatible and runtime-managed providers with explicit compatibility flags;
-  connector manifest/capability/effect model; event envelope and NATS subject filter.
-- **Persistence** (`orbit-store`): 18-table PostgreSQL schema with migrations covering
-  organizations, users, API tokens, agents, immutable agent versions, instances,
-  runtimes, providers, connectors, connections, triggers, executions, execution events,
-  approvals, policies, audit logs, processed events and encrypted secrets. Keyset
-  pagination, org scoping, atomic execution claiming, terminal-state guards.
+- Monorepo: Rust workspace (`crates/*`, `services/*`), pnpm workspaces (`apps/*`,
+  `packages/*`) and a generated OpenAPI TypeScript client.
+- **Domain** (`orbit-domain`): versioned `orbit.io/v1` agent definitions with semantic
+  validation, autonomy levels 1–4, capability evaluation, execution state machine and
+  keyset pagination cursors.
+- **Contracts** (`orbit-contracts`): harness adapter trait with capabilities,
+  lifecycle, execute/resume, streaming events, cancellation and typed errors; provider
+  contracts with explicit compatibility flags; connector manifest/capability/effect
+  model; event envelope and subject filters.
+- **Persistence** (`orbit-store`): PostgreSQL schema with migrations, org scoping, keyset
+  pagination, atomic execution claiming and terminal-state guards.
 - **Security** (`orbit-security`): OIDC JWT validation with JWKS caching, hashed API
   tokens, role/permission matrix, AES-256-GCM secret store with reference-bound AAD.
-- **Event transport** (`orbit-events`): `EventBus` abstraction with in-memory and NATS
-  JetStream drivers; durable PostgreSQL queue as the source of truth with polling
-  failover.
-- **Runtime registry** (`orbit-runtime`): mock runtime (fully working, streaming,
-  cancellation, timeouts) plus OpenCode adapter scaffold (capabilities, config
-  validation, CLI preflight) and registered descriptors for Claude Code, Pi and generic.
-  Shared contract test harness.
-- **Control plane API** (`orbit-api` + `orbit-api` binary): health/readiness/metrics,
-  OpenAPI 3.1 document + Swagger UI, agents CRUD/versioning/export/activate/pause,
-  manual executions with idempotency, concurrency and rate limits, execution events and
-  SSE streaming with replay, runtimes, providers (with write-only credentials and
-  `/models` probing), connectors, connections, triggers, dashboard, audit log, API token
-  management and org/user endpoints. Dev auth mode and OIDC bearer validation.
-- **Execution plane worker** (`orbit-worker`): durable queue polling, concurrency
-  limiting, runtime dispatch, incremental event persistence, cancellation watcher,
-  timeout enforcement, scheduled trigger firing and rescheduling.
-- **Frontend foundation**: Next.js App Router + Tailwind + shadcn-style components,
-  TanStack Query, Zod schemas, typed OpenAPI client, mobile-first shell and PWA assets.
-- **Deployment**: Dockerfiles (multi-stage, non-root) and Helm chart targeting
-  `orbit.mdk.local` ingress; Compose stack for local development.
-- **Documentation**: architecture overview, domain model, runtime/provider/connector
-  contracts, events, API design, ADRs 0001–0007, local development, testing and
-  deployment guides.
+- **Events** (`orbit-events`): `EventBus` abstraction with in-memory and NATS JetStream
+  drivers; PostgreSQL remains the source of truth.
+- **Harness registry** (`orbit-harness`): mock harness (streaming, cancellation,
+  timeouts), OpenCode adapter scaffold and registered descriptors for Claude Code, Pi and
+  generic, plus a shared contract test harness.
+- **Control-plane API**: health/readiness/metrics, OpenAPI 3.1 + Swagger UI, agent
+  CRUD/versioning/export/activate/pause, manual executions with idempotency, concurrency
+  and rate limits, execution events and SSE replay, harnesses, providers, connectors,
+  connections, triggers, dashboard, audit log, API tokens and user/org endpoints.
+- **Execution-plane worker**: durable queue polling, concurrency limiting, harness
+  dispatch, incremental event persistence, cancellation watcher and timeout enforcement.
+- **Frontend**: Next.js App Router + Tailwind + shadcn-style components, TanStack Query,
+  Zod schemas, typed client, mobile-first shell and PWA assets.
+- **Deployment**: Dockerfiles (multi-stage, non-root), a Compose stack and a Helm chart.
+- **Documentation**: architecture, domain model, harness/provider/connector contracts,
+  events, API design, ADRs 0001–0007, local development, testing and deployment guides.
 
 ### Known limitations
-- The OpenCode adapter does **not** execute tasks yet; it validates configuration and
-  performs a real CLI preflight. Do not advertise it as working until Phase 1
-  integration tests pass against a pinned OpenCode version.
-- Claude Code, Pi and generic runtimes are descriptor-only and fail closed.
-- Connector capability invocation, OAuth flows, webhook verification and approvals are
-  Phase 2.
-- Runtime isolation (containers/Jobs per execution) is not implemented yet; the mock
-  runtime runs in the worker process. The production execution path must not run
-  untrusted tasks in the worker process.
-- OIDC login (Authorization Code + PKCE) is validated server-side, but the web app does
-  not yet implement the browser login flow; dev auth is the supported local mode.
-- No RBAC management UI beyond role changes; enterprise features are Phase 4.
+- The OpenCode adapter validated configuration and performed a real CLI preflight but did
+  not execute tasks yet.
+- Claude Code, Pi and generic harnesses were descriptor-only and failed closed.
+- Connector invocation, OAuth flows, webhook verification and approvals were not
+  implemented.
+- Per-execution isolation was not implemented; the mock harness ran in the worker process.
+- The web app did not implement the browser OIDC login flow; dev auth was the supported
+  local mode.

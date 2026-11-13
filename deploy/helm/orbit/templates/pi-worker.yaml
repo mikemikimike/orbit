@@ -1,0 +1,126 @@
+{{- if .Values.piWorker.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "orbit.fullname" . }}-worker-pi
+  labels:
+    {{- include "orbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker-pi
+spec:
+  replicas: {{ .Values.piWorker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "orbit.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker-pi
+  template:
+    metadata:
+      labels:
+        {{- include "orbit.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker-pi
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "orbit.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: worker-pi
+          image: {{ include "orbit.image" (dict "root" . "registry" .Values.imageRegistry "image" .Values.piWorker.image "tag" .Values.piWorker.tag) | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          env:
+            - name: ORBIT_ENV
+              value: {{ .Values.platform.environment | quote }}
+            - name: ORBIT_API_URL
+              value: "http://{{ include "orbit.apiHost" . }}:{{ .Values.api.port }}"
+            - name: ORBIT_WORKER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orbit.secretName" . }}
+                  key: pi-worker-token
+            - name: ORBIT_WORKER_HARNESSES
+              value: {{ .Values.piWorker.harnesses | default "pi" | quote }}
+            - name: ORBIT_WORKER_TARGET
+              value: "kubernetes"
+            - name: ORBIT_WORKER_CONCURRENCY
+              value: {{ .Values.piWorker.concurrency | quote }}
+            - name: ORBIT_WORKER_POLL_MS
+              value: {{ .Values.worker.pollIntervalMs | quote }}
+            - name: ORBIT_WORKSPACE_ROOT
+              value: "/tmp/orbit-workspaces"
+            - name: ORBIT_LOG_FORMAT
+              value: {{ .Values.platform.logFormat | quote }}
+            - name: HOME
+              value: "/home/orbit"
+            - name: PI_CODING_AGENT_DIR
+              value: "/home/orbit/.pi/agent"
+            {{- if .Values.extraEnv }}
+            {{- toYaml .Values.extraEnv | nindent 12 }}
+            {{- end }}
+            {{- if .Values.caCertificates.enabled }}
+            - name: SSL_CERT_FILE
+              value: "/etc/ssl/certs/ca-bundle.crt"
+            - name: REQUESTS_CA_BUNDLE
+              value: "/etc/ssl/certs/ca-bundle.crt"
+            - name: NODE_EXTRA_CA_CERTS
+              value: "/etc/ssl/certs/ca-bundle.crt"
+            {{- end }}
+          volumeMounts:
+            {{- if .Values.caCertificates.enabled }}
+            - name: ca-bundle
+              mountPath: /etc/ssl/certs/ca-bundle.crt
+              subPath: {{ .Values.caCertificates.key }}
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+            - name: pi-home
+              mountPath: /home/orbit/.pi
+            {{- if .Values.piWorker.auth.existingSecret }}
+            - name: pi-auth
+              mountPath: /home/orbit/.pi/agent
+              readOnly: true
+            {{- end }}
+          {{- with .Values.piWorker.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        {{- if .Values.caCertificates.enabled }}
+        - name: ca-bundle
+          secret:
+            secretName: {{ .Values.caCertificates.secretName }}
+        {{- end }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: {{ dig "workspace" "sizeLimit" "2Gi" .Values.piWorker }}
+        - name: pi-home
+          emptyDir:
+            sizeLimit: 512Mi
+        {{- if .Values.piWorker.auth.existingSecret }}
+        - name: pi-auth
+          secret:
+            secretName: {{ .Values.piWorker.auth.existingSecret }}
+            optional: true
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

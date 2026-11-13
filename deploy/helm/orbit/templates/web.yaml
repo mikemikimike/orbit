@@ -31,7 +31,7 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: web
-          image: {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.web.image "tag" .Values.web.tag) | quote }}
+          image: {{ include "orbit.image" (dict "root" . "registry" .Values.imageRegistry "image" .Values.web.image "tag" .Values.web.tag) | quote }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           # Next.js writes image-optimization cache; keep the root filesystem writable.
           securityContext:

@@ -15,9 +15,9 @@ Auth mode:   {{ .Values.auth.mode }}
 Registry:    {{ .Values.imageRegistry }}
 
 Images:
-  {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.api.image "tag" .Values.api.tag) }}
-  {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.worker.image "tag" .Values.worker.tag) }}
-  {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.web.image "tag" .Values.web.tag) }}
+  {{ include "orbit.image" (dict "root" . "registry" .Values.imageRegistry "image" .Values.api.image "tag" .Values.api.tag) }}
+  {{ include "orbit.image" (dict "root" . "registry" .Values.imageRegistry "image" .Values.worker.image "tag" .Values.worker.tag) }}
+  {{ include "orbit.image" (dict "root" . "registry" .Values.imageRegistry "image" .Values.web.image "tag" .Values.web.tag) }}
 
 {{- if .Values.secrets.create }}
 The chart created a secret. Replace ORBIT_MASTER_KEY and the database URL for real

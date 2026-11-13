@@ -4,6 +4,7 @@
 
 - **[Getting started](development/local.md)** — run ORBIT locally in 5 minutes
 - **[Deployment](development/deployment.md)** — Docker Compose and Kubernetes
+- **[Releasing](development/releasing.md)** — version bump, tag, images, chart
 - **[OIDC / SSO](development/oidc.md)** — configure single sign-on
 
 ## For developers

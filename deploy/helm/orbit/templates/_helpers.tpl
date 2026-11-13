@@ -72,12 +72,21 @@ app.kubernetes.io/component: {{ .component }}
 {{- end -}}
 {{- end -}}
 
+{{/*
+Image reference. The tag defaults to the chart appVersion so a released chart always
+pulls the images built for that release. Override per component with `<component>.tag`.
+Call with: dict "root" $ "image" .Values.api.image "registry" .Values.imageRegistry "tag" .Values.api.tag
+*/}}
 {{- define "orbit.image" -}}
 {{- $registry := trimSuffix "/" .registry -}}
+{{- $tag := .tag -}}
+{{- if not $tag -}}
+{{- $tag = .root.Chart.AppVersion -}}
+{{- end -}}
 {{- if $registry -}}
-{{- printf "%s/%s:%s" $registry .image .tag -}}
+{{- printf "%s/%s:%s" $registry .image $tag -}}
 {{- else -}}
-{{- printf "%s:%s" .image .tag -}}
+{{- printf "%s:%s" .image $tag -}}
 {{- end -}}
 {{- end -}}
 

@@ -145,6 +145,11 @@ externally managed Secret with `database-url` and `master-key`. The bundled Post
 runs with the capabilities its entrypoint needs to chown its data directory; it is not a
 production-grade database deployment.
 
+Image tags default to the chart `appVersion`, so `--version 0.7.0` pulls `orbit-*:0.7.0`
+— the same tags CI publishes for that release. Override per component with
+`--set api.tag=…`, `worker.tag`, `web.tag`, `launcher.tag`, `opencodeWorker.tag` or
+`piWorker.tag`.
+
 The chart requires no cluster-admin permissions: it creates a namespaced ServiceAccount
 with token automounting disabled and namespaced Deployments/Services/Ingress only.
 Vault integration is env wiring only (`VAULT_ADDR`); the Vault secret backend lands in a

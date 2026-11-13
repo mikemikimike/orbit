@@ -1,0 +1,111 @@
+# Releasing ORBIT
+
+A release is a version bump, a changelog entry, a signed git tag, and a green CI run that
+publishes images and binaries. Everything below is automated except the bump and tag.
+
+## 1. Prepare the version
+
+The version lives in four places and they must match:
+
+```bash
+# Rust workspace (also drives the crate and binary versions)
+crates  -> Cargo.toml             [workspace.package] version
+# Node packages
+package.json
+apps/web/package.json
+packages/api-client/package.json
+packages/contracts/package.json
+# Helm chart (version = chart, appVersion = image tag)
+deploy/helm/orbit/Chart.yaml
+```
+
+`Chart.yaml` `appVersion` is what the chart uses as the default image tag, so it must
+equal the version CI publishes.
+
+Update the changelog: move everything under `## [Unreleased]` into a new
+`## [X.Y.Z] — YYYY-MM-DD` section. The release notes are generated from git history, but
+the changelog is the human-facing record.
+
+## 2. Verify locally
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+ORBIT_TEST_DATABASE_URL=postgres://orbit:orbit@localhost:5432/orbit cargo test --workspace
+
+pnpm --filter @orbit/web typecheck
+pnpm --filter @orbit/web build
+
+helm lint deploy/helm/orbit --set worker.token=lint
+helm template orbit deploy/helm/orbit -n orbit --set worker.token=lint >/dev/null
+```
+
+For the harness images, `scripts/build-images.sh` builds every image; the harness images
+extend the base worker image, so build the base first.
+
+## 3. Tag and push
+
+```bash
+git add -A
+git commit -m "release: vX.Y.Z"
+git tag -a vX.Y.Z -m "ORBIT vX.Y.Z"
+git push origin main
+git push origin vX.Y.Z
+```
+
+The tag triggers the **CI** workflow. On a `v*` tag it:
+
+1. Runs rustfmt, clippy, tests (with a PostgreSQL service), `cargo audit`, `pnpm audit`
+   and a TruffleHog secret scan.
+2. Builds and pushes `orbit-api`, `orbit-worker`, `orbit-web` and `orbit-launcher` to
+   GHCR for `linux/amd64`, tagged `X.Y.Z`, `X.Y`, the branch name and the full commit SHA.
+3. Builds `orbit-worker-opencode` and `orbit-worker-pi` from the freshly pushed base
+   worker image (using the commit SHA tag as `WORKER_BASE`).
+4. Builds the `orbit-worker` binary for `x86_64` and attaches it to the GitHub release.
+5. Publishes the Helm chart package (`.tgz`) as a release asset.
+
+## 4. Verify the release
+
+```bash
+gh release view vX.Y.Z
+# images (requires a token with read:packages)
+docker pull ghcr.io/opsifyhq/orbit/orbit-api:X.Y.Z
+docker pull ghcr.io/opsifyhq/orbit/orbit-worker:X.Y.Z
+docker pull ghcr.io/opsifyhq/orbit/orbit-web:X.Y.Z
+docker pull ghcr.io/opsifyhq/orbit/orbit-worker-opencode:X.Y.Z
+docker pull ghcr.io/opsifyhq/orbit/orbit-worker-pi:X.Y.Z
+docker pull ghcr.io/opsifyhq/orbit/orbit-launcher:X.Y.Z
+```
+
+Install the chart against a scratch namespace and confirm it renders the release tags:
+
+```bash
+helm template orbit deploy/helm/orbit -n orbit \
+  --set worker.token=lint \
+  --set imageRegistry=ghcr.io/opsifyhq/orbit | grep 'image:'
+```
+
+## 5. Deploy a private registry (optional)
+
+Clusters that cannot reach GHCR can mirror the images and point the chart at the mirror:
+
+```bash
+REGISTRY=registry.example.com:5000 TAG=X.Y.Z ./scripts/build-images.sh
+PUSH_REGISTRY=registry.example.com:5000 REGISTRY=registry.example.com:5000 \
+  TAG=X.Y.Z ./scripts/push-images.sh
+
+KUBE_CONTEXT=your-cluster NAMESPACE=orbit TAG=X.Y.Z \
+  REGISTRY=registry.example.com:5000 INGRESS_HOST=orbit.example.com ./scripts/deploy.sh
+```
+
+`scripts/deploy.sh` reuses existing worker/launcher tokens from the cluster secret and
+sets `platform.corsOrigins` / `platform.publicBaseUrl` from the ingress host.
+
+## Notes
+
+- Migrations are append-only. A release never edits an applied migration; add a new one.
+- `cargo audit` findings fail the build. If a finding has no fix, document the exception
+  in the workflow instead of silently ignoring it.
+- The chart refuses to render without `worker.token`; that is intentional so a worker can
+  never start without a scoped credential.

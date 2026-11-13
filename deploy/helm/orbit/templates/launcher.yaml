@@ -58,7 +58,7 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: launcher
-          image: {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.launcher.image "tag" .Values.launcher.tag) | quote }}
+          image: {{ include "orbit.image" (dict "root" . "registry" .Values.imageRegistry "image" .Values.launcher.image "tag" .Values.launcher.tag) | quote }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - name: ORBIT_LAUNCHER_ADDR

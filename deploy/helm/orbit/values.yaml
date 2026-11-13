@@ -14,7 +14,8 @@ imagePullSecrets: []
 
 api:
   image: orbit-api
-  tag: 0.1.1
+  # Empty tag = Chart.AppVersion (matches the images built for this release).
+  tag: ""
   replicas: 1
   port: 8080
   resources:
@@ -27,7 +28,8 @@ api:
 
 worker:
   image: orbit-worker
-  tag: 0.7.0
+  # Empty tag = Chart.AppVersion.
+  tag: ""
   # Scoped token issued by the API (POST /api/v1/worker-tokens). Required.
   token: ""
   replicas: 1
@@ -51,7 +53,8 @@ worker:
 opencodeWorker:
   enabled: false
   image: orbit-worker-opencode
-  tag: 0.7.0
+  # Empty tag = Chart.AppVersion.
+  tag: ""
   # Token restricted to the opencode harness. Required when enabled.
   token: ""
   replicas: 1
@@ -78,9 +81,37 @@ opencodeWorker:
     existingConfigMap: ""
     key: opencode.json
 
+# Pi worker: separate image because it bundles the Pi CLI and Node. Enable after
+# providing a Pi agent directory Secret (the contents of ~/.pi/agent).
+piWorker:
+  enabled: false
+  image: orbit-worker-pi
+  # Empty tag = Chart.AppVersion.
+  tag: ""
+  # Token restricted to the pi harness. Required when enabled.
+  token: ""
+  replicas: 1
+  concurrency: 2
+  harnesses: pi
+  resources:
+    requests:
+      cpu: 200m
+      memory: 384Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  workspace:
+    sizeLimit: 2Gi
+  auth:
+    # Existing Secret mounted at /home/orbit/.pi/agent, e.g.
+    #   kubectl -n orbit create secret generic orbit-pi-auth \
+    #     --from-file=auth.json=$HOME/.pi/agent/auth.json
+    existingSecret: ""
+
 web:
   image: orbit-web
-  tag: 0.7.0
+  # Empty tag = Chart.AppVersion.
+  tag: ""
   replicas: 1
   port: 3000
   resources:
@@ -96,7 +127,8 @@ web:
 launcher:
   enabled: false
   image: orbit-launcher
-  tag: 0.7.0
+  # Empty tag = Chart.AppVersion.
+  tag: ""
   token: ""
   imagePullSecret: ""
   resources:

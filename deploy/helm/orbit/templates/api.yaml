@@ -31,7 +31,7 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: api
-          image: {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.api.image "tag" .Values.api.tag) | quote }}
+          image: {{ include "orbit.image" (dict "root" . "registry" .Values.imageRegistry "image" .Values.api.image "tag" .Values.api.tag) | quote }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}

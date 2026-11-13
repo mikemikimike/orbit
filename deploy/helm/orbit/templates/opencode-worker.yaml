@@ -33,7 +33,7 @@ spec:
       {{- if and .Values.opencodeWorker.auth .Values.opencodeWorker.auth.existingSecret }}
       initContainers:
         - name: import-opencode-auth
-          image: {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.opencodeWorker.image "tag" .Values.opencodeWorker.tag) | quote }}
+          image: {{ include "orbit.image" (dict "root" . "registry" .Values.imageRegistry "image" .Values.opencodeWorker.image "tag" .Values.opencodeWorker.tag) | quote }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
@@ -74,7 +74,7 @@ spec:
       {{- end }}
       containers:
         - name: worker-opencode
-          image: {{ include "orbit.image" (dict "registry" .Values.imageRegistry "image" .Values.opencodeWorker.image "tag" .Values.opencodeWorker.tag) | quote }}
+          image: {{ include "orbit.image" (dict "root" . "registry" .Values.imageRegistry "image" .Values.opencodeWorker.image "tag" .Values.opencodeWorker.tag) | quote }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
