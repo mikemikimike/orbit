@@ -15,5 +15,6 @@ sources:
 maintainers:
   - name: mkluiver
     url: https://github.com/mkluiver
+icon: https://raw.githubusercontent.com/opsifyhq/orbit/main/apps/web/public/icon.svg
 annotations:
   category: AI

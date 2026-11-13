@@ -8,7 +8,7 @@ provider-specific code is required beyond the issuer URL and client registration
 | Setting | Env | Example |
 |---|---|---|
 | Auth mode | `ORBIT_AUTH_MODE` | `oidc` |
-| Issuer | `ORBIT_OIDC_ISSUER` | `https://dex.mdk.local` |
+| Issuer | `ORBIT_OIDC_ISSUER` | `https://dex.example.com` |
 | Audience | `ORBIT_OIDC_AUDIENCE` | `orbit` |
 | Client ID | `ORBIT_OIDC_CLIENT_ID` | `orbit` |
 | Client secret | `ORBIT_OIDC_CLIENT_SECRET` | optional for public PKCE clients |
@@ -44,11 +44,11 @@ staticClients:
 Set:
 
 ```text
-ORBIT_OIDC_ISSUER=https://dex.mdk.local
+ORBIT_OIDC_ISSUER=https://dex.example.com
 ORBIT_OIDC_AUDIENCE=orbit
 ORBIT_OIDC_CLIENT_ID=orbit
 ORBIT_OIDC_REDIRECT_URI=http://orbit.example.com/auth/callback
-ORBIT_OIDC_JWKS_URL=https://dex.mdk.local/keys
+ORBIT_OIDC_JWKS_URL=https://dex.example.com/keys
 ```
 
 Dex access tokens may be opaque. ORBIT uses the `id_token` from the token response as the
@@ -96,11 +96,11 @@ rotation are not implemented yet.
 auth:
   mode: oidc
   oidc:
-    issuer: https://dex.mdk.local
+    issuer: https://dex.example.com
     audience: orbit
     clientId: orbit
     redirectUri: http://orbit.example.com/auth/callback
-    jwksUrl: https://dex.mdk.local/keys
+    jwksUrl: https://dex.example.com/keys
     scopes: "openid profile email"
     autoProvision: true
     defaultRole: viewer

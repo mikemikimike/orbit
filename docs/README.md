@@ -1,28 +1,28 @@
 # ORBIT Documentation
 
-## Architecture
-- [Overview](architecture/overview.md) — layers, harness topology, component roles
-- [Agent Teams](architecture/agent-teams.md) — pipeline, native subagents, queue, multi-repo
-- [Runtime Contract](architecture/runtime-contract.md) — harness adapter trait, capabilities, errors
-- [Diagram](architecture/diagram.md) — system context, execution sequence, broker policy path
-- [Provider & Connector Contract](architecture/provider-connector-contract.md) — provider/connector specs
+## For users
 
-## Development
-- [Local development](development/local.md) — running the stack locally
-- [Deployment](development/deployment.md) — Docker Compose & Kubernetes
-- [Kubernetes launcher](development/kubernetes-launcher.md) — worker launch auth (RBAC)
-- [OIDC](development/oidc.md) — OIDC/SSO configuration
-- [Testing](development/testing.md) — test expectations per change type
+- **[Getting started](development/local.md)** — run ORBIT locally in 5 minutes
+- **[Deployment](development/deployment.md)** — Docker Compose and Kubernetes
+- **[OIDC / SSO](development/oidc.md)** — configure single sign-on
 
-## Decisions
-- [ADR index](decisions/) — architecture decision records
+## For developers
 
-## Security
-- [Threat Analysis](security/threat-analysis.md) — threat model, attack vectors, mitigations
+- **[Architecture overview](architecture/overview.md)** — what ORBIT is and how it's built
+- **[Runtime contract](architecture/runtime-contract.md)** — harness adapter interface
+- **[Provider & connector contract](architecture/provider-connector-contract.md)** — adding providers and connectors
+- **[Agent Teams](architecture/agent-teams.md)** — multi-agent orchestration
+- **[Diagram](architecture/diagram.md)** — system context, sequence, and deployment diagrams
 
-## Planning
+## Reference
+
+- **[Testing](development/testing.md)** — test expectations per change type
+- **[Kubernetes launcher](development/kubernetes-launcher.md)** — worker launch RBAC
+- **[Threat analysis](security/threat-analysis.md)** — security model
+- **[Decisions (ADRs)](decisions/)** — architecture decision records
+
+## Planning (in progress)
+
 - [Agent Team queue & multi-repo](planning/agent-team-queue-and-multi-repo.md)
 - [Provider UX & harness decoupling](planning/provider-ux-and-harness-decoupling.md)
 - [Support scripts in skills](planning/support-scripts-in-skills.md)
-- [Agent spawning for simulations](planning/agent-spawning-for-simulations.md)
-- [Different models per agent teams](planning/different-models-per-agent-teams.md)

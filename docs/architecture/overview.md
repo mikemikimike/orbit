@@ -45,22 +45,22 @@ harnesses are launched as isolated containers/Jobs (`HarnessDispatcher`).
 | NATS JetStream | container | external or bundled (opt-in) |
 | Harness processes | mock in worker; OpenCode/Pi via subprocess sandbox | Jobs/Pods via dispatcher |
 
-## 3. Module boundaries (Rust workspace)
+## 3. Code structure
 
-| Crate | Responsibility |
+ORBIT is a Rust workspace with a Next.js frontend:
+
+| Directory | Purpose |
 |---|---|
-| `orbit-domain` | Pure domain types, agent spec, validation, autonomy policy, state machines |
-| `orbit-contracts` | Cross-boundary contracts: harness adapter, provider, connector, events |
-| `orbit-store` | PostgreSQL repositories, migrations, transactions |
-| `orbit-events` | `EventBus` abstraction, in-memory and NATS JetStream drivers |
-| `orbit-security` | Auth context, token hashing, OIDC validation, `SecretStore`, AES-GCM |
-| `orbit-harness` | Harness registry and adapters (mock, opencode, pi available; claude_code/generic planned) |
-| `orbit-api` | HTTP router, handlers, OpenAPI document, SSE |
+| `crates/orbit-domain` | Domain types, validation, autonomy policy |
+| `crates/orbit-contracts` | Cross-boundary traits (harness, provider, connector) |
+| `crates/orbit-store` | PostgreSQL repositories and migrations |
+| `crates/orbit-api` | HTTP API (handlers, routes, OpenAPI) |
+| `crates/orbit-harness` | Harness adapters (mock, OpenCode, Pi) |
 | `services/api` | Control-plane binary |
-| `services/worker` | Execution-plane supervisor binary |
+| `services/worker` | Execution-plane binary |
+| `apps/web` | Next.js web app |
 
-Dependency rule: `domain` ← everything; `contracts` ← `harness`, `api`, `worker`;
-`store` ← `api`, `worker`. Adapters never depend on `orbit-api` or `orbit-store`.
+See [AGENTS.md](../../AGENTS.md) for the full repository map.
 
 ## 4. Request & execution flow
 
