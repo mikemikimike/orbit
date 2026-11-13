@@ -310,7 +310,8 @@ impl Store {
     ) -> StoreResult<Agent> {
         let current = self.get_agent(org_id, agent_id).await?;
         let current_status = AgentStatus::parse(&current.status).unwrap_or(AgentStatus::Draft);
-        if current_status == target {
+        // Archiving an already-archived agent is idempotent (no error).
+        if current_status == AgentStatus::Archived && target == AgentStatus::Archived {
             return Ok(current);
         }
         let allowed = match target {
