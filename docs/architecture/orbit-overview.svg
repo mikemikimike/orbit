@@ -89,21 +89,23 @@
   <text x="928" y="281" class="box-line">per-execution workspace</text>
   <text x="928" y="297" class="box-muted">AGENTS.md · NDJSON events · cancel</text>
 
-  <rect x="664" y="334" width="472" height="86" rx="10" class="card-warm"/>
-  <text x="682" y="354" class="box-title">Policy-enforcing tool broker</text>
-  <text x="682" y="371" class="box-line">execution token · capability allowlist · autonomy L1–L4</text>
-  <text x="682" y="387" class="box-line">approvals · credential lease · rate limits · audit</text>
-  <text x="682" y="407" class="box-muted">Harness calls MCP tools; provider credentials never leave the broker</text>
+  <rect x="664" y="324" width="226" height="96" rx="10" class="card-teal"/>
+  <text x="682" y="344" class="box-title">orbit-worker-pi</text>
+  <text x="682" y="361" class="box-line">Pi CLI v1.5.2</text>
+  <text x="682" y="377" class="box-line">per-execution workspace</text>
+  <text x="682" y="393" class="box-muted">.pi/mcp.json · JSON events</text>
+  <text x="682" y="408" class="box-muted">read-only tool allowlist</text>
 
-  <rect x="910" y="430" width="226" height="86" rx="10" class="card-teal"/>
-  <text x="928" y="450" class="box-title">orbit-worker-pi</text>
-  <text x="928" y="467" class="box-line">Pi CLI v1.5.2</text>
-  <text x="928" y="483" class="box-line">per-execution workspace</text>
-  <text x="928" y="499" class="box-muted">.pi/mcp.json · JSON events · read-only tools</text>
+  <rect x="910" y="324" width="226" height="96" rx="10" class="card-warm"/>
+  <text x="928" y="344" class="box-title">Policy tool broker</text>
+  <text x="928" y="361" class="box-line">execution token · allowlist</text>
+  <text x="928" y="377" class="box-line">autonomy L1–L4 · approvals</text>
+  <text x="928" y="393" class="box-line">credential lease · audit</text>
+  <text x="928" y="408" class="box-muted">credentials never reach harness</text>
 
-  <text x="664" y="526" class="box-line">Harness adapters:</text>
-  <text x="664" y="542" class="box-muted">OpenCode (available) · Pi (available) · Claude Code · generic (planned)</text>
-  <text x="664" y="546" class="box-muted">mock harness for local development and contract tests</text>
+  <text x="664" y="448" class="box-line">Harness adapters:</text>
+  <text x="664" y="465" class="box-muted">OpenCode (available) · Pi (available) · Claude Code · generic (planned)</text>
+  <text x="664" y="481" class="box-muted">mock harness for local development and contract tests</text>
 
   <!-- External -->
   <rect x="40" y="556" width="1120" height="176" rx="14" class="layer"/>
@@ -156,8 +158,8 @@
   <text x="1018" y="329" class="arrow-label">MCP</text>
 
   <!-- broker to external -->
-  <path d="M 820 420 C 820 480 900 500 900 556" class="arrow-teal" marker-end="url(#arrow-teal)"/>
-  <text x="812" y="524" class="arrow-label">HTTPS · least privilege</text>
+  <path d="M 1023 420 L 1023 556" class="arrow-teal" marker-end="url(#arrow-teal)"/>
+  <text x="1013" y="505" text-anchor="end" class="arrow-label">HTTPS · least privilege</text>
 
   <!-- legend -->
   <line x1="820" y1="760" x2="860" y2="760" class="arrow" marker-end="url(#arrow)"/>
@@ -169,6 +171,6 @@
 
   <text x="40" y="764" class="note">Public interfaces: /api/v1 (versioned) · MCP tools (execution-scoped) · SSE execution events</text>
   <text x="40" y="784" class="note">Territory of enforcement: autonomy, capability allowlists, approvals, credentials, isolation</text>
-  <text x="40" y="804" class="note">OpenCode is executed in a separate worker image; the control plane never runs agent code.</text>
-  <text x="40" y="844" class="note">ORBIT v0.1.x · docs/architecture/diagram.md for detailed Mermaid diagrams</text>
+  <text x="40" y="804" class="note">OpenCode and Pi run in separate worker images; the control plane never runs agent code.</text>
+  <text x="40" y="844" class="note">docs/architecture/diagram.md has detailed Mermaid diagrams</text>
 </svg>
