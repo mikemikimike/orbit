@@ -15,9 +15,9 @@ A high-resolution PNG is available at [`orbit-overview.png`](orbit-overview.png)
 
 | Status | Components |
 |---|---|
-| **Implemented** | API, PostgreSQL schema, NATS/memory bus, mock harness, OpenCode v2.3.0, X read hydration, SSE, audit, encrypted secrets |
-| **In progress** | Execution-scoped tool broker, GitHub capabilities, approval UI |
-| **Planned** | GitLab actions, X posting, webhook verification, long-running service mode, swarm simulations, per-execution container isolation |
+| **Implemented** | API, PostgreSQL schema, NATS/memory bus, mock harness, OpenCode v2.3.0, Pi v1.5.2, X read hydration, SSE, audit, encrypted secrets, tool broker, GitHub capabilities, approval UI, Agent Teams (queue, dispatcher, multi-repo), memory, K8s Jobs, OIDC, custom CA, dark/light mode |
+| **In progress** | GitLab actions, webhook verification, long-running service mode |
+| **Planned** | X posting, swarm simulations, per-execution container isolation (Docker), Claude Code adapter |
 
 ## System context
 

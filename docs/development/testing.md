@@ -15,5 +15,6 @@ DB-backed tests are skipped unless `ORBIT_TEST_DATABASE_URL` is set, so `cargo t
 stays usable without infrastructure. CI sets it to a Postgres service.
 
 Harness integrations are only considered "working" when exercised against the real
-harness. Phase 0's OpenCode adapter is explicitly marked *scaffolded* and is not claimed
-as certified.
+harness. The OpenCode adapter is **available** and tested against OpenCode v2.3.0.
+The Pi adapter is **available** and tested against Pi v1.5.2.
+Claude Code and generic adapters are registered as planned (fail closed).
