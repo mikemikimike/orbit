@@ -318,6 +318,6 @@ export function useAuditLogs() {
   }>({
     queryKey: ["audit-logs"] as const,
     queryFn: async () =>
-      unwrap(await api.GET("/api/v1/audit-logs", { params: { query: { limit: 25 } } })) as never,
+      unwrap(await api.GET("/api/v1/audit-logs", { params: { query: { limit: 25 } } })),
   });
 }

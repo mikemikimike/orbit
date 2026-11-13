@@ -68,6 +68,17 @@ pub fn spawn(state: AppState) {
         }
     });
 
+    let retention_state = state.clone();
+    tokio::spawn(async move {
+        // Run shortly after start, then daily.
+        let mut ticker = tokio::time::interval(Duration::from_secs(6 * 3600));
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticker.tick().await;
+            archive_old_runs(&retention_state).await;
+        }
+    });
+
     let pruner_state = state.clone();
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(3600));
@@ -81,6 +92,30 @@ pub fn spawn(state: AppState) {
             }
         }
     });
+}
+
+/// Archive terminal executions, team runs and worker launches older than the configured
+/// retention window. History is kept; the default list simply stops showing old runs.
+async fn archive_old_runs(state: &AppState) {
+    let Some(days) = state.archive_after_days else {
+        return;
+    };
+    let cutoff = Utc::now() - chrono::Duration::days(days as i64);
+    match state.store.archive_executions_before(cutoff).await {
+        Ok(0) => {}
+        Ok(count) => tracing::info!(count, days, "archived old executions"),
+        Err(error) => tracing::warn!(%error, "execution archive failed"),
+    }
+    match state.store.archive_team_runs_before(cutoff).await {
+        Ok(0) => {}
+        Ok(count) => tracing::info!(count, days, "archived old team runs"),
+        Err(error) => tracing::warn!(%error, "team run archive failed"),
+    }
+    match state.store.archive_worker_launches_before(cutoff).await {
+        Ok(0) => {}
+        Ok(count) => tracing::info!(count, days, "archived old worker launches"),
+        Err(error) => tracing::warn!(%error, "worker launch archive failed"),
+    }
 }
 
 async fn scheduler_tick(state: &AppState) -> anyhow::Result<()> {

@@ -4,7 +4,6 @@ use std::time::Duration;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
-use axum::response::IntoResponse;
 use axum::Extension;
 use axum::Json;
 use futures::Stream;
@@ -415,7 +414,3 @@ pub async fn stream_execution_events(
             .text("keep-alive"),
     ))
 }
-
-/// Unused import guard: ensures IntoResponse stays referenced for future handlers.
-#[allow(dead_code)]
-fn _assert_response<T: IntoResponse>(_value: T) {}

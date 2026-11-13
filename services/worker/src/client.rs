@@ -379,12 +379,9 @@ impl WorkerClient {
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
-#[allow(dead_code)]
 pub struct WorkerMemoryEntry {
-    pub id: uuid::Uuid,
     pub kind: String,
     pub content: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl WorkerClient {

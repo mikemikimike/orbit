@@ -273,6 +273,7 @@ impl HarnessAdapter for MockHarnessAdapter {
             autonomy: orbit_domain::AutonomyLevel::default(),
             resources: orbit_domain::ResourceLimits::default(),
             harness_config: serde_json::Value::Null,
+            extra_env: Default::default(),
             session: orbit_contracts::SessionRequest {
                 session_ref: Some(request.session_ref),
                 mode: ExecutionMode::OnDemand,

@@ -44,12 +44,9 @@ import {
 import { errorMessage } from "@orbit/api-client";
 import type { WorkerBootstrap, WorkerProfile } from "@/lib/types";
 import { relativeTime, titleCase } from "@/lib/utils";
+import { DEFAULT_WORKER_IMAGES } from "@/lib/worker-images";
 
-const DEFAULT_IMAGES: Record<string, string> = {
-  pi: "192.168.1.201:5000/orbit-worker-pi",
-  opencode: "192.168.1.201:5000/orbit-worker-opencode",
-  mock: "192.168.1.201:5000/orbit-worker",
-};
+const DEFAULT_IMAGES = DEFAULT_WORKER_IMAGES;
 
 function WorkersPageInner() {
   const profiles = useWorkerProfiles();
@@ -127,7 +124,7 @@ function WorkersPageInner() {
           secretKey: m.secretKey || null,
         })),
         resources: editing?.resources ?? {},
-      } as never;
+      };
       if (editing) {
         return unwrap(
           await api.PATCH("/api/v1/worker-profiles/{profile_id}", {

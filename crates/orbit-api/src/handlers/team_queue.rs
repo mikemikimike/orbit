@@ -31,6 +31,7 @@ pub struct EnqueueRequest {
     pub items: Vec<QueueItemInput>,
 }
 
+#[utoipa::path(post, path = "/api/v1/agent-teams/{team_id}/queue", tag = "agent-teams", request_body = EnqueueRequest, responses((status = 201, body = [orbit_store::team_queue::TeamQueueItem])))]
 pub async fn enqueue(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -73,6 +74,7 @@ pub async fn enqueue(
     Ok((StatusCode::CREATED, Json(items)))
 }
 
+#[utoipa::path(get, path = "/api/v1/agent-teams/{team_id}/queue", tag = "agent-teams", responses((status = 200, body = [orbit_store::team_queue::TeamQueueItem])))]
 pub async fn list(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -85,6 +87,7 @@ pub async fn list(
     ))
 }
 
+#[utoipa::path(post, path = "/api/v1/agent-teams/{team_id}/queue/{item_id}/run", tag = "agent-teams", responses((status = 201, body = crate::handlers::teams::TeamRunDetail)))]
 pub async fn run_item(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -194,6 +197,7 @@ async fn fetch_item(
     Ok(item)
 }
 
+#[utoipa::path(post, path = "/api/v1/agent-teams/{team_id}/queue/{item_id}/retry", tag = "agent-teams", responses((status = 200, body = orbit_store::team_queue::TeamQueueItem)))]
 pub async fn retry(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -212,6 +216,7 @@ pub async fn retry(
     ))
 }
 
+#[utoipa::path(post, path = "/api/v1/agent-teams/{team_id}/queue/{item_id}/requeue", tag = "agent-teams", responses((status = 200, body = orbit_store::team_queue::TeamQueueItem)))]
 pub async fn requeue(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -230,6 +235,7 @@ pub async fn requeue(
     ))
 }
 
+#[utoipa::path(post, path = "/api/v1/agent-teams/{team_id}/queue/{item_id}/cancel", tag = "agent-teams", responses((status = 200, body = orbit_store::team_queue::TeamQueueItem)))]
 pub async fn cancel(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,

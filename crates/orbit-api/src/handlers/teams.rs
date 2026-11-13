@@ -224,6 +224,7 @@ async fn validate_native_primary(
     }
 }
 
+#[utoipa::path(post, path = "/api/v1/agent-teams", tag = "agent-teams", request_body = CreateTeamRequest, responses((status = 201, body = orbit_store::AgentTeam)))]
 pub async fn create_team(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -331,6 +332,7 @@ pub async fn create_team(
     Ok((StatusCode::CREATED, Json(team)))
 }
 
+#[utoipa::path(patch, path = "/api/v1/agent-teams/{team_id}", tag = "agent-teams", request_body = CreateTeamRequest, responses((status = 200, body = orbit_store::AgentTeam)))]
 pub async fn update_team(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -440,6 +442,7 @@ pub async fn update_team(
     ))
 }
 
+#[utoipa::path(get, path = "/api/v1/agent-teams", tag = "agent-teams", responses((status = 200, body = [orbit_store::AgentTeam])))]
 pub async fn list_teams(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -448,6 +451,7 @@ pub async fn list_teams(
     Ok(Json(state.store.list_agent_teams(auth.org_id).await?))
 }
 
+#[utoipa::path(get, path = "/api/v1/agent-teams/{team_id}", tag = "agent-teams", responses((status = 200, body = orbit_store::AgentTeam)))]
 pub async fn get_team(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -459,6 +463,7 @@ pub async fn get_team(
     ))
 }
 
+#[utoipa::path(delete, path = "/api/v1/agent-teams/{team_id}", tag = "agent-teams", responses((status = 204)))]
 pub async fn delete_team(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -676,6 +681,7 @@ pub(crate) async fn start_step(
     Ok(created)
 }
 
+#[utoipa::path(post, path = "/api/v1/agent-teams/{team_id}/runs", tag = "agent-teams", request_body = CreateTeamRunRequest, responses((status = 201, body = TeamRunDetail)))]
 pub async fn create_run(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -767,6 +773,7 @@ pub async fn create_run(
     ))
 }
 
+#[utoipa::path(get, path = "/api/v1/team-runs", tag = "agent-teams", params(ArchiveListQuery), responses((status = 200, body = [orbit_store::TeamRun])))]
 pub async fn list_runs(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -781,6 +788,7 @@ pub async fn list_runs(
     ))
 }
 
+#[utoipa::path(get, path = "/api/v1/team-runs/{run_id}", tag = "agent-teams", responses((status = 200, body = TeamRunDetail)))]
 pub async fn get_run(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,

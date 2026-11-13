@@ -30,6 +30,9 @@ pub struct WorkerState {
     pub profile_agent_ids: Vec<Uuid>,
     /// Skills materialized for every execution handled by this worker.
     pub profile_skill_slugs: Vec<String>,
+    /// Environment variables resolved from worker-profile connection mappings. Applied
+    /// to each harness process instead of mutating the worker's global environment.
+    pub extra_env: Arc<std::collections::BTreeMap<String, String>>,
     pub active: Arc<
         tokio::sync::Mutex<std::collections::BTreeMap<Uuid, tokio_util::sync::CancellationToken>>,
     >,
@@ -166,14 +169,6 @@ pub async fn run_execution(
     }
 
     let grants = context.grants;
-
-    // Fetch mapped environment variables from the API and set them for this process
-    // and for spawned harness subprocesses.
-    if let Ok(env_vars) = state.client.resolve_env().await {
-        for (key, value) in &env_vars {
-            std::env::set_var(key, value);
-        }
-    }
 
     // Short-term memory: retrieve recent memory entries for this agent and inject
     // them into the execution input so the harness can use them as context.
@@ -412,6 +407,7 @@ pub async fn run_execution(
             ..spec.resources.clone()
         },
         harness_config,
+        extra_env: (*state.extra_env).clone(),
         session: SessionRequest {
             session_ref: execution.session_ref.clone(),
             mode: spec.harness.execution_mode,

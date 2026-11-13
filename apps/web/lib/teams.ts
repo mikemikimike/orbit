@@ -1,6 +1,7 @@
 "use client";
 
-import { API_BASE_URL, getAccessToken } from "./api";
+import type { components } from "@orbit/api-client";
+import { request } from "./http";
 import type {
   AgentTeam,
   TeamRun,
@@ -8,26 +9,6 @@ import type {
   TeamRepository,
   WorkSource,
 } from "./types";
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getAccessToken();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      ...(init?.headers ?? {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      "Content-Type": "application/json",
-    },
-  });
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as
-      | { error?: { message?: string } }
-      | null;
-    throw new Error(body?.error?.message ?? `HTTP ${response.status}`);
-  }
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
-}
 
 export type TeamStepInput = { agentId: string };
 
@@ -98,19 +79,7 @@ export function getTeamRun(runId: string): Promise<TeamRunDetail> {
   return request<TeamRunDetail>(`/api/v1/team-runs/${runId}`);
 }
 
-export type TeamQueueItem = {
-  id: string;
-  orgId: string;
-  teamId: string;
-  externalKey: string;
-  repository?: string | null;
-  payload: Record<string, unknown>;
-  status: string;
-  teamRunId?: string | null;
-  error?: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
+export type TeamQueueItem = components["schemas"]["TeamQueueItem"];
 
 export function listTeamQueue(teamId: string): Promise<TeamQueueItem[]> {
   return request<TeamQueueItem[]>(`/api/v1/agent-teams/${teamId}/queue`);

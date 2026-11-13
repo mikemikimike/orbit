@@ -28,31 +28,11 @@ export type WorkerView = components["schemas"]["WorkerView"];
 export type Skill = components["schemas"]["Skill"];
 export type WorkerProfile = components["schemas"]["WorkerProfile"];
 export type WorkerBootstrap = components["schemas"]["WorkerBootstrap"];
-export type WorkSource = {
+// Generated from the API schema so the UI cannot drift from the server contract.
+export type WorkSource = components["schemas"]["WorkSourceDefinition"] & {
   provider: "github" | "gitlab";
-  enabled: boolean;
-  connectionId?: string | null;
-  repository?: string | null;
-  labels?: string[];
-  claimLabel?: string;
-  doneLabel?: string;
-  failedLabel?: string;
-  maxItems?: number;
-  maxAttempts?: number;
-  pollSeconds?: number;
-  autoRun?: boolean;
-  groupId?: string | null;
-  project?: string | null;
-  boardId?: number | null;
 };
-
-export type TeamRepository = {
-  connectionId?: string | null;
-  repository: string;
-  path?: string;
-  primary?: boolean;
-  branch?: string | null;
-};
+export type TeamRepository = components["schemas"]["RepositorySpec"];
 
 export type AgentTeam = {
   id: string;

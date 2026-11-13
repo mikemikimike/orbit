@@ -275,6 +275,11 @@ pub struct ExecutionRequest {
     pub resources: orbit_domain::ResourceLimits,
     #[serde(default)]
     pub harness_config: serde_json::Value,
+    /// Extra environment variables for the harness process, resolved by the control
+    /// plane (for example worker-profile connection mappings used by skill scripts).
+    /// Never serialized into events or logs.
+    #[serde(default, skip_serializing)]
+    pub extra_env: std::collections::BTreeMap<String, String>,
     #[serde(default)]
     pub session: SessionRequest,
     #[serde(default)]
@@ -301,6 +306,11 @@ pub struct ResumeRequest {
     pub model: Option<crate::provider::ResolvedModel>,
     #[serde(default)]
     pub harness_config: serde_json::Value,
+    /// Extra environment variables for the harness process, resolved by the control
+    /// plane (for example worker-profile connection mappings used by skill scripts).
+    /// Never serialized into events or logs.
+    #[serde(default, skip_serializing)]
+    pub extra_env: std::collections::BTreeMap<String, String>,
     #[serde(default)]
     pub resources: orbit_domain::ResourceLimits,
     #[serde(default)]

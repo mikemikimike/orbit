@@ -645,12 +645,24 @@ spec:
     }))
 }
 
+/// Registry prefix for the worker images. Defaults to the images CI publishes; set
+/// `ORBIT_IMAGE_PREFIX` to point at your own mirror.
+fn image_prefix() -> String {
+    std::env::var("ORBIT_IMAGE_PREFIX")
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "ghcr.io/opsifyhq/orbit".into())
+}
+
 fn default_image(harness: HarnessKind) -> String {
-    match harness {
-        HarnessKind::Pi => "192.168.1.201:5000/orbit-worker-pi".into(),
-        HarnessKind::OpenCode => "192.168.1.201:5000/orbit-worker-opencode".into(),
-        _ => "192.168.1.201:5000/orbit-worker".into(),
-    }
+    let prefix = image_prefix();
+    let name = match harness {
+        HarnessKind::Pi => "orbit-worker-pi",
+        HarnessKind::OpenCode => "orbit-worker-opencode",
+        _ => "orbit-worker",
+    };
+    format!("{prefix}/{name}")
 }
 
 trait HarnessKindExt {

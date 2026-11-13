@@ -102,19 +102,21 @@ async fn main() -> anyhow::Result<()> {
     let client = WorkerClient::new(&config.api_url, &config.worker_token)
         .context("invalid worker API configuration")?;
 
-    // Fetch mapped environment variables from the API and set them for this process.
-    // These are available to spawned harness subprocesses (scripts, tools, etc.).
-    if let Ok(env_vars) = client.resolve_env().await {
-        for (key, value) in &env_vars {
-            std::env::set_var(key, value);
-        }
-        if !env_vars.is_empty() {
-            tracing::info!(
-                count = env_vars.len(),
-                "loaded mapped environment variables"
-            );
-        }
+    // Resolve worker-profile connection mappings once. They are passed to each harness
+    // process (never written into the worker's global environment).
+    let extra_env: std::collections::BTreeMap<String, String> = client
+        .resolve_env()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+    if !extra_env.is_empty() {
+        tracing::info!(
+            count = extra_env.len(),
+            "loaded mapped environment variables"
+        );
     }
+    let extra_env = Arc::new(extra_env);
     let registry = Arc::new(HarnessRegistry::builtin());
 
     // The API may still be migrating/seeding while a worker starts. Retry session
@@ -159,6 +161,7 @@ async fn main() -> anyhow::Result<()> {
         target,
         profile_agent_ids: session.agent_ids.clone(),
         profile_skill_slugs: session.skill_slugs.clone(),
+        extra_env,
         active: Arc::new(tokio::sync::Mutex::new(std::collections::BTreeMap::new())),
     };
 

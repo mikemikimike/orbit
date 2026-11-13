@@ -118,7 +118,7 @@ export default function ModelsPage() {
             params: { path: { provider_id: editing.id } },
             body: {
               name: form.name.trim(),
-              config: config as never,
+              config,
               ...(form.credential ? { credential: form.credential } : {}),
             },
           }),
@@ -129,7 +129,7 @@ export default function ModelsPage() {
           body: {
             name: form.name.trim(),
             kind: form.kind,
-            config: config as never,
+            config,
             ...(form.credential ? { credential: form.credential } : {}),
           },
         }),

@@ -44,6 +44,7 @@ fn request(model: &str) -> ExecutionRequest {
             "autoApprove": true,
             "standalone": true
         }),
+        extra_env: Default::default(),
         session: orbit_contracts::SessionRequest {
             session_ref: None,
             mode: ExecutionMode::OnDemand,

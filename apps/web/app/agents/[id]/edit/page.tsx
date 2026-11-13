@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { toAgentDefinitionBody } from "@/lib/agent-body";
 import { queryKeys, unwrap, useAgent } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 import { agentSpecSchema, type AgentDefinition } from "@orbit/contracts";
@@ -75,7 +76,7 @@ export default function EditAgentPage() {
       unwrap(
         await api.PATCH("/api/v1/agents/{agent_id}", {
           params: { path: { agent_id: agentId } },
-          body: { definition: definition as never },
+          body: { definition: toAgentDefinitionBody(definition) },
         }),
       );
       await queryClient.invalidateQueries({ queryKey: queryKeys.agent(agentId) });

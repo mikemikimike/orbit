@@ -62,7 +62,7 @@ export default function ConnectionsPage() {
             body: {
               name: name.trim(),
               scopes,
-              config: config as never,
+              config,
               ...(credential ? { credential } : {}),
             },
           }),
@@ -75,7 +75,7 @@ export default function ConnectionsPage() {
             name: name.trim(),
             ...(credential ? { credential } : {}),
             scopes,
-            config: config as never,
+            config,
           },
         }),
       );

@@ -76,6 +76,7 @@ async fn main() -> anyhow::Result<()> {
         launcher_url: config.launcher_url.clone(),
         launcher_token: config.launcher_token.clone(),
         worker_api_url: config.worker_api_url.clone(),
+        archive_after_days: config.archive_after_days,
     };
 
     orbit_api::background::spawn(state.clone());

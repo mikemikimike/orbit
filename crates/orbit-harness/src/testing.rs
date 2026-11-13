@@ -36,6 +36,7 @@ pub fn execution_request(_adapter: &dyn HarnessAdapter, task: &str) -> Execution
             ..Default::default()
         },
         harness_config: serde_json::json!({}),
+        extra_env: Default::default(),
         session: orbit_contracts::SessionRequest {
             session_ref: None,
             mode: ExecutionMode::OnDemand,

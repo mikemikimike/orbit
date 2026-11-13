@@ -56,6 +56,7 @@ async fn pi_executes_a_task_and_streams_events() {
             ..Default::default()
         },
         harness_config: serde_json::json!({ "model": model, "thinking": "low" }),
+        extra_env: Default::default(),
         session: orbit_contracts::SessionRequest {
             session_ref: None,
             mode: ExecutionMode::OnDemand,

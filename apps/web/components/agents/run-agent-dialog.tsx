@@ -55,7 +55,7 @@ export function RunAgentDialog({
       const execution = unwrap(
         await api.POST("/api/v1/agents/{agent_id}/executions", {
           params: { path: { agent_id: agentId } },
-          body: { task, payload: payload as never, idempotencyKey },
+          body: { task, payload, idempotencyKey },
           headers: { "idempotency-key": idempotencyKey },
         }),
       );

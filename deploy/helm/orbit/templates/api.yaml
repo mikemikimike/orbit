@@ -86,6 +86,8 @@ spec:
               value: {{ .Values.auth.dev.orgName | quote }}
             - name: ORBIT_BODY_LIMIT_BYTES
               value: {{ .Values.platform.bodyLimitBytes | quote }}
+            - name: ORBIT_ARCHIVE_AFTER_DAYS
+              value: {{ .Values.platform.archiveAfterDays | quote }}
             {{- if eq .Values.auth.mode "dev" }}
             - name: ORBIT_DEV_AUTH_ALLOW_ANONYMOUS
               value: {{ .Values.auth.dev.allowAnonymous | quote }}

@@ -403,18 +403,20 @@ function OidcSettingsForm() {
 
   const load = async () => {
     try {
-      const result = await api.GET("/api/v1/settings/oidc" as never);
-      const data = (result as { data?: Record<string, unknown> }).data ?? {};
-      setIssuer(String(data.issuer ?? ""));
-      setClientId(String(data.clientId ?? ""));
-      setRedirectUri(String(data.redirectUri ?? ""));
-      setScopes(String(data.scopes ?? "openid profile email"));
-      setAudience(String(data.audience ?? ""));
-      setJwksUrl(String(data.jwksUrl ?? ""));
-      setAutoProvision(Boolean(data.autoProvision ?? true));
-      setDefaultRole(String(data.defaultRole ?? "viewer"));
-      setLoaded(true);
-    } catch {
+      const { data } = await api.GET("/api/v1/settings/oidc");
+      if (data) {
+        setIssuer(data.issuer ?? "");
+        setClientId(data.clientId ?? "");
+        setRedirectUri(data.redirectUri ?? "");
+        setScopes(data.scopes || "openid profile email");
+        setAudience(data.audience ?? "");
+        setJwksUrl(data.jwksUrl ?? "");
+        setAutoProvision(data.autoProvision ?? true);
+        setDefaultRole(data.defaultRole || "viewer");
+      }
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
       setLoaded(true);
     }
   };
@@ -426,24 +428,21 @@ function OidcSettingsForm() {
 
   async function save() {
     try {
-      await (api.PUT as (path: string, init: unknown) => Promise<unknown>)(
-        "/api/v1/settings/oidc",
-        {
-          body: {
-            settings: {
-              issuer,
-              clientId,
-              redirectUri,
-              scopes,
-              audience,
-              jwksUrl,
-              autoProvision,
-              defaultRole,
-            },
+      await api.PUT("/api/v1/settings/oidc", {
+        body: {
+          settings: {
+            issuer,
+            clientId,
+            redirectUri,
+            scopes,
+            audience,
+            jwksUrl,
+            autoProvision,
+            defaultRole,
           },
         },
-      );
-      toast.success("OIDC settings saved");
+      });
+      toast.success("OIDC settings saved — restart the API to apply");
     } catch (error) {
       toast.error(errorMessage(error));
     }

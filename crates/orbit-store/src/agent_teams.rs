@@ -326,6 +326,3 @@ impl Store {
         .map_err(Into::into)
     }
 }
-
-#[allow(dead_code)]
-fn _value(_: Value, _: Utc) {}

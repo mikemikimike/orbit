@@ -37,6 +37,7 @@ pub struct UpdateOidcRequest {
     pub settings: OidcSettings,
 }
 
+#[utoipa::path(get, path = "/api/v1/settings/oidc", tag = "settings", responses((status = 200, body = OidcSettings)))]
 pub async fn get_oidc(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
@@ -60,6 +61,7 @@ pub async fn get_oidc(
     Ok(Json(settings))
 }
 
+#[utoipa::path(put, path = "/api/v1/settings/oidc", tag = "settings", request_body = UpdateOidcRequest, responses((status = 200, body = OidcSettings)))]
 pub async fn update_oidc(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,

@@ -145,6 +145,10 @@ externally managed Secret with `database-url` and `master-key`. The bundled Post
 runs with the capabilities its entrypoint needs to chown its data directory; it is not a
 production-grade database deployment.
 
+`platform.archiveAfterDays` (default `30`, `0` disables) archives terminal executions,
+team runs and worker launches older than that window. Records are never deleted; the
+default list simply hides archived runs, and the UI can switch to Active/Archived/All.
+
 Image tags default to the chart `appVersion`, so `--version 0.7.0` pulls `orbit-*:0.7.0`
 — the same tags CI publishes for that release. Override per component with
 `--set api.tag=…`, `worker.tag`, `web.tag`, `launcher.tag`, `opencodeWorker.tag` or

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { AgentForm } from "@/components/agents/agent-form";
 import { PageHeader } from "@/components/ui/page-header";
 import { api } from "@/lib/api";
+import { toAgentDefinitionBody } from "@/lib/agent-body";
 import { unwrap } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 import type { AgentDefinition } from "@orbit/contracts";
@@ -20,7 +21,7 @@ export default function NewAgentPage() {
     try {
       const created = unwrap(
         await api.POST("/api/v1/agents", {
-          body: definition as never,
+          body: toAgentDefinitionBody(definition),
         }),
       );
       toast.success("Agent created");

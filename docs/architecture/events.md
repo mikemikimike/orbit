@@ -77,4 +77,6 @@ database or the event bus directly.
   an enabled work source, takes a per-team advisory lock, claims issues via labels, and
   enqueues deduplicated `team_queue_items`.
 - **Memory pruner** (hourly) deletes expired agent memory entries.
+- **Retention** (every 6h) archives terminal executions, team runs and worker launches
+  older than `ORBIT_ARCHIVE_AFTER_DAYS` (default 30, `0` disables).
 - **Execution reaper** (every 15s) marks orphaned running executions failed.

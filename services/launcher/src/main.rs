@@ -190,9 +190,9 @@ async fn docker_image_exists(state: &AppState, image: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Docker treats `192.168.1.201:5000/...` and `registry.mdk.local:5000/...` as different
-/// repositories even though they are the same registry. Resolve configured aliases to a
-/// locally present image instead of attempting a registry pull while offline.
+/// Docker treats an IP and a DNS name for the same registry as different repositories.
+/// Resolve configured aliases (`ORBIT_LAUNCHER_IMAGE_ALIASES`) to a locally present image
+/// instead of attempting a registry pull while offline.
 async fn resolve_docker_image(state: &AppState, image: &str, tag: &str) -> String {
     let exact = format!("{image}:{tag}");
     if docker_image_exists(state, &exact).await {

@@ -20,6 +20,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agent-teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_teams"];
+        put?: never;
+        post: operations["create_team"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-teams/{team_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_team"];
+        put?: never;
+        post?: never;
+        delete: operations["delete_team"];
+        options?: never;
+        head?: never;
+        patch: operations["update_team"];
+        trace?: never;
+    };
+    "/api/v1/agent-teams/{team_id}/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post: operations["enqueue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-teams/{team_id}/queue/{item_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-teams/{team_id}/queue/{item_id}/requeue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["requeue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-teams/{team_id}/queue/{item_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-teams/{team_id}/queue/{item_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["run_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-teams/{team_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["create_run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents": {
         parameters: {
             query?: never;
@@ -487,6 +615,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/oidc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_oidc"];
+        put: operations["update_oidc"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/skills": {
         parameters: {
             query?: never;
@@ -517,6 +661,38 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["update_skill"];
+        trace?: never;
+    };
+    "/api/v1/team-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_runs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/team-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_run"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/triggers": {
@@ -581,6 +757,86 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["update_user_role"];
+        trace?: never;
+    };
+    "/api/v1/worker-launches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_launches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/worker-launches/{launch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_launch"];
+        put?: never;
+        post?: never;
+        delete: operations["delete_launch"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/worker-launches/{launch_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["archive_launch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/worker-launches/{launch_id}/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["launch_logs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/worker-launches/{launch_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["stop_launch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/worker-profiles": {
@@ -657,6 +913,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["enable_profile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/worker-profiles/{profile_id}/launch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["launch_profile"];
         delete?: never;
         options?: never;
         head?: never;
@@ -868,6 +1140,24 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        AgentTeam: {
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            createdBy?: string | null;
+            definition: unknown;
+            description: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            lastPollAt?: string | null;
+            lastPollError?: string | null;
+            name: string;
+            /** Format: uuid */
+            orgId: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
         AgentVersion: {
             /** Format: uuid */
             agentId: string;
@@ -957,6 +1247,10 @@ export interface components {
             agentId: string;
             agentName: string;
             executionStatus: string;
+        };
+        AuditLogPage: {
+            items: components["schemas"]["AuditLogRecord"][];
+            nextCursor?: string | null;
         };
         AuditLogRecord: {
             action: string;
@@ -1064,7 +1358,10 @@ export interface components {
             scopes?: string[];
         };
         CreateExecutionRequest: {
+            /** @description Override the agent's stored harness for this execution. */
+            harnessOverride?: string | null;
             idempotencyKey?: string | null;
+            name?: string | null;
             payload?: unknown;
             /** @description Skills to materialize for this execution, in addition to the agent spec. */
             skills?: string[];
@@ -1086,6 +1383,49 @@ export interface components {
             name: string;
             slug: string;
         };
+        CreateTeamRequest: {
+            autoLaunch?: boolean;
+            /** @description Optional base/working branch for repository checkout. */
+            branch?: string | null;
+            description?: string;
+            /**
+             * @description Shared goal/instruction for the team. The first step receives it as its task;
+             *     later steps receive it together with the previous step output.
+             */
+            instructions?: string;
+            /**
+             * @description `pipeline` runs each agent once in order. `native` runs the primary agent only
+             *     and materializes the remaining agents as harness-native subagents.
+             */
+            mode?: string;
+            model?: null | components["schemas"]["TeamModelOverride"];
+            name: string;
+            /** @description Multi-repository workspace. When empty, `repository`/`branch` are used. */
+            repositories?: components["schemas"]["RepositorySpec"][];
+            /**
+             * @description Structured workspace repository (owner/repo). Instructions alone cannot drive
+             *     repository checkout; this is passed to the worker.
+             */
+            repository?: string | null;
+            /** @description Skills materialized for every step in the team. */
+            skills?: string[];
+            steps: components["schemas"]["TeamStepInput"][];
+            workSource?: null | components["schemas"]["WorkSourceDefinition"];
+            /**
+             * Format: uuid
+             * @description Worker profile used for automatic launch.
+             */
+            workerProfileId?: string | null;
+        };
+        CreateTeamRunRequest: {
+            /** @description Explicitly allow bound writes for this run without per-call approvals (L4). */
+            autoApprove?: boolean;
+            /** @description Override the agent's stored harness for this run. */
+            harnessOverride?: string | null;
+            payload?: unknown;
+            /** @description Optional run-specific task. Falls back to the team instruction. */
+            task?: string;
+        };
         CreateTriggerRequest: {
             /** Format: uuid */
             agentId: string;
@@ -1097,6 +1437,7 @@ export interface components {
             agentIds?: string[];
             authSecretName?: string | null;
             env?: unknown;
+            envMappings?: unknown;
             executionDriver?: string;
             harnessKind: string;
             image?: string;
@@ -1148,6 +1489,9 @@ export interface components {
         };
         /** @enum {string} */
         EgressMode: "default" | "allowlist" | "denied";
+        EnqueueRequest: {
+            items: components["schemas"]["QueueItemInput"][];
+        };
         ErrorBody: {
             code: string;
             details?: components["schemas"]["ValidationIssue"][];
@@ -1190,6 +1534,8 @@ export interface components {
             agentName: string;
             /** Format: uuid */
             agentVersionId: string;
+            /** Format: date-time */
+            archivedAt?: string | null;
             /** Format: date-time */
             createdAt: string;
             error?: unknown;
@@ -1309,6 +1655,9 @@ export interface components {
             /** @description Trusted system instructions. Always transported separately from untrusted input. */
             system: string;
         };
+        LaunchLogs: {
+            logs: string;
+        };
         /** @enum {string} */
         LogLevel: "debug" | "info" | "warn" | "error";
         MeResponse: {
@@ -1357,6 +1706,16 @@ export interface components {
         NetworkPolicy: {
             allowedHosts?: string[];
             mode?: null | components["schemas"]["EgressMode"];
+        };
+        OidcSettings: {
+            audience?: string;
+            autoProvision?: boolean;
+            clientId?: string;
+            defaultRole?: string;
+            issuer?: string;
+            jwksUrl?: string;
+            redirectUri?: string;
+            scopes?: string;
         };
         Organization: {
             /** Format: date-time */
@@ -1427,6 +1786,19 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        QueueItemInput: {
+            externalKey: string;
+            payload?: unknown;
+            repository?: string | null;
+        };
+        RepositorySpec: {
+            branch?: string | null;
+            /** Format: uuid */
+            connectionId?: string | null;
+            path?: string;
+            primary?: boolean;
+            repository: string;
+        };
         /** @description Limits enforced by the platform and honoured by harness isolation. */
         ResourceLimits: {
             /** Format: int32 */
@@ -1457,6 +1829,95 @@ export interface components {
             updatedAt: string;
             /** Format: int32 */
             version: number;
+        };
+        TeamModelOverride: {
+            management?: string | null;
+            model?: string | null;
+            provider?: string | null;
+        };
+        TeamQueueItem: {
+            /** Format: int32 */
+            attempts: number;
+            /** Format: date-time */
+            createdAt: string;
+            error?: string | null;
+            externalKey: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            maxAttempts: number;
+            /** Format: uuid */
+            orgId: string;
+            payload: unknown;
+            repository?: string | null;
+            status: string;
+            /** Format: uuid */
+            teamId: string;
+            /** Format: uuid */
+            teamRunId?: string | null;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        TeamRun: {
+            /** Format: date-time */
+            archivedAt?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            error?: string | null;
+            /** Format: date-time */
+            finishedAt?: string | null;
+            /** Format: uuid */
+            id: string;
+            input: unknown;
+            /** Format: uuid */
+            orgId: string;
+            output?: unknown;
+            /** Format: uuid */
+            requestedBy?: string | null;
+            status: string;
+            /** Format: uuid */
+            teamId: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        TeamRunDetail: {
+            run: components["schemas"]["TeamRun"];
+            steps: components["schemas"]["TeamStep"][];
+        };
+        TeamStep: {
+            /** Format: uuid */
+            agentId: string;
+            /** Format: uuid */
+            agentVersionId: string;
+            /** Format: date-time */
+            createdAt: string;
+            error?: string | null;
+            /** Format: uuid */
+            executionId?: string | null;
+            /** Format: date-time */
+            finishedAt?: string | null;
+            /** Format: uuid */
+            id: string;
+            input: unknown;
+            name: string;
+            /** Format: uuid */
+            orgId: string;
+            output?: unknown;
+            /** Format: uuid */
+            runId: string;
+            skills: string[];
+            /** Format: date-time */
+            startedAt?: string | null;
+            status: string;
+            /** Format: int32 */
+            stepIndex: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        TeamStepInput: {
+            /** Format: uuid */
+            agentId: string;
+            model?: null | components["schemas"]["TeamModelOverride"];
         };
         Trigger: {
             /** Format: uuid */
@@ -1510,6 +1971,9 @@ export interface components {
             name?: string | null;
             scopes?: string[] | null;
         };
+        UpdateOidcRequest: {
+            settings: components["schemas"]["OidcSettings"];
+        };
         UpdateProviderRequest: {
             config?: unknown;
             credential?: string | null;
@@ -1548,11 +2012,62 @@ export interface components {
             message: string;
             path: string;
         };
+        WorkSourceDefinition: {
+            autoRun?: boolean;
+            /** Format: int64 */
+            boardId?: number | null;
+            claimLabel?: string;
+            /** Format: uuid */
+            connectionId?: string | null;
+            doneLabel?: string;
+            enabled?: boolean;
+            failedLabel?: string;
+            groupId?: string | null;
+            labels?: string[];
+            /** Format: int64 */
+            maxAttempts?: number;
+            /** Format: int64 */
+            maxItems?: number;
+            /** Format: int64 */
+            pollSeconds?: number;
+            project?: string | null;
+            provider: string;
+            repository?: string | null;
+        };
         WorkerBootstrap: {
             compose: string;
             docker: string;
             kubernetes: string;
             notes: string[];
+        };
+        WorkerLaunch: {
+            /** Format: date-time */
+            archivedAt?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            createdBy?: string | null;
+            error?: string | null;
+            /** Format: uuid */
+            id: string;
+            image: string;
+            name: string;
+            /** Format: uuid */
+            orgId: string;
+            /** Format: uuid */
+            profileId: string;
+            runtimeId?: string | null;
+            /** Format: date-time */
+            startedAt?: string | null;
+            status: string;
+            /** Format: date-time */
+            stoppedAt?: string | null;
+            target: string;
+            /** Format: date-time */
+            updatedAt: string;
+            workerId?: string | null;
+            /** Format: uuid */
+            workerTokenId?: string | null;
         };
         WorkerProfile: {
             agentIds: string[];
@@ -1561,6 +2076,7 @@ export interface components {
             createdAt: string;
             enabled: boolean;
             env: unknown;
+            envMappings: unknown;
             executionDriver: string;
             harnessKind: string;
             /** Format: uuid */
@@ -1613,6 +2129,272 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentInstancePage"];
+                };
+            };
+        };
+    };
+    list_teams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTeam"][];
+                };
+            };
+        };
+    };
+    create_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTeamRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTeam"];
+                };
+            };
+        };
+    };
+    get_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTeam"];
+                };
+            };
+        };
+    };
+    delete_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTeamRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTeam"];
+                };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamQueueItem"][];
+                };
+            };
+        };
+    };
+    enqueue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnqueueRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamQueueItem"][];
+                };
+            };
+        };
+    };
+    cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamQueueItem"];
+                };
+            };
+        };
+    };
+    requeue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamQueueItem"];
+                };
+            };
+        };
+    };
+    retry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamQueueItem"];
+                };
+            };
+        };
+    };
+    run_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamRunDetail"];
+                };
+            };
+        };
+    };
+    create_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTeamRunRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamRunDetail"];
                 };
             };
         };
@@ -1768,6 +2550,7 @@ export interface operations {
                 cursor?: string;
                 status?: string;
                 agentId?: string;
+                archived?: boolean;
             };
             header?: never;
             path: {
@@ -2032,7 +2815,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AuditLogRecord"][];
+                    "application/json": components["schemas"]["AuditLogPage"];
                 };
             };
         };
@@ -2168,6 +2951,7 @@ export interface operations {
                 cursor?: string;
                 status?: string;
                 agentId?: string;
+                archived?: boolean;
             };
             header?: never;
             path?: never;
@@ -2454,6 +3238,48 @@ export interface operations {
             };
         };
     };
+    get_oidc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OidcSettings"];
+                };
+            };
+        };
+    };
+    update_oidc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOidcRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OidcSettings"];
+                };
+            };
+        };
+    };
     list_skills: {
         parameters: {
             query?: never;
@@ -2557,6 +3383,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Skill"];
+                };
+            };
+        };
+    };
+    list_runs: {
+        parameters: {
+            query?: {
+                archived?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamRun"][];
+                };
+            };
+        };
+    };
+    get_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamRunDetail"];
                 };
             };
         };
@@ -2689,6 +3557,128 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["User"];
+                };
+            };
+        };
+    };
+    list_launches: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerLaunch"][];
+                };
+            };
+        };
+    };
+    get_launch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerLaunch"];
+                };
+            };
+        };
+    };
+    delete_launch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    archive_launch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerLaunch"];
+                };
+            };
+        };
+    };
+    launch_logs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LaunchLogs"];
+                };
+            };
+        };
+    };
+    stop_launch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerLaunch"];
                 };
             };
         };
@@ -2865,6 +3855,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkerProfile"];
+                };
+            };
+        };
+    };
+    launch_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerLaunch"];
                 };
             };
         };

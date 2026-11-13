@@ -482,6 +482,8 @@ impl PiHarnessAdapter {
         let mut command = Command::new(settings.binary());
         command.args(&args);
         command.current_dir(&workspace);
+        // Worker-profile connection mappings, resolved by the control plane.
+        command.envs(&request.extra_env);
         command.env("PWD", &workspace);
         // Platform-managed providers: inject endpoint + credential via env vars.
         // Pi's built-in OpenAI provider reads OPENAI_API_KEY and OPENAI_BASE_URL.
@@ -767,6 +769,7 @@ impl HarnessAdapter for PiHarnessAdapter {
             autonomy: AutonomyLevel::OBSERVE,
             resources: request.resources,
             harness_config: request.harness_config,
+            extra_env: Default::default(),
             session: orbit_contracts::SessionRequest {
                 session_ref: Some(request.session_ref.clone()),
                 mode: ExecutionMode::OnDemand,

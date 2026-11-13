@@ -573,6 +573,8 @@ impl OpenCodeHarnessAdapter {
         let mut command = Command::new(settings.binary());
         command.args(&args);
         command.current_dir(&workspace);
+        // Worker-profile connection mappings, resolved by the control plane.
+        command.envs(&request.extra_env);
         // OpenCode resolves its project/workspace from PWD in some code paths; the
         // worker's PWD points at the ORBIT repository, so explicitly set it to the
         // per-execution workspace. This also keeps shell tools inside the sandbox.
@@ -873,6 +875,7 @@ impl HarnessAdapter for OpenCodeHarnessAdapter {
             autonomy: orbit_domain::AutonomyLevel::OBSERVE,
             resources: request.resources,
             harness_config: request.harness_config,
+            extra_env: Default::default(),
             session: SessionRequest {
                 session_ref: Some(request.session_ref.clone()),
                 mode: ExecutionMode::OnDemand,
@@ -974,6 +977,7 @@ mod tests {
             autonomy: orbit_domain::AutonomyLevel::OBSERVE,
             resources: orbit_domain::ResourceLimits::default(),
             harness_config: Value::Null,
+            extra_env: Default::default(),
             session: SessionRequest::default(),
             workspace: Default::default(),
             events: None,

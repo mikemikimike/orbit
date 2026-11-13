@@ -20,6 +20,9 @@ pub struct ApiConfig {
     pub launcher_url: Option<String>,
     pub launcher_token: Option<String>,
     pub worker_api_url: String,
+    /// Days after which terminal executions, team runs and worker launches are archived.
+    /// `0` disables the retention loop.
+    pub archive_after_days: Option<u32>,
 }
 
 impl ApiConfig {
@@ -62,6 +65,10 @@ impl ApiConfig {
                 .ok()
                 .filter(|value| !value.trim().is_empty()),
             worker_api_url: env_or("ORBIT_WORKER_API_URL", "http://orbit-api:8080"),
+            archive_after_days: env_or("ORBIT_ARCHIVE_AFTER_DAYS", "30")
+                .parse::<u32>()
+                .ok()
+                .filter(|days| *days > 0),
         })
     }
 

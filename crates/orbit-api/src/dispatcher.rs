@@ -54,6 +54,14 @@ async fn dispatch_team(state: &AppState, team: AgentTeam) -> anyhow::Result<()> 
     }
 
     let result = dispatch_team_locked(state, &team, &definition, &source).await;
+    if let Err(error) = &result {
+        // Record the failure so the next attempt waits for `pollSeconds` instead of
+        // retrying the connector on every tick.
+        let _ = state
+            .store
+            .set_team_poll_status(team.org_id, team.id, Some(&error.to_string()))
+            .await;
+    }
     let unlock: Result<bool, _> = sqlx::query_scalar("SELECT pg_advisory_unlock($1)")
         .bind(lock_id)
         .fetch_one(&mut *conn)

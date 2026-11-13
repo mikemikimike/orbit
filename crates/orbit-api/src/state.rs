@@ -35,6 +35,8 @@ pub struct AppState {
     pub launcher_url: Option<String>,
     pub launcher_token: Option<String>,
     pub worker_api_url: String,
+    /// Archive terminal runs older than this many days. `None` disables retention.
+    pub archive_after_days: Option<u32>,
 }
 
 impl AppState {

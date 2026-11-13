@@ -19,6 +19,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { errorMessage } from "@orbit/api-client";
 import { titleCase } from "@/lib/utils";
+import { defaultWorkerImage } from "@/lib/worker-images";
 import type { WorkerProfile } from "@/lib/types";
 
 const STEPS = [
@@ -89,26 +90,22 @@ export default function WorkPage() {
           }),
         );
         const effectiveHarness = harness || selectedAgent?.harness || "mock";
-        // Find or create a worker profile for this harness.
-        let profile = (workerProfiles.data ?? []).find(
+        const target = where === "kubernetes" ? "kubernetes" : where === "docker" ? "docker" : "local";
+
+        // Reuse an existing profile for this harness, otherwise create and enable one.
+        let profileId = (workerProfiles.data ?? []).find(
           (p) => p.harnessKind === effectiveHarness,
-        );
-        if (!profile) {
-          // Auto-create a minimal worker profile.
+        )?.id;
+        if (!profileId) {
           try {
-            const DEFAULT_IMAGES: Record<string, string> = {
-              pi: "192.168.1.201:5000/orbit-worker-pi",
-              opencode: "192.168.1.201:5000/orbit-worker-opencode",
-              mock: "192.168.1.201:5000/orbit-worker",
-            };
             const created = unwrap(
               await api.POST("/api/v1/worker-profiles", {
                 body: {
                   name: `Auto: ${effectiveHarness}`,
                   harnessKind: effectiveHarness,
-                  target: where === "kubernetes" ? "kubernetes" : where === "docker" ? "docker" : "local",
+                  target,
                   executionDriver: "process",
-                  image: DEFAULT_IMAGES[effectiveHarness] ?? "192.168.1.201:5000/orbit-worker",
+                  image: defaultWorkerImage(effectiveHarness),
                   imageTag: "latest",
                   agentIds: [who],
                   skillSlugs: [],
@@ -116,28 +113,26 @@ export default function WorkPage() {
                   resources: {},
                 },
               }),
-            ) as { id: string };
+            );
+            profileId = created.id;
             await api.POST("/api/v1/worker-profiles/{profile_id}/enable", {
               params: { path: { profile_id: created.id } },
             });
-            profile = { ...profile!, id: created.id, enabled: true, harnessKind: effectiveHarness, name: `Auto: ${effectiveHarness}`, target: where === "kubernetes" ? "kubernetes" : where === "docker" ? "docker" : "local", executionDriver: "process", image: DEFAULT_IMAGES[effectiveHarness] ?? "192.168.1.201:5000/orbit-worker", imageTag: "latest", agentIds: [who], skillSlugs: [], env: {}, resources: {}, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), authSecretName: null, provider: null, model: null, workerTokenId: null } as unknown as WorkerProfile;
-            toast.success("Work created, worker profile created");
-          } catch {
-            toast.success("Work created (profile creation skipped)");
+            toast.success("Work created — worker profile created");
+          } catch (error) {
+            toast.error(errorMessage(error));
           }
         }
-        if (profile) {
+
+        if (profileId) {
           try {
-            await (api.POST as (path: string, init: unknown) => Promise<unknown>)(
-              "/api/v1/worker-profiles/{profile_id}/launch",
-              { params: { path: { profile_id: profile.id } } },
-            );
-            toast.success("Work created and worker launched");
-          } catch {
-            toast.success("Work created (worker launch skipped)");
+            await api.POST("/api/v1/worker-profiles/{profile_id}/launch", {
+              params: { path: { profile_id: profileId } },
+            });
+            toast.success("Work created — worker launched");
+          } catch (error) {
+            toast.error(errorMessage(error));
           }
-        } else {
-          toast.success("Work created");
         }
         window.location.href = `/executions/${result.id}`;
       } else {

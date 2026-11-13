@@ -7,8 +7,11 @@
 nameOverride: ""
 fullnameOverride: ""
 
-# Private registry (HTTP on the LAN) used by the cluster.
-imageRegistry: registry.example.com:5000
+# Registry prefix for the ORBIT images. The value must include the repository
+# segment: the published images are ghcr.io/<owner>/<repo>/orbit-<component>, so with
+# `ghcr.io/opsifyhq/orbit` the chart renders `ghcr.io/opsifyhq/orbit/orbit-api:0.7.0`.
+# Set this to your own mirror (e.g. `registry.example.com:5000`) when not using GHCR.
+imageRegistry: ghcr.io/opsifyhq/orbit
 imagePullPolicy: IfNotPresent
 imagePullSecrets: []
 
@@ -228,6 +231,9 @@ platform:
   corsOrigins: "http://orbit.example.com"
   publicBaseUrl: "http://orbit.example.com"
   bodyLimitBytes: "2097152"
+  # Archive terminal executions/team runs/worker launches older than this many days.
+  # History is retained; the default list just stops showing old runs. 0 disables.
+  archiveAfterDays: "30"
 
 # Optional Vault wiring (secret retrieval is Phase 2; values are injected as env so
 # Vault Agent / CSI can be used without chart changes).

@@ -186,12 +186,19 @@ pub async fn revoke_api_token(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[utoipa::path(get, path = "/api/v1/audit-logs", tag = "account", params(AuditListQuery), responses((status = 200, body = [orbit_store::AuditLogRecord])))]
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditLogPage {
+    pub items: Vec<orbit_store::AuditLogRecord>,
+    pub next_cursor: Option<String>,
+}
+
+#[utoipa::path(get, path = "/api/v1/audit-logs", tag = "account", params(AuditListQuery), responses((status = 200, body = AuditLogPage)))]
 pub async fn list_audit_logs(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
     Query(query): Query<AuditListQuery>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<Json<AuditLogPage>, ApiError> {
     auth.require(Permission::AuditRead)?;
     let (items, next) = state
         .store
@@ -202,8 +209,8 @@ pub async fn list_audit_logs(
             query.action.as_deref(),
         )
         .await?;
-    Ok(Json(serde_json::json!({
-        "items": items,
-        "nextCursor": next.map(|id| id.to_string()),
-    })))
+    Ok(Json(AuditLogPage {
+        items,
+        next_cursor: next.map(|id| id.to_string()),
+    }))
 }

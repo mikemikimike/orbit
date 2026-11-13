@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::{Store, StoreError, StoreResult};
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamQueueItem {
     pub id: Uuid,
