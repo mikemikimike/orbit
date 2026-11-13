@@ -38,10 +38,12 @@ harnesses are launched as isolated containers/Jobs (`HarnessDispatcher`).
 |---|---|---|
 | `orbit-api` | container, port 8080 | Deployment + Service + Ingress |
 | `orbit-worker` | container | Deployment (or Job-per-execution later) |
+| `orbit-worker-opencode` | container | Deployment (OpenCode CLI bundled) |
+| `orbit-worker-pi` | container | Deployment (Pi CLI bundled) |
 | web | container, port 3000 | Deployment + Service + Ingress |
 | PostgreSQL | container | external or bundled (opt-in) |
 | NATS JetStream | container | external or bundled (opt-in) |
-| Harness processes | mock in worker; OpenCode via subprocess sandbox | Jobs/Pods via dispatcher |
+| Harness processes | mock in worker; OpenCode/Pi via subprocess sandbox | Jobs/Pods via dispatcher |
 
 ## 3. Module boundaries (Rust workspace)
 
