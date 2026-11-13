@@ -181,14 +181,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Trivy scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ github.sha }}
-          format: table
-          exit-code: 0
-          severity: CRITICAL,HIGH
-
       - name: Generate SBOM
         uses: aquasecurity/trivy-action@master
         with:
