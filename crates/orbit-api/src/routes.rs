@@ -295,10 +295,7 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/worker/memory/store",
             post(handlers::worker_api::store_memory),
         )
-        .route(
-            "/api/v1/worker/env",
-            get(handlers::worker_api::resolve_env),
-        )
+        .route("/api/v1/worker/env", get(handlers::worker_api::resolve_env))
         .route(
             "/api/v1/worker/executions/{execution_id}/cancel",
             get(handlers::worker_api::cancel_requested),

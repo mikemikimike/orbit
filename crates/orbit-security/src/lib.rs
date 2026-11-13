@@ -4,13 +4,13 @@
 //! implements [`SecretStore`] and credential lookups; the API layer wires extractors.
 
 pub mod auth;
-pub mod http;
 pub mod error;
+pub mod http;
 pub mod permissions;
 pub mod secrets;
 
 pub use auth::*;
-pub use http::*;
 pub use error::*;
+pub use http::*;
 pub use permissions::*;
 pub use secrets::*;

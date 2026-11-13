@@ -160,7 +160,10 @@ pub async fn list_launches(
     Query(query): Query<ArchiveListQuery>,
 ) -> Result<Json<Vec<WorkerLaunch>>, ApiError> {
     auth.require(Permission::HarnessesRead)?;
-    let launches = state.store.list_worker_launches(auth.org_id, query.archived).await?;
+    let launches = state
+        .store
+        .list_worker_launches(auth.org_id, query.archived)
+        .await?;
     let mut refreshed = Vec::with_capacity(launches.len());
     for launch in launches {
         refreshed.push(refresh(&state, launch).await);
@@ -397,7 +400,10 @@ pub async fn delete_launch(
     Path(launch_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     auth.require(Permission::SettingsWrite)?;
-    state.store.delete_worker_launch(auth.org_id, launch_id).await?;
+    state
+        .store
+        .delete_worker_launch(auth.org_id, launch_id)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

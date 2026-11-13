@@ -883,10 +883,7 @@ pub async fn list_memory(
     if agent_id.is_nil() {
         return Ok(Json(vec![]));
     }
-    let entries = state
-        .store
-        .list_memory(org_id, agent_id, None, 20)
-        .await?;
+    let entries = state.store.list_memory(org_id, agent_id, None, 20).await?;
     Ok(Json(
         entries
             .into_iter()
@@ -909,7 +906,14 @@ pub async fn store_memory(
     let expires_at = None;
     state
         .store
-        .store_memory(org_id, body.agent_id, &body.kind, &body.content, &body.metadata, expires_at)
+        .store_memory(
+            org_id,
+            body.agent_id,
+            &body.kind,
+            &body.content,
+            &body.metadata,
+            expires_at,
+        )
         .await?;
     Ok(Json(serde_json::json!({ "stored": true })))
 }

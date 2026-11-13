@@ -7,12 +7,12 @@ use crate::{Store, StoreResult};
 
 impl Store {
     pub async fn get_platform_setting(&self, key: &str) -> StoreResult<Option<Value>> {
-        Ok(sqlx::query_scalar::<_, Value>(
-            "SELECT value FROM platform_settings WHERE key = $1",
+        Ok(
+            sqlx::query_scalar::<_, Value>("SELECT value FROM platform_settings WHERE key = $1")
+                .bind(key)
+                .fetch_optional(&self.pool)
+                .await?,
         )
-        .bind(key)
-        .fetch_optional(&self.pool)
-        .await?)
     }
 
     pub async fn set_platform_setting(

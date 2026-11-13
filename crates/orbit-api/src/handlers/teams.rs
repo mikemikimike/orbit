@@ -563,7 +563,10 @@ pub(crate) async fn start_step(
         }
     } else {
         if instructions.trim().is_empty() {
-            format!("Role: {}\n\nOriginal task: {task}\n\nPrevious step output:\n{previous}", agent.name)
+            format!(
+                "Role: {}\n\nOriginal task: {task}\n\nPrevious step output:\n{previous}",
+                agent.name
+            )
         } else {
             format!(
                 "Role: {}\n\nOriginal task: {task}\n\nTeam context: {instructions}\n\nPrevious step output:\n{previous}",
@@ -770,7 +773,12 @@ pub async fn list_runs(
     Query(query): Query<ArchiveListQuery>,
 ) -> Result<Json<Vec<TeamRun>>, ApiError> {
     auth.require(Permission::HarnessesRead)?;
-    Ok(Json(state.store.list_team_runs(auth.org_id, query.archived).await?))
+    Ok(Json(
+        state
+            .store
+            .list_team_runs(auth.org_id, query.archived)
+            .await?,
+    ))
 }
 
 pub async fn get_run(

@@ -1,12 +1,12 @@
 mod broker;
 mod client;
-mod mcp_broker;
 mod connectors;
 mod dispatch;
 mod git;
 mod github;
 mod gitlab;
 mod liveness;
+mod mcp_broker;
 mod runner;
 mod skills;
 mod subagents;
@@ -109,7 +109,10 @@ async fn main() -> anyhow::Result<()> {
             std::env::set_var(key, value);
         }
         if !env_vars.is_empty() {
-            tracing::info!(count = env_vars.len(), "loaded mapped environment variables");
+            tracing::info!(
+                count = env_vars.len(),
+                "loaded mapped environment variables"
+            );
         }
     }
     let registry = Arc::new(HarnessRegistry::builtin());

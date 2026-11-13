@@ -45,7 +45,8 @@ pub fn spawn(state: AppState) {
             match team_state.store.list_running_team_runs().await {
                 Ok(runs) => {
                     for run in runs {
-                        if let Err(error) = crate::handlers::teams::advance(&team_state, run).await {
+                        if let Err(error) = crate::handlers::teams::advance(&team_state, run).await
+                        {
                             tracing::warn!(%error, "team run advance failed");
                         }
                     }

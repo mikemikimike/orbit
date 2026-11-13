@@ -174,7 +174,10 @@ impl Store {
     }
 
     /// Archive terminal executions whose last activity predates `cutoff`.
-    pub async fn archive_executions_before(&self, cutoff: chrono::DateTime<Utc>) -> StoreResult<u64> {
+    pub async fn archive_executions_before(
+        &self,
+        cutoff: chrono::DateTime<Utc>,
+    ) -> StoreResult<u64> {
         let result = sqlx::query(
             r#"
             UPDATE executions

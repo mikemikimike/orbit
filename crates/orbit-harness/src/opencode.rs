@@ -285,12 +285,13 @@ fn write_open_code_provider_config(
     model: &orbit_contracts::ResolvedModel,
 ) -> std::io::Result<()> {
     use orbit_contracts::ModelSelection;
-    let (provider_name, endpoint, credential) = match (&model.selection, &model.endpoint, &model.credential) {
-        (ModelSelection::Platform { provider_name, .. }, Some(endpoint), credential) => {
-            (provider_name.clone(), endpoint.clone(), credential.clone())
-        }
-        _ => return Ok(()),
-    };
+    let (provider_name, endpoint, credential) =
+        match (&model.selection, &model.endpoint, &model.credential) {
+            (ModelSelection::Platform { provider_name, .. }, Some(endpoint), credential) => {
+                (provider_name.clone(), endpoint.clone(), credential.clone())
+            }
+            _ => return Ok(()),
+        };
 
     // Read existing config or start fresh.
     let path = workspace.join("opencode.json");

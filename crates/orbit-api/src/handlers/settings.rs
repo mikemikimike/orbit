@@ -66,8 +66,8 @@ pub async fn update_oidc(
     Json(body): Json<UpdateOidcRequest>,
 ) -> Result<Json<OidcSettings>, ApiError> {
     auth.require(Permission::SettingsWrite)?;
-    let value = serde_json::to_value(&body.settings)
-        .map_err(|e| ApiError::bad_request(e.to_string()))?;
+    let value =
+        serde_json::to_value(&body.settings).map_err(|e| ApiError::bad_request(e.to_string()))?;
     let stored = state
         .store
         .set_platform_setting("oidc", &value, Some(auth.user_id))

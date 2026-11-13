@@ -220,7 +220,10 @@ fn validate_files(files: &serde_json::Value) -> Result<(), Vec<ValidationIssue>>
             if !has_allowed_ext {
                 issues.push(ValidationIssue::new(
                     format!("files.{path}"),
-                    format!("scripts must have an allowed extension: {}", allowed_script_exts.join(", ")),
+                    format!(
+                        "scripts must have an allowed extension: {}",
+                        allowed_script_exts.join(", ")
+                    ),
                 ));
             }
             if let Some(content) = value.as_str() {

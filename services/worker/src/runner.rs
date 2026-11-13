@@ -7,8 +7,7 @@ use orbit_contracts::{
     HarnessEventKind, InstructionsBlock, SessionRequest,
 };
 use orbit_domain::{
-    AutonomyLevel, ExecutionEventKind, ExecutionStatus, HarnessKind, LogLevel,
-    ResourceLimits,
+    AutonomyLevel, ExecutionEventKind, ExecutionStatus, HarnessKind, LogLevel, ResourceLimits,
 };
 use orbit_store::ExecutionRecord;
 use tokio::sync::{mpsc, Semaphore};

@@ -69,7 +69,10 @@ impl Store {
     }
 
     /// Archive terminal worker launches whose last activity predates `cutoff`.
-    pub async fn archive_worker_launches_before(&self, cutoff: chrono::DateTime<Utc>) -> StoreResult<u64> {
+    pub async fn archive_worker_launches_before(
+        &self,
+        cutoff: chrono::DateTime<Utc>,
+    ) -> StoreResult<u64> {
         let result = sqlx::query(
             r#"
             UPDATE worker_launches
@@ -143,7 +146,11 @@ impl Store {
 }
 
 impl Store {
-    pub async fn archive_worker_launch(&self, org_id: Uuid, launch_id: Uuid) -> StoreResult<WorkerLaunch> {
+    pub async fn archive_worker_launch(
+        &self,
+        org_id: Uuid,
+        launch_id: Uuid,
+    ) -> StoreResult<WorkerLaunch> {
         sqlx::query_as::<_, WorkerLaunch>(
             r#"
             UPDATE worker_launches

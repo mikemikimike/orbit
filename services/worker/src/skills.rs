@@ -49,8 +49,7 @@ pub async fn materialize(
                         }
                         let _ = tokio::fs::write(&target, content).await;
                         // Make scripts executable.
-                        let is_script = path.starts_with("scripts/")
-                            || path.contains("/scripts/");
+                        let is_script = path.starts_with("scripts/") || path.contains("/scripts/");
                         if is_script {
                             #[cfg(unix)]
                             {

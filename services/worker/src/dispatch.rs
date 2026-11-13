@@ -108,10 +108,7 @@ pub async fn run(
         ("ORBIT_EXECUTION_DRIVER", "process".into()),
         ("ORBIT_WORKER_POLL_MS", "1000".into()),
         ("ORBIT_WORKSPACE_ROOT", "/tmp/orbit-workspaces".into()),
-        (
-            "ORBIT_MCP_BROKER_BIN",
-            "/usr/local/bin/orbit-worker".into(),
-        ),
+        ("ORBIT_MCP_BROKER_BIN", "/usr/local/bin/orbit-worker".into()),
         (
             "ORBIT_LOG_FORMAT",
             std::env::var("ORBIT_LOG_FORMAT").unwrap_or_else(|_| "json".into()),

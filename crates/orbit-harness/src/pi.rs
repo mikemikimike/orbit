@@ -99,10 +99,7 @@ impl PiSettings {
                     _ => None,
                 }
             }
-            orbit_contracts::ModelSelection::Platform {
-                model,
-                ..
-            } => Some(model),
+            orbit_contracts::ModelSelection::Platform { model, .. } => Some(model),
         }
     }
 
@@ -489,13 +486,19 @@ impl PiHarnessAdapter {
         // Platform-managed providers: inject endpoint + credential via env vars.
         // Pi's built-in OpenAI provider reads OPENAI_API_KEY and OPENAI_BASE_URL.
         if let Some(model) = &request.model {
-            if let (orbit_contracts::ModelSelection::Platform { .. }, Some(endpoint), Some(credential)) =
-                (&model.selection, &model.endpoint, &model.credential)
+            if let (
+                orbit_contracts::ModelSelection::Platform { .. },
+                Some(endpoint),
+                Some(credential),
+            ) = (&model.selection, &model.endpoint, &model.credential)
             {
                 command.env("OPENAI_API_KEY", credential.expose());
                 command.env("OPENAI_BASE_URL", &endpoint.base_url);
                 for (key, value) in &endpoint.headers {
-                    command.env(format!("OPENAI_HEADER_{}", key.to_uppercase().replace('-', "_")), value);
+                    command.env(
+                        format!("OPENAI_HEADER_{}", key.to_uppercase().replace('-', "_")),
+                        value,
+                    );
                 }
             }
         }

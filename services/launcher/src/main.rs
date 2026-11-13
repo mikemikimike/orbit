@@ -480,7 +480,11 @@ async fn launch_kubernetes(
             }
         });
     }
-    let resource_type = if request.single_execution_id.is_some() { "job" } else { "pod" };
+    let resource_type = if request.single_execution_id.is_some() {
+        "job"
+    } else {
+        "pod"
+    };
     let _ = Command::new(&state.kubectl)
         .args([
             "-n",
@@ -538,9 +542,18 @@ async fn kubernetes_status(state: &AppState, name: &str) -> LaunchStatus {
         Ok(o) if o.status.success() => {
             let stdout = String::from_utf8_lossy(&o.stdout);
             let parts: Vec<&str> = stdout.trim().split('|').collect();
-            let succeeded = parts.first().and_then(|s| s.parse::<i32>().ok()).unwrap_or(0);
-            let failed = parts.get(1).and_then(|s| s.parse::<i32>().ok()).unwrap_or(0);
-            let active = parts.get(2).and_then(|s| s.parse::<i32>().ok()).unwrap_or(0);
+            let succeeded = parts
+                .first()
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(0);
+            let failed = parts
+                .get(1)
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(0);
+            let active = parts
+                .get(2)
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(0);
             let status = if succeeded > 0 {
                 "stopped"
             } else if failed > 0 {

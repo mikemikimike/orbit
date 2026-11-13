@@ -73,9 +73,11 @@ impl Store {
     }
 
     pub async fn prune_expired_memory(&self) -> StoreResult<u64> {
-        let result = sqlx::query("DELETE FROM agent_memory WHERE expires_at IS NOT NULL AND expires_at < now()")
-            .execute(&self.pool)
-            .await?;
+        let result = sqlx::query(
+            "DELETE FROM agent_memory WHERE expires_at IS NOT NULL AND expires_at < now()",
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(result.rows_affected())
     }
 

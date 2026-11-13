@@ -170,7 +170,10 @@ impl Store {
     }
 
     /// Archive terminal team runs whose last activity predates `cutoff`.
-    pub async fn archive_team_runs_before(&self, cutoff: chrono::DateTime<Utc>) -> StoreResult<u64> {
+    pub async fn archive_team_runs_before(
+        &self,
+        cutoff: chrono::DateTime<Utc>,
+    ) -> StoreResult<u64> {
         let result = sqlx::query(
             r#"
             UPDATE team_runs
