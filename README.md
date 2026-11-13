@@ -1,5 +1,22 @@
 # ORBIT — Open Agent Platform
 
+<div align="center">
+
+[![CI](https://github.com/opsifyhq/orbit/actions/workflows/ci.yml/badge.svg)](https://github.com/opsifyhq/orbit/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
+[![Release](https://img.shields.io/github/v/release/opsifyhq/orbit?include_prereleases)](https://github.com/opsifyhq/orbit/releases)
+[![Rust](https://img.shields.io/badge/Rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org/)
+
+**Self-hosted control plane for persistent AI agents.**
+
+Create agents, connect them to GitHub/GitLab, run them on Kubernetes or Docker,
+and govern every action with policy-enforced approvals.
+
+[Documentation](./docs/README.md) · [Architecture](./docs/architecture/overview.md) · [Deployment](./docs/development/deployment.md) · [Releases](https://github.com/opsifyhq/orbit/releases)
+
+</div>
+
 ORBIT is a self-hosted **control plane** for creating, configuring, connecting, deploying
 and governing persistent AI agents. It is deliberately *not* another agent framework:
 agent reasoning runs in dedicated harness processes behind a stable adapter contract,
@@ -27,6 +44,26 @@ Browser / future mobile app
 
 Detailed diagrams (system context, execution sequence, broker policy path, domain model,
 deployment topology): [`docs/architecture/diagram.md`](docs/architecture/diagram.md).
+
+## What can you do with ORBIT?
+
+| Put an agent to work on… | Start it with… | What happens |
+|---|---|---|
+| **An issue → a pull request** | Manual, schedule, webhook, or queue | Agent reads the issue, implements the fix, runs tests, commits, pushes, opens a PR |
+| **Dependency updates and daily briefings** | A cron schedule | Run saved instructions on a schedule, with separate history per run |
+| **Agent Teams** | Manual or auto-dispatch from GitHub/GitLab issues | Sequential or native subagent handoffs, each step is a normal execution |
+| **Monitoring and triage** | Event triggers (Telegram, webhooks) | Agent classifies, drafts replies, proposes actions for approval |
+| **Research and analysis** | Manual execution | Agent gathers info, summarizes, marks uncertainty |
+
+## Five answers describe the work
+
+| | Your choice |
+|---|---|
+| **When** | Manual, schedule (cron), event, webhook, or connector-triggered |
+| **Where** | Local worker, Docker, or Kubernetes — auto-routed by placement |
+| **Who** | A single agent or an Agent Team (primary + subagents) |
+| **What** | A task, repository, connectors, and skills |
+| **Then** | Succeed, fail, retry, or stay running as a 24/7 agent |
 
 ## Status
 
