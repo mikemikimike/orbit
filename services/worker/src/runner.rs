@@ -7,7 +7,8 @@ use orbit_contracts::{
     HarnessEventKind, InstructionsBlock, SessionRequest,
 };
 use orbit_domain::{
-    AutonomyLevel, ExecutionEventKind, ExecutionStatus, HarnessKind, LogLevel, ResourceLimits,
+    AutonomyLevel, ExecutionEventKind, ExecutionStatus, HarnessKind, LogLevel,
+    ResourceLimits,
 };
 use orbit_store::ExecutionRecord;
 use tokio::sync::{mpsc, Semaphore};
@@ -110,7 +111,10 @@ pub async fn run_execution(
         spec.autonomy.level = 4;
         spec.autonomy.approval_mode = orbit_domain::ApprovalMode::Auto;
     }
-    let harness_kind = spec.harness.kind;
+    let harness_kind = execution
+        .harness_kind
+        .parse::<orbit_domain::HarnessKind>()
+        .unwrap_or(spec.harness.kind);
 
     let adapter = match state.registry.require(harness_kind) {
         Ok(adapter) => adapter,
@@ -163,6 +167,36 @@ pub async fn run_execution(
     }
 
     let grants = context.grants;
+
+    // Fetch mapped environment variables from the API and set them for this process
+    // and for spawned harness subprocesses.
+    if let Ok(env_vars) = state.client.resolve_env().await {
+        for (key, value) in &env_vars {
+            std::env::set_var(key, value);
+        }
+    }
+
+    // Short-term memory: retrieve recent memory entries for this agent and inject
+    // them into the execution input so the harness can use them as context.
+    if spec.memory.enabled && spec.memory.strategy != orbit_domain::MemoryStrategy::None {
+        if let Ok(entries) = state
+            .client
+            .list_memory(execution_id, execution.agent_id, spec.memory.retention_days)
+            .await
+        {
+            if !entries.is_empty() {
+                let memory_text = entries
+                    .iter()
+                    .map(|e| format!("[{}] {}", e.kind, e.content))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if let Some(payload) = input.payload.as_object_mut() {
+                    payload.insert("memory".into(), serde_json::json!(memory_text));
+                }
+            }
+        }
+    }
+
     let workspace = state.workspace_root.join(execution_id.to_string());
     if let Err(err) = tokio::fs::create_dir_all(&workspace).await {
         tracing::warn!(error = %err, workspace = %workspace.display(), "could not create workspace");
@@ -178,7 +212,7 @@ pub async fn run_execution(
                     .any(|capability| capability == "repo.checkout")
         })
         .and_then(|binding| binding.connection_id);
-    match crate::git::checkout(
+    match crate::git::checkout_workspace(
         &state.client,
         execution_id,
         checkout_connection,
@@ -187,18 +221,19 @@ pub async fn run_execution(
     )
     .await
     {
-        Ok(Some(note)) => {
-            append_event(
-                &state,
-                &execution,
-                ExecutionEventKind::Status,
-                LogLevel::Info,
-                &note,
-                serde_json::json!({ "connector": "github", "capability": "repo.checkout" }),
-            )
-            .await;
+        Ok(notes) => {
+            for note in notes {
+                append_event(
+                    &state,
+                    &execution,
+                    ExecutionEventKind::Status,
+                    LogLevel::Info,
+                    &note,
+                    serde_json::json!({ "connector": "github", "capability": "repo.checkout" }),
+                )
+                .await;
+            }
         }
-        Ok(None) => {}
         Err(error) => {
             return fail_execution(
                 &state,
@@ -472,6 +507,27 @@ pub async fn run_execution(
             },
         )
         .await?;
+    if updated && status == ExecutionStatus::Succeeded {
+        // Store execution output as short-term memory for the agent.
+        if spec.memory.enabled {
+            let kind = if spec.memory.strategy == orbit_domain::MemoryStrategy::Summary {
+                "summary"
+            } else {
+                "short_term"
+            };
+            let content = outcome
+                .output
+                .as_ref()
+                .map(|o| o.to_string())
+                .unwrap_or_default();
+            if !content.is_empty() {
+                let _ = state
+                    .client
+                    .store_memory(execution.agent_id, kind, &content)
+                    .await;
+            }
+        }
+    }
     if updated {
         tracing::info!(
             %execution_id,

@@ -2,7 +2,6 @@
 
 use std::time::Duration;
 
-use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -143,10 +142,7 @@ struct AuditRequest<'a> {
 
 impl WorkerClient {
     pub fn new(base_url: impl Into<String>, token: impl Into<String>) -> anyhow::Result<Self> {
-        let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()
-            .context("could not create worker HTTP client")?;
+        let http = orbit_security::client_with_custom_ca(Duration::from_secs(30));
         Ok(Self {
             base_url: base_url.into().trim_end_matches('/').to_string(),
             token: token.into(),
@@ -379,5 +375,80 @@ impl WorkerClient {
 
     pub fn token(&self) -> &str {
         &self.token
+    }
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[allow(dead_code)]
+pub struct WorkerMemoryEntry {
+    pub id: uuid::Uuid,
+    pub kind: String,
+    pub content: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl WorkerClient {
+    pub async fn list_memory(
+        &self,
+        _execution_id: uuid::Uuid,
+        agent_id: uuid::Uuid,
+        _retention_days: Option<u32>,
+    ) -> anyhow::Result<Vec<WorkerMemoryEntry>> {
+        let response = self
+            .http
+            .post(format!("{}/api/v1/worker/memory/list", self.base_url))
+            .bearer_auth(&self.token)
+            .json(&serde_json::json!({ "agentId": agent_id }))
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            return Ok(vec![]);
+        }
+        Ok(response.json().await.unwrap_or_default())
+    }
+
+    pub async fn store_memory(
+        &self,
+        agent_id: uuid::Uuid,
+        kind: &str,
+        content: &str,
+    ) -> anyhow::Result<()> {
+        let _ = self
+            .http
+            .post(format!("{}/api/v1/worker/memory/store", self.base_url))
+            .bearer_auth(&self.token)
+            .json(&serde_json::json!({
+                "agentId": agent_id,
+                "kind": kind,
+                "content": content,
+                "metadata": {},
+            }))
+            .send()
+            .await;
+        Ok(())
+    }
+}
+
+impl WorkerClient {
+    /// Fetch resolved environment variables from the API.
+    pub async fn resolve_env(&self) -> anyhow::Result<Vec<(String, String)>> {
+        let response = self
+            .http
+            .get(format!("{}/api/v1/worker/env", self.base_url))
+            .bearer_auth(&self.token)
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            return Ok(vec![]);
+        }
+        let entries: Vec<serde_json::Value> = response.json().await.unwrap_or_default();
+        Ok(entries
+            .iter()
+            .filter_map(|e| {
+                let key = e.get("envVar")?.as_str()?.to_string();
+                let val = e.get("value")?.as_str()?.to_string();
+                Some((key, val))
+            })
+            .collect())
     }
 }

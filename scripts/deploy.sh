@@ -27,6 +27,16 @@ echo "==> Applying secret prerequisites (namespace ${NAMESPACE})"
 kubectl --context "${KUBE_CONTEXT}" create namespace "${NAMESPACE}" \
   --dry-run=client -o yaml | kubectl --context "${KUBE_CONTEXT}" apply -f -
 
+# Fetch tokens from the existing secret (if present).
+WORKER_TOKEN=""
+OP_TOKEN=""
+LAUNCHER_TOKEN=""
+if kubectl --context "${KUBE_CONTEXT}" -n "${NAMESPACE}" get secret orbit-secrets >/dev/null 2>&1; then
+  WORKER_TOKEN=$(kubectl --context "${KUBE_CONTEXT}" -n "${NAMESPACE}" get secret orbit-secrets -o jsonpath='{.data.worker-token}' 2>/dev/null | base64 -d 2>/dev/null || true)
+  OP_TOKEN=$(kubectl --context "${KUBE_CONTEXT}" -n "${NAMESPACE}" get secret orbit-secrets -o jsonpath='{.data.opencode-worker-token}' 2>/dev/null | base64 -d 2>/dev/null || true)
+  LAUNCHER_TOKEN=$(kubectl --context "${KUBE_CONTEXT}" -n "${NAMESPACE}" get secret orbit-secrets -o jsonpath='{.data.launcher-token}' 2>/dev/null | base64 -d 2>/dev/null || true)
+fi
+
 set -x
 helm --kube-context "${KUBE_CONTEXT}" upgrade --install "${RELEASE}" deploy/helm/orbit \
   --namespace "${NAMESPACE}" \
@@ -36,7 +46,16 @@ helm --kube-context "${KUBE_CONTEXT}" upgrade --install "${RELEASE}" deploy/helm
   --set worker.tag="${TAG}" \
   --set web.tag="${TAG}" \
   --set launcher.tag="${TAG}" \
+  --set opencodeWorker.tag="${TAG}" \
   --set ingress.host="${INGRESS_HOST}" \
+  --set platform.environment=development \
+  --set postgresql.storageClassName=hostpath \
+  --set nats.storageClassName=hostpath \
+  ${WORKER_TOKEN:+--set worker.token="${WORKER_TOKEN}"} \
+  ${OP_TOKEN:+--set opencodeWorker.token="${OP_TOKEN}"} \
+  ${OP_TOKEN:+--set opencodeWorker.enabled=true} \
+  ${LAUNCHER_TOKEN:+--set launcher.token="${LAUNCHER_TOKEN}"} \
+  ${LAUNCHER_TOKEN:+--set launcher.enabled=true} \
   "$@"
 set +x
 

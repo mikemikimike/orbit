@@ -204,3 +204,40 @@ impl Store {
         Ok(())
     }
 }
+
+impl Store {
+    /// Record a successful trigger fire.
+    pub async fn record_trigger_success(&self, trigger_id: Uuid) -> StoreResult<()> {
+        sqlx::query(
+            "UPDATE triggers SET consecutive_failures = 0, updated_at = now() WHERE id = $1",
+        )
+        .bind(trigger_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Record a failed trigger fire. Auto-disables after max_failures consecutive failures.
+    pub async fn record_trigger_failure(&self, trigger_id: Uuid) -> StoreResult<bool> {
+        let result = sqlx::query(
+            r#"
+            UPDATE triggers
+            SET consecutive_failures = consecutive_failures + 1,
+                enabled = CASE WHEN consecutive_failures + 1 >= max_failures THEN false ELSE enabled END,
+                updated_at = now()
+            WHERE id = $1
+            RETURNING enabled
+            "#,
+        )
+        .bind(trigger_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        match result {
+            Some(row) => {
+                let enabled: bool = sqlx::Row::get(&row, "enabled");
+                Ok(!enabled) // true if disabled
+            }
+            None => Ok(false),
+        }
+    }
+}

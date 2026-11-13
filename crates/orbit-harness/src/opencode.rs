@@ -278,6 +278,69 @@ fn write_open_code_mcp_config(workspace: &Path, bridge: &OrbitMcpBridge) -> std:
     )
 }
 
+/// Write a platform-managed provider into opencode.json so OpenCode can use
+/// ORBIT-resolved OpenAI-compatible endpoints (e.g. vLLM).
+fn write_open_code_provider_config(
+    workspace: &Path,
+    model: &orbit_contracts::ResolvedModel,
+) -> std::io::Result<()> {
+    use orbit_contracts::ModelSelection;
+    let (provider_name, endpoint, credential) = match (&model.selection, &model.endpoint, &model.credential) {
+        (ModelSelection::Platform { provider_name, .. }, Some(endpoint), credential) => {
+            (provider_name.clone(), endpoint.clone(), credential.clone())
+        }
+        _ => return Ok(()),
+    };
+
+    // Read existing config or start fresh.
+    let path = workspace.join("opencode.json");
+    let mut config: serde_json::Value = if path.exists() {
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_else(|| serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+    if !config.is_object() {
+        config = serde_json::json!({});
+    }
+
+    let mut provider = serde_json::Map::new();
+    provider.insert("npm".into(), serde_json::json!("@ai-sdk/openai-compatible"));
+    provider.insert("name".into(), serde_json::json!(provider_name));
+    let mut options = serde_json::Map::new();
+    options.insert("baseURL".into(), serde_json::json!(endpoint.base_url));
+    if let Some(cred) = &credential {
+        options.insert("apiKey".into(), serde_json::json!(cred.expose()));
+    }
+    for (key, value) in &endpoint.headers {
+        options.insert(key.clone(), serde_json::json!(value));
+    }
+    provider.insert("options".into(), serde_json::Value::Object(options));
+
+    let mut models = serde_json::Map::new();
+    models.insert(
+        endpoint.model.clone(),
+        serde_json::json!({ "name": endpoint.model }),
+    );
+    provider.insert("models".into(), serde_json::Value::Object(models));
+
+    let providers = config
+        .as_object_mut()
+        .unwrap()
+        .entry("provider")
+        .or_insert_with(|| serde_json::json!({}));
+    if let Some(map) = providers.as_object_mut() {
+        map.insert(provider_name, serde_json::Value::Object(provider));
+    }
+
+    std::fs::write(
+        &path,
+        serde_json::to_string_pretty(&config).unwrap_or_else(|_| "{}".into()),
+    )
+}
+
 fn write_agent_instructions(workspace: &Path, request: &ExecutionRequest) -> std::io::Result<()> {
     let instructions: &InstructionsBlock = &request.instructions;
     let path = workspace.join("AGENTS.md");
@@ -292,6 +355,12 @@ fn write_agent_instructions(workspace: &Path, request: &ExecutionRequest) -> std
     content.push_str(&format!("# ORBIT agent: {}\n\n", request.agent_name));
     content.push_str("## Trusted system instructions\n\n");
     content.push_str(&instructions.system);
+    content.push_str("\n\n## Skill scripts\n\n");
+    content.push_str(
+        "Executable scripts bundled with skills are available under \
+         `.opencode/skills/{slug}/scripts/` and `.pi/skills/{slug}/scripts/`. \
+         Run them with their relative path from the workspace root.\n",
+    );
     content.push_str("\n\n");
     if !instructions.constraints.is_empty() {
         content.push_str("## Constraints\n\n");
@@ -485,6 +554,14 @@ impl OpenCodeHarnessAdapter {
                 HarnessError::new(
                     HarnessErrorKind::Internal,
                     format!("could not write opencode.json: {error}"),
+                )
+            })?;
+        }
+        if let Some(model) = &request.model {
+            write_open_code_provider_config(&workspace, model).map_err(|error| {
+                HarnessError::new(
+                    HarnessErrorKind::Internal,
+                    format!("could not write provider config: {error}"),
                 )
             })?;
         }

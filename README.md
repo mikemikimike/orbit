@@ -16,8 +16,8 @@ Browser / future mobile app
         │ HarnessAdapter contract
 ┌───────▼────────────────────────────────────────────────┐
 │ Execution plane: orbit-worker                          │
-│   mock harness (working) · opencode (scaffolded, Phase 1)│
-│   claude_code / pi / generic (registered, planned)      │
+│   mock (working) · opencode (available, v2.3.0)        │
+│   pi (available, v1.5.2) · claude_code / generic (planned)│
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -40,32 +40,41 @@ Phase 0 foundation is implemented and validated:
   SSE streaming with replay.
 - Mock harness executed **in the worker**, with cancellation and timeouts.
 - **OpenCode harness executes real tasks** in a separate worker image, tested against
-  OpenCode v2.2.5: NDJSON event streaming, tool events, session capture, cancellation,
+  OpenCode v2.3.0: NDJSON event streaming, tool events, session capture, cancellation,
   usage tokens and `AGENTS.md` instruction isolation.
+- **Pi harness executes real tasks** in a separate worker image, tested against Pi v1.5.2:
+  JSON event streaming, session capture/resume, read-only tool allowlist.
 - **X read connector**: X recent-search posts are hydrated into the harness input as
   untrusted context (bearer token from an encrypted connection).
-- **GitHub read via the policy-enforcing tool broker** (OpenCode → MCP → broker → GitHub),
+- **GitHub read/write via the policy-enforcing tool broker** (OpenCode/Pi → MCP → broker → GitHub),
   verified end-to-end; write capabilities are approval-gated.
+- **Agent Teams**: pipeline + native subagent modes, durable work queue, dispatcher with
+  auto-claim, close-the-loop (labels/comments), multi-repo workspace.
 - **Approvals UI**, worker heartbeats + orphaned-execution reaper, and opt-in
   **per-execution Docker containers** for local/single-user deployments.
+- **Kubernetes Jobs mode**: per-execution container isolation via K8s Jobs.
+- **Memory**: short-term and summary memory for persistent agents.
+- **OIDC**: configurable from the Settings UI, JWT validation against provider JWKS.
+- **Custom CA certificates**: Helm chart support for private CAs.
+- **Dark/light mode**: theme toggle in the web app.
 - Providers (custom OpenAI-compatible endpoints, harness-managed), connectors,
   connections, triggers, dashboard, API tokens, health/readiness/metrics, OpenAPI 3.1 +
   Swagger UI.
-- Next.js mobile-first web app (dashboard, Agent Studio, agent detail, executions with
-  live logs, harnesses, models, connections, settings) with PWA assets.
+- Next.js mobile-first web app (dashboard, Agent Studio, executions with live logs,
+  harnesses, models, connectors, skills, workers, settings, work wizard) with PWA assets.
 - Docker images (non-root, reproducible) and a Helm chart deployed and smoke-tested on a
-  local Kubernetes cluster with ingress host `orbit.mdk.local`.
+  local Kubernetes cluster with ingress host `orbit.example.com`.
+- **GitHub Actions CI**: tests, lint, security scan (Trivy, cargo audit, pnpm audit,
+  gitleaks), SBOM generation, container image builds.
 
 Not yet implemented — do not assume otherwise:
 
-- GitHub/X **writes** still need live end-to-end verification (approvals UI is in place).
-- Kubernetes **Job-per-execution** isolation (Docker per-execution works locally).
-- X posting, general connector invocation, OAuth/webhooks (Phase 2).
-- ORBIT platform provider → OpenCode provider mapping (use OpenCode-managed auth today).
-- Claude Code / Pi / generic adapters (registered descriptors only, fail closed).
-- Connector capability invocation, OAuth flows, webhook verification, approvals (Phase 2).
-- Container/Job-per-execution harness isolation (Phase 1/3 hardening).
-- Browser OIDC login flow (API-side JWT validation is implemented).
+- GitHub **writes** still need live end-to-end verification (approvals UI is in place).
+- Claude Code adapter (registered descriptor only, fail closed).
+- X posting, OAuth flows, webhook verification (Phase 2).
+- Enterprise RBAC, shared connections, quotas, marketplace (Phase 4).
+- Agent workflow branching/parallel execution (issue #9).
+- Large-scale agent simulation with result aggregation (issue #11).
 
 See `CHANGELOG.md` for the detailed list and `docs/` for architecture and decisions.
 
@@ -100,16 +109,16 @@ the browser.
 
 ## Kubernetes (Helm)
 
-The chart targets the mkd.local private registry and ingress conventions:
+The chart targets the example.com private registry and ingress conventions:
 
 ```bash
 # build + push linux/amd64 images to the private registry
 TAG=0.1.0 ./scripts/build-images.sh
 TAG=0.1.0 ./scripts/push-images.sh
 
-# deploy (default host orbit.mdk.local)
+# deploy (default host orbit.example.com)
 helm upgrade --install orbit deploy/helm/orbit \
-  --kube-context microk8s \
+  --kube-context your-cluster \
   --namespace orbit --create-namespace \
   -f deploy/helm/orbit/values.yaml
 ```
@@ -122,9 +131,9 @@ Ingress routes: `/docs`, `/healthz`, `/readyz` → API; `/api` → web (same-ori
 that injects the dev token server-side or forwards OIDC/API bearer headers); `/` → web.
 SSE-friendly annotations are included (`proxy-buffering: off`, long read/send timeouts).
 
-A live deployment is available at **http://orbit.mdk.local** (microk8s, namespace
-`orbit`). Dev auth is enabled for this test deployment: the web proxy injects the token,
-so do not expose it beyond your LAN until OIDC is configured.
+Dev auth mode is enabled by default for local/test deployments. The web proxy injects
+the dev token server-side, so do not expose a dev-auth deployment beyond your LAN
+until OIDC is configured.
 
 ## Native development
 

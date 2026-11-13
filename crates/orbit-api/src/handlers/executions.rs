@@ -43,6 +43,7 @@ pub async fn list_executions(
             query.cursor.as_deref(),
             query.status.as_deref(),
             query.agent_id,
+            query.archived,
         )
         .await?;
     Ok(Json(ExecutionPage {
@@ -103,6 +104,7 @@ pub async fn list_agent_executions(
             query.cursor.as_deref(),
             query.status.as_deref(),
             Some(agent_id),
+            query.archived,
         )
         .await?;
     Ok(Json(ExecutionPage {
@@ -156,6 +158,15 @@ pub async fn execute_agent(
     let version = state.store.get_current_version(auth.org_id, &agent).await?;
     let spec = parse_spec(&version)?;
 
+    // Harness override: use the specified harness instead of the agent's stored one.
+    let harness_kind = if let Some(override_kind) = &body.harness_override {
+        override_kind
+            .parse::<orbit_domain::HarnessKind>()
+            .unwrap_or(spec.harness.kind)
+    } else {
+        spec.harness.kind
+    };
+
     let idempotency_key = headers
         .get("idempotency-key")
         .and_then(|v| v.to_str().ok())
@@ -200,6 +211,7 @@ pub async fn execute_agent(
 
     let input = serde_json::json!({
         "task": body.task,
+        "name": body.name,
         "payload": body.payload,
         "provenance": {
             "source": format!("user:{}", auth.email),
@@ -217,7 +229,7 @@ pub async fn execute_agent(
             agent_id: agent.id,
             agent_version_id: version.id,
             agent_name: &agent.name,
-            harness_kind: spec.harness.kind,
+            harness_kind,
             trigger_source: TriggerSource::Manual,
             placement: spec.harness.placement.as_str(),
             trigger_id: None,

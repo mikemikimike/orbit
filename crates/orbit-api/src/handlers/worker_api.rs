@@ -841,3 +841,148 @@ async fn resolve_grants(store: &Store, org_id: Uuid, spec: &AgentSpec) -> Vec<Gr
     }
     grants
 }
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryEntry {
+    pub id: uuid::Uuid,
+    pub kind: String,
+    pub content: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListMemoryRequest {
+    #[serde(default)]
+    pub agent_id: Option<uuid::Uuid>,
+    #[serde(default)]
+    pub retention_days: Option<u32>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreMemoryRequest {
+    pub agent_id: uuid::Uuid,
+    pub kind: String,
+    pub content: String,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+}
+
+pub async fn list_memory(
+    State(state): State<AppState>,
+    auth: WorkerAuth,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<ListMemoryRequest>,
+) -> Result<Json<Vec<MemoryEntry>>, ApiError> {
+    let org_id = auth.org_id;
+    let agent_id = match body.agent_id {
+        Some(id) => id,
+        None => return Ok(Json(vec![])),
+    };
+    if agent_id.is_nil() {
+        return Ok(Json(vec![]));
+    }
+    let entries = state
+        .store
+        .list_memory(org_id, agent_id, None, 20)
+        .await?;
+    Ok(Json(
+        entries
+            .into_iter()
+            .map(|e| MemoryEntry {
+                id: e.id,
+                kind: e.kind,
+                content: e.content,
+                created_at: e.created_at,
+            })
+            .collect(),
+    ))
+}
+
+pub async fn store_memory(
+    State(state): State<AppState>,
+    auth: WorkerAuth,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<StoreMemoryRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let org_id = auth.org_id;
+    let expires_at = None;
+    state
+        .store
+        .store_memory(org_id, body.agent_id, &body.kind, &body.content, &body.metadata, expires_at)
+        .await?;
+    Ok(Json(serde_json::json!({ "stored": true })))
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnvMapping {
+    pub env_var: String,
+    #[serde(default)]
+    pub connection_id: Option<uuid::Uuid>,
+    #[serde(default)]
+    pub secret_key: Option<String>,
+    #[serde(default)]
+    pub secret_ref: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedEnv {
+    pub env_var: String,
+    pub value: String,
+}
+
+pub async fn resolve_env(
+    State(state): State<AppState>,
+    auth: WorkerAuth,
+) -> Result<Json<Vec<ResolvedEnv>>, ApiError> {
+    // Get the worker's profile to find env_mappings
+    let profile = match auth.profile_id {
+        Some(id) => state.store.get_worker_profile(auth.org_id, id).await.ok(),
+        None => None,
+    };
+    let mappings: Vec<EnvMapping> = profile
+        .map(|p| serde_json::from_value(p.env_mappings).unwrap_or_default())
+        .unwrap_or_default();
+
+    let mut resolved = Vec::new();
+    for mapping in mappings {
+        let value = if let Some(conn_id) = mapping.connection_id {
+            // Fetch connection and extract the secret value
+            match state.store.get_connection(auth.org_id, conn_id).await {
+                Ok(conn) => {
+                    if let Some(ref secret_ref) = conn.credential_ref {
+                        state
+                            .store
+                            .get_secret_value(secret_ref)
+                            .await
+                            .ok()
+                            .flatten()
+                            .map(|s| s.expose().to_string())
+                    } else {
+                        None
+                    }
+                }
+                Err(_) => None,
+            }
+        } else if let Some(ref secret_ref) = mapping.secret_ref {
+            state
+                .store
+                .get_secret_value(secret_ref)
+                .await
+                .ok()
+                .flatten()
+                .map(|s| s.expose().to_string())
+        } else {
+            None
+        };
+        if let Some(value) = value {
+            resolved.push(ResolvedEnv {
+                env_var: mapping.env_var,
+                value,
+            });
+        }
+    }
+    Ok(Json(resolved))
+}

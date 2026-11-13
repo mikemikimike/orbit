@@ -1,5 +1,9 @@
 "use client";
 
+
+export const dynamic = 'force-dynamic';
+export const dynamicParams = true;
+
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -43,6 +47,7 @@ import {
   relativeTime,
   titleCase,
 } from "@/lib/utils";
+import { capabilityLabel, eventKindLabel, toolLabel } from "@/lib/presentation";
 import type { ExecutionEventRecord } from "@/lib/types";
 
 export default function ExecutionDetailPage() {
@@ -59,6 +64,8 @@ export default function ExecutionDetailPage() {
   );
   const [autoScroll, setAutoScroll] = useState(true);
   const [showVerbose, setShowVerbose] = useState(false);
+  const [showRawOutput, setShowRawOutput] = useState(false);
+  const [showRawInput, setShowRawInput] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
 
   const execution = live.execution ?? executionQuery.data;
@@ -161,7 +168,10 @@ export default function ExecutionDetailPage() {
               ) : null}
             </div>
             <h1 className="mt-2 truncate text-2xl font-semibold tracking-tight">
-              {execution.agentName}
+              {(() => {
+                const input = execution.input as { name?: string };
+                return input.name || execution.agentName;
+              })()}
             </h1>
             <p className="mt-1 line-clamp-2 max-w-3xl text-sm text-muted-foreground">
               {task || "No task recorded"}
@@ -282,8 +292,8 @@ export default function ExecutionDetailPage() {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
           <CardHeader className="flex-row items-center justify-between pb-3">
             <CardTitle className="flex items-center gap-2">
               <Terminal className="h-4 w-4 text-primary" /> Harness timeline
@@ -316,7 +326,7 @@ export default function ExecutionDetailPage() {
           <CardContent className="p-0">
             <div
               ref={logRef}
-              className="max-h-[480px] min-h-[220px] overflow-y-auto px-4 pb-4"
+              className="max-h-[640px] min-h-[220px] overflow-y-auto px-4 pb-4"
             >
               {visibleEvents.length === 0 ? (
                 <p className="py-10 text-center text-sm text-muted-foreground">
@@ -367,6 +377,62 @@ export default function ExecutionDetailPage() {
           </CardContent>
         </Card>
 
+      </div>
+
+      <Card>
+        <CardHeader className="flex-row items-center justify-between pb-2">
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-primary" /> Output
+          </CardTitle>
+          {execution.output ? (
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label="Copy output"
+              onClick={async () => {
+                const copied = await copyText(JSON.stringify(execution.output, null, 2));
+                if (copied) toast.success("Output copied");
+                else toast.error("Copy is unavailable in this browser context");
+              }}
+            >
+              <Copy />
+            </Button>
+          ) : null}
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {execution.output ? (
+            <>
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] text-muted-foreground">
+                  {countFields(execution.output)} field(s) · {JSON.stringify(execution.output).length} chars
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowRawOutput((v) => !v)}
+                >
+                  {showRawOutput ? "Show rendered" : "Show raw JSON"}
+                </Button>
+              </div>
+              {showRawOutput ? (
+                <pre className="max-h-[600px] overflow-auto rounded-lg bg-muted/50 p-3 text-[11px] leading-relaxed">
+                  {JSON.stringify(execution.output, null, 2)}
+                </pre>
+              ) : (
+                <div className="max-h-[600px] overflow-auto rounded-lg bg-muted/50 p-4 text-sm leading-relaxed whitespace-pre-wrap">
+                  {renderOutput(execution.output)}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {active ? "Output will appear when the harness completes." : "No output."}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           {pendingApproval ? (
         <Card className="border-[hsl(var(--warning))]/40 bg-[hsl(var(--warning))]/10">
@@ -404,46 +470,34 @@ export default function ExecutionDetailPage() {
           ) : null}
 
           <Card>
-            <CardHeader className="flex-row items-center justify-between pb-2">
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-primary" /> Output
-              </CardTitle>
-              {execution.output ? (
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  aria-label="Copy output"
-                  onClick={async () => {
-                    const copied = await copyText(JSON.stringify(execution.output, null, 2));
-                    if (copied) toast.success("Output copied");
-                    else toast.error("Copy is unavailable in this browser context");
-                  }}
-                >
-                  <Copy />
-                </Button>
-              ) : null}
-            </CardHeader>
-            <CardContent>
-              {execution.output ? (
-                <pre className="max-h-72 overflow-auto rounded-lg bg-muted/50 p-3 text-[11px] leading-relaxed">
-                  {JSON.stringify(execution.output, null, 2)}
-                </pre>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  {active ? "Output will appear when the harness completes." : "No output."}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
             <CardHeader className="pb-2">
               <CardTitle>Input</CardTitle>
             </CardHeader>
-            <CardContent>
-              <pre className="max-h-56 overflow-auto rounded-lg bg-muted/50 p-3 text-[11px] leading-relaxed">
-                {JSON.stringify(execution.input, null, 2)}
-              </pre>
+            <CardContent className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] text-muted-foreground">
+                  {countFields(execution.input)} field(s) · {JSON.stringify(execution.input).length} chars
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowRawInput((v) => !v)}
+                >
+                  {showRawInput ? "Show rendered" : "Show raw JSON"}
+                </Button>
+              </div>
+              {showRawInput ? (
+                <pre className="max-h-[600px] overflow-auto rounded-lg bg-muted/50 p-3 text-[11px] leading-relaxed">
+                  {JSON.stringify(execution.input, null, 2)}
+                </pre>
+              ) : (
+                <div className="max-h-[600px] overflow-auto rounded-lg bg-muted/50 p-4 text-sm leading-relaxed whitespace-pre-wrap">
+                  {(() => {
+                    const input = execution.input as { task?: string; instructions?: string };
+                    return input.task || input.instructions || renderOutput(execution.input);
+                  })()}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -599,7 +653,12 @@ function EventLine({ event }: { event: ExecutionEventRecord }) {
       </span>
       <span className="mt-0.5 shrink-0 text-muted-foreground">{icon}</span>
       <div className="min-w-0 flex-1">
-        <p className={`whitespace-pre-wrap break-words ${levelClass}`}>{title}</p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
+            {eventKindLabel(event.kind)}
+          </span>
+          <p className={`whitespace-pre-wrap break-words ${levelClass}`}>{title}</p>
+        </div>
         {detail ? (
           <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
             {detail}
@@ -630,11 +689,11 @@ function eventTitle(
   input: Record<string, unknown>,
 ): string {
   if (capability) {
-    const target = [input.owner, input.repo].filter(Boolean).join("/");
-    return `GitHub ${capability}${target ? ` · ${target}` : ""}`;
+    const target = [input.owner, input.repo, input.project].filter(Boolean).join("/");
+    return `${capabilityLabel(capability)}${target ? ` · ${target}` : ""}`;
   }
   if (tool) {
-    return `${tool}${toolDetail(tool, input) ? ` · ${toolDetail(tool, input)}` : ""}`;
+    return `${toolLabel(tool)}${toolDetail(tool, input) ? ` · ${toolDetail(tool, input)}` : ""}`;
   }
   return event.message;
 }
@@ -662,6 +721,41 @@ function toolDetail(tool: string, input: Record<string, unknown>): string | null
   const value = input.path ?? input.command ?? input.pattern ?? input.query;
   if (typeof value !== "string") return null;
   return value.replace(/\s+/g, " ").slice(0, 140);
+}
+
+function countFields(value: unknown): number {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return Object.keys(value as Record<string, unknown>).length;
+  }
+  if (Array.isArray(value)) return value.length;
+  return 1;
+}
+
+function renderOutput(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value === null || value === undefined) return "—";
+  if (typeof value !== "object") return String(value);
+
+  // Try common text fields.
+  const obj = value as Record<string, unknown>;
+  for (const key of ["text", "output", "result", "message", "summary", "content", "answer", "response"]) {
+    if (typeof obj[key] === "string" && (obj[key] as string).trim()) {
+      return obj[key] as string;
+    }
+  }
+  // Nested output/result.
+  if (obj.output && typeof obj.output === "object") {
+    const nested = renderOutput(obj.output);
+    if (nested !== JSON.stringify(obj.output)) return nested;
+  }
+  // Array of items — join text fields.
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item : renderOutput(item)))
+      .join("\n\n");
+  }
+  // Fallback: pretty-print JSON.
+  return JSON.stringify(value, null, 2);
 }
 
 function formatClock(value: string): string {

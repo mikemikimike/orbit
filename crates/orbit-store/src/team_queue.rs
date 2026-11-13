@@ -20,6 +20,8 @@ pub struct TeamQueueItem {
     pub error: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub attempts: i32,
+    pub max_attempts: i32,
 }
 
 impl Store {
@@ -62,6 +64,60 @@ impl Store {
         .fetch_one(&self.pool)
         .await
         .map_err(Into::into)
+    }
+
+    /// Insert a work-source item only when the dedupe key is not already present.
+    /// Returns `None` when the item already exists, so callers can skip cleanly.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn try_enqueue_team_item(
+        &self,
+        org_id: Uuid,
+        team_id: Uuid,
+        external_key: &str,
+        repository: Option<&str>,
+        payload: &Value,
+        max_attempts: i32,
+    ) -> StoreResult<Option<TeamQueueItem>> {
+        sqlx::query_as::<_, TeamQueueItem>(
+            r#"
+            INSERT INTO team_queue_items
+                (id, org_id, team_id, external_key, repository, payload, max_attempts)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (team_id, external_key) DO NOTHING
+            RETURNING *
+            "#,
+        )
+        .bind(orbit_domain::new_id())
+        .bind(org_id)
+        .bind(team_id)
+        .bind(external_key)
+        .bind(repository)
+        .bind(payload)
+        .bind(max_attempts)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    pub async fn list_team_queue_external_keys(&self, team_id: Uuid) -> StoreResult<Vec<String>> {
+        Ok(sqlx::query_scalar::<_, String>(
+            "SELECT external_key FROM team_queue_items WHERE team_id = $1",
+        )
+        .bind(team_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_team_queue_item_by_run(
+        &self,
+        team_run_id: Uuid,
+    ) -> StoreResult<Option<TeamQueueItem>> {
+        Ok(sqlx::query_as::<_, TeamQueueItem>(
+            "SELECT * FROM team_queue_items WHERE team_run_id = $1",
+        )
+        .bind(team_run_id)
+        .fetch_optional(&self.pool)
+        .await?)
     }
 
     pub async fn get_team_queue_item(
@@ -135,5 +191,73 @@ impl Store {
             return Err(StoreError::NotFound("team queue item".into()));
         }
         Ok(())
+    }
+
+    /// Return a failed item to pending for another attempt.
+    pub async fn retry_team_queue_item(
+        &self,
+        org_id: Uuid,
+        item_id: Uuid,
+        error: Option<&str>,
+    ) -> StoreResult<TeamQueueItem> {
+        sqlx::query_as::<_, TeamQueueItem>(
+            r#"
+            UPDATE team_queue_items
+            SET status = 'pending', error = $3, attempts = attempts + 1,
+                team_run_id = NULL, updated_at = now()
+            WHERE org_id = $1 AND id = $2
+            RETURNING *
+            "#,
+        )
+        .bind(org_id)
+        .bind(item_id)
+        .bind(error)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("team queue item".into()))
+    }
+
+    /// Manual requeue: pending again without consuming an attempt.
+    pub async fn requeue_team_queue_item(
+        &self,
+        org_id: Uuid,
+        item_id: Uuid,
+    ) -> StoreResult<TeamQueueItem> {
+        sqlx::query_as::<_, TeamQueueItem>(
+            r#"
+            UPDATE team_queue_items
+            SET status = 'pending', error = NULL, team_run_id = NULL, updated_at = now()
+            WHERE org_id = $1 AND id = $2
+            RETURNING *
+            "#,
+        )
+        .bind(org_id)
+        .bind(item_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("team queue item".into()))
+    }
+
+    /// Cancel a queued/running item and detach any in-flight run link.
+    pub async fn cancel_team_queue_item(
+        &self,
+        org_id: Uuid,
+        item_id: Uuid,
+        error: Option<&str>,
+    ) -> StoreResult<TeamQueueItem> {
+        sqlx::query_as::<_, TeamQueueItem>(
+            r#"
+            UPDATE team_queue_items
+            SET status = 'cancelled', error = $3, team_run_id = NULL, updated_at = now()
+            WHERE org_id = $1 AND id = $2
+            RETURNING *
+            "#,
+        )
+        .bind(org_id)
+        .bind(item_id)
+        .bind(error)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("team queue item".into()))
     }
 }

@@ -49,11 +49,54 @@ struct BrokerState {
     tools: Vec<ToolSpec>,
     token: String,
     http: reqwest::Client,
+    repo_specs: Vec<crate::git::RepoSpec>,
 }
 
 enum ConnectorClient {
     Github(GitHubClientConfig),
     Gitlab(GitLabClientConfig),
+}
+
+impl BrokerState {
+    fn repo_target(
+        &self,
+        repository: Option<&str>,
+    ) -> Result<(std::path::PathBuf, uuid::Uuid), String> {
+        if self.repo_specs.is_empty() {
+            return Ok((self.workspace.clone(), self.connection.id));
+        }
+        if self.repo_specs.len() == 1 {
+            let spec = &self.repo_specs[0];
+            let path = if spec.path.is_empty() {
+                self.workspace.clone()
+            } else {
+                self.workspace.join(&spec.path)
+            };
+            return Ok((path, spec.connection_id.unwrap_or(self.connection.id)));
+        }
+        let repository = repository
+            .ok_or_else(|| {
+                "multi-repository workspace requires a 'repository' argument (owner/repo)"
+                    .to_string()
+            })?
+            .trim();
+        let spec = self
+            .repo_specs
+            .iter()
+            .find(|spec| spec.repository.eq_ignore_ascii_case(repository))
+            .ok_or_else(|| {
+                format!("repository '{repository}' is not part of this team workspace")
+            })?;
+        let path = if spec.primary && spec.path.is_empty() {
+            self.workspace.clone()
+        } else if spec.path.is_empty() {
+            self.workspace
+                .join(spec.repository.split('/').next_back().unwrap_or("repo"))
+        } else {
+            self.workspace.join(&spec.path)
+        };
+        Ok((path, spec.connection_id.unwrap_or(self.connection.id)))
+    }
 }
 
 pub struct BrokerHandle {
@@ -65,8 +108,13 @@ pub struct BrokerHandle {
 
 impl BrokerHandle {
     pub fn mcp_command(&self) -> Vec<String> {
-        vec![std::env::var("ORBIT_MCP_BROKER_BIN")
-            .unwrap_or_else(|_| "/usr/local/bin/orbit-mcp-broker".to_string())]
+        let bin = std::env::var("ORBIT_MCP_BROKER_BIN")
+            .unwrap_or_else(|_| "/usr/local/bin/orbit-worker".to_string());
+        if bin.ends_with("orbit-worker") || bin.ends_with("orbit-worker.exe") {
+            vec![bin, "mcp-broker".to_string()]
+        } else {
+            vec![bin]
+        }
     }
 }
 
@@ -156,6 +204,7 @@ fn github_tool_specs(
                 "pulls.create" => json!({
                     "type": "object",
                     "properties": {
+                        "repository": { "type": "string", "description": "owner/repo; alternative to owner+repo" },
                         "owner": { "type": "string" }, "repo": { "type": "string" },
                         "title": { "type": "string", "minLength": 1, "maxLength": 256 },
                         "head": { "type": "string", "description": "Source branch" },
@@ -176,6 +225,7 @@ fn github_tool_specs(
                 "repo.commit" => json!({
                     "type": "object",
                     "properties": {
+                        "repository": { "type": "string", "description": "owner/repo; required for multi-repo workspaces" },
                         "message": { "type": "string", "minLength": 1, "maxLength": 2000 }
                     },
                     "required": ["message"]
@@ -183,6 +233,7 @@ fn github_tool_specs(
                 "repo.push" => json!({
                     "type": "object",
                     "properties": {
+                        "repository": { "type": "string", "description": "owner/repo; required for multi-repo workspaces" },
                         "branch": { "type": "string", "minLength": 1, "maxLength": 200 }
                     },
                     "required": ["branch"]
@@ -362,12 +413,18 @@ fn gitlab_tool_specs(
                 }),
                 "repo.commit" => json!({
                     "type": "object",
-                    "properties": { "message": { "type": "string" } },
+                    "properties": {
+                        "repository": { "type": "string", "description": "project path; required for multi-repo workspaces" },
+                        "message": { "type": "string" }
+                    },
                     "required": ["message"]
                 }),
                 "repo.push" => json!({
                     "type": "object",
-                    "properties": { "branch": { "type": "string" } },
+                    "properties": {
+                        "repository": { "type": "string", "description": "project path; required for multi-repo workspaces" },
+                        "branch": { "type": "string" }
+                    },
                     "required": ["branch"]
                 }),
                 _ => json!({ "type": "object", "properties": {} }),
@@ -486,9 +543,8 @@ pub async fn start(
         connector_client,
         tools,
         token: format!("{}{}", Uuid::now_v7().simple(), Uuid::now_v7().simple()),
-        http: reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()?,
+        http: orbit_security::client_with_custom_ca(Duration::from_secs(30)),
+        repo_specs: crate::git::repo_specs(&execution.input),
     });
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
@@ -610,6 +666,13 @@ async fn call_tool(
     }
 
     let result = if matches!(tool.capability.as_str(), "repo.commit" | "repo.push") {
+        let repository = call.arguments.get("repository").and_then(Value::as_str);
+        let (workspace, connection_id) = match state.repo_target(repository) {
+            Ok(target) => target,
+            Err(error) => {
+                return tool_error(&state, tool, &call.arguments, &error).await;
+            }
+        };
         let outcome = if tool.capability == "repo.commit" {
             let message = call
                 .arguments
@@ -621,8 +684,8 @@ async fn call_tool(
                     crate::git::commit(
                         &state.client,
                         state.execution.id,
-                        state.connection.id,
-                        &state.workspace,
+                        connection_id,
+                        &workspace,
                         message,
                     )
                     .await
@@ -636,8 +699,8 @@ async fn call_tool(
                     crate::git::push(
                         &state.client,
                         state.execution.id,
-                        state.connection.id,
-                        &state.workspace,
+                        connection_id,
+                        &workspace,
                         branch,
                     )
                     .await
@@ -649,7 +712,8 @@ async fn call_tool(
     } else {
         match &state.connector_client {
             ConnectorClient::Github(config) => {
-                github::invoke(&state.http, config, &tool.capability, &call.arguments).await
+                let args = normalize_github_args(&call.arguments);
+                github::invoke(&state.http, config, &tool.capability, &args).await
             }
             ConnectorClient::Gitlab(config) => {
                 gitlab::invoke(&state.http, config, &tool.capability, &call.arguments).await
@@ -864,6 +928,22 @@ async fn record_audit(state: &BrokerState, action: &str, metadata: Value) {
     }
 }
 
+fn normalize_github_args(arguments: &Value) -> Value {
+    let mut args = arguments.clone();
+    if args.get("owner").and_then(Value::as_str).is_none()
+        && args.get("repo").and_then(Value::as_str).is_none()
+    {
+        if let Some(repository) = args.get("repository").and_then(Value::as_str) {
+            if let Some((owner, repo)) = repository.split_once('/') {
+                let (owner, repo) = (owner.to_string(), repo.to_string());
+                args["owner"] = json!(owner);
+                args["repo"] = json!(repo);
+            }
+        }
+    }
+    args
+}
+
 fn authorized(headers: &HeaderMap, token: &str) -> bool {
     headers
         .get(axum::http::header::AUTHORIZATION)
@@ -959,6 +1039,7 @@ mod tests {
             started_at: Some(Utc::now()),
             finished_at: None,
             updated_at: Utc::now(),
+            archived_at: None,
         };
         assert!(approval_wait_seconds(&execution) <= 60);
         execution.timeout_seconds = 3600;

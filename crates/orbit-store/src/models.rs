@@ -233,6 +233,7 @@ pub struct ExecutionRecord {
     pub started_at: Option<DateTime<Utc>>,
     pub finished_at: Option<DateTime<Utc>>,
     pub updated_at: DateTime<Utc>,
+    pub archived_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
@@ -392,6 +393,8 @@ pub struct AgentTeam {
     pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub last_poll_at: Option<DateTime<Utc>>,
+    pub last_poll_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
@@ -408,6 +411,7 @@ pub struct TeamRun {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub finished_at: Option<DateTime<Utc>>,
+    pub archived_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
@@ -451,6 +455,7 @@ pub struct WorkerLaunch {
     pub updated_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,
     pub stopped_at: Option<DateTime<Utc>>,
+    pub archived_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
@@ -470,6 +475,8 @@ pub struct WorkerProfile {
     pub model: Option<String>,
     pub auth_secret_name: Option<String>,
     pub env: serde_json::Value,
+    #[sqlx(default)]
+    pub env_mappings: serde_json::Value,
     pub resources: serde_json::Value,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,

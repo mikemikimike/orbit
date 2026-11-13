@@ -38,6 +38,14 @@ pub struct ExecutionListQuery {
     pub cursor: Option<String>,
     pub status: Option<String>,
     pub agent_id: Option<Uuid>,
+    pub archived: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+#[into_params(parameter_in = Query)]
+pub struct ArchiveListQuery {
+    pub archived: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -184,12 +192,17 @@ pub struct CreateExecutionRequest {
     /// The task or message for the agent.
     pub task: String,
     #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
     pub payload: serde_json::Value,
     #[serde(default)]
     pub idempotency_key: Option<String>,
     /// Skills to materialize for this execution, in addition to the agent spec.
     #[serde(default)]
     pub skills: Vec<String>,
+    /// Override the agent's stored harness for this execution.
+    #[serde(default)]
+    pub harness_override: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]

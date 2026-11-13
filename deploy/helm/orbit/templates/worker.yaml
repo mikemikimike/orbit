@@ -66,12 +66,31 @@ spec:
             {{- if .Values.extraEnv }}
             {{- toYaml .Values.extraEnv | nindent 12 }}
             {{- end }}
+            {{- if .Values.caCertificates.enabled }}
+            - name: SSL_CERT_FILE
+              value: "/etc/ssl/certs/ca-bundle.crt"
+            - name: REQUESTS_CA_BUNDLE
+              value: "/etc/ssl/certs/ca-bundle.crt"
+            - name: NODE_EXTRA_CA_CERTS
+              value: "/etc/ssl/certs/ca-bundle.crt"
+            {{- end }}
           volumeMounts:
+            {{- if .Values.caCertificates.enabled }}
+            - name: ca-bundle
+              mountPath: /etc/ssl/certs/ca-bundle.crt
+              subPath: {{ .Values.caCertificates.key }}
+              readOnly: true
+            {{- end }}
             - name: tmp
               mountPath: /tmp
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}
       volumes:
+        {{- if .Values.caCertificates.enabled }}
+        - name: ca-bundle
+          secret:
+            secretName: {{ .Values.caCertificates.secretName }}
+        {{- end }}
         - name: tmp
           emptyDir:
             sizeLimit: {{ .Values.worker.workspace.sizeLimit }}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useRef, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -31,6 +31,7 @@ import {
   emptyAgentDefinition,
 } from "@orbit/contracts";
 import { cn, titleCase } from "@/lib/utils";
+import { cronDescription, effectLabel } from "@/lib/presentation";
 
 type Trigger = AgentDefinition["spec"]["triggers"][number];
 
@@ -60,6 +61,25 @@ export function AgentForm({
   const [harnessConfigText, setHarnessConfigText] = useState(
     JSON.stringify(initial?.spec.harness.config ?? {}, null, 2),
   );
+  const configFileRef = useRef<HTMLInputElement>(null);
+
+  function handleConfigUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      try {
+        JSON.parse(content);
+        setHarnessConfigText(content);
+        toast.success("Config loaded");
+      } catch {
+        toast.error("File must be valid JSON");
+      }
+    };
+    reader.readAsText(file);
+    if (configFileRef.current) configFileRef.current.value = "";
+  }
   const [configError, setConfigError] = useState<string | null>(null);
   const [issues, setIssues] = useState<Array<{ path: string; message: string }>>([]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -67,6 +87,10 @@ export function AgentForm({
   const selectedHarness = harnesses.data?.find((r) => r.kind === definition.spec.harness.type);
   const platformProviders = useMemo(
     () => providers.data?.filter((p) => p.kind === "openai_compatible") ?? [],
+    [providers.data],
+  );
+  const harnessProviders = useMemo(
+    () => providers.data?.filter((p) => p.kind === "harness_managed") ?? [],
     [providers.data],
   );
 
@@ -323,11 +347,13 @@ export function AgentForm({
                     }
                   >
                     <option value="on_demand">On demand</option>
-                    <option value="long_running" disabled>
-                      Long running (later phase)
-                    </option>
+                    <option value="long_running">Long running (24/7)</option>
                   </select>
-                  <p className={helpClass}>Harnesses are created per execution until long-running support lands.</p>
+                  <p className={helpClass}>
+                    On demand: harness is created per execution. Long running: the harness
+                    stays alive between executions (requires a harness that supports
+                    instances, e.g. mock for testing).
+                  </p>
                 </div>
                 <div className={fieldClass}>
                   <Label>Model management</Label>
@@ -358,22 +384,50 @@ export function AgentForm({
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className={fieldClass}>
                   <Label>Provider</Label>
-                  {definition.spec.model.management === "platform" ? (
+                  {(providers.data ?? []).length > 0 ? (
                     <select
                       className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
                       value={definition.spec.model.provider ?? ""}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const selected = (providers.data ?? []).find((p) => {
+                          const config = (p.config ?? {}) as Record<string, unknown>;
+                          const name = String(config.provider ?? p.name);
+                          return name === event.target.value || p.name === event.target.value;
+                        });
+                        const kind = selected?.kind;
                         updateSpec({
-                          model: { ...definition.spec.model, provider: event.target.value || undefined },
-                        })
-                      }
+                          model: {
+                            ...definition.spec.model,
+                            provider: event.target.value || undefined,
+                            management:
+                              kind === "harness_managed"
+                                ? "harness"
+                                : kind === "openai_compatible"
+                                  ? "platform"
+                                  : definition.spec.model.management,
+                          },
+                        });
+                      }}
                     >
                       <option value="">Select a provider…</option>
-                      {platformProviders.map((provider) => (
-                        <option key={provider.id} value={provider.name}>
-                          {provider.name}
-                        </option>
-                      ))}
+                      <optgroup label="Harness-authenticated (worker handles auth)">
+                        {harnessProviders.map((provider) => {
+                          const config = (provider.config ?? {}) as Record<string, unknown>;
+                          const name = String(config.provider ?? provider.name);
+                          return (
+                            <option key={provider.id} value={name}>
+                              {provider.name} · {name}
+                            </option>
+                          );
+                        })}
+                      </optgroup>
+                      <optgroup label="ORBIT-managed (API key stored in ORBIT)">
+                        {platformProviders.map((provider) => (
+                          <option key={provider.id} value={provider.name}>
+                            {provider.name}
+                          </option>
+                        ))}
+                      </optgroup>
                     </select>
                   ) : (
                     <Input
@@ -405,22 +459,47 @@ export function AgentForm({
                       })
                     }
                   />
-                  {platformProviders.length === 0 && definition.spec.model.management === "platform" ? (
+                  {definition.spec.model.management === "platform" && platformProviders.length === 0 ? (
                     <p className="text-[11px] text-[hsl(var(--warning))]">
-                      No providers configured yet. Add one under Models.
+                      No OpenAI-compatible providers configured yet. Add one under Models.
+                      {harnessProviders.length > 0
+                        ? " (You have harness-managed providers like OpenCode Go — switch Model management to 'Harness managed' to use them.)"
+                        : ""}
+                    </p>
+                  ) : null}
+                  {definition.spec.model.management === "harness" && harnessProviders.length === 0 ? (
+                    <p className="text-[11px] text-[hsl(var(--warning))]">
+                      No harness-managed providers configured yet. Add one under Models.
                     </p>
                   ) : null}
                 </div>
               </div>
 
               <div>
-                <button
-                  type="button"
-                  className="text-xs font-medium text-primary hover:underline"
-                  onClick={() => setAdvancedOpen((open) => !open)}
-                >
-                  {advancedOpen ? "Hide" : "Show"} harness-specific configuration (JSON)
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-primary hover:underline"
+                    onClick={() => setAdvancedOpen((open) => !open)}
+                  >
+                    {advancedOpen ? "Hide" : "Show"} harness-specific configuration (JSON)
+                  </button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => configFileRef.current?.click()}
+                  >
+                    Upload JSON
+                  </Button>
+                  <input
+                    ref={configFileRef}
+                    type="file"
+                    accept=".json"
+                    className="hidden"
+                    onChange={handleConfigUpload}
+                  />
+                </div>
                 {advancedOpen ? (
                   <div className="mt-2 space-y-1.5">
                     <Textarea
@@ -606,9 +685,9 @@ export function AgentForm({
                               )}
                             >
                               {selected ? <Check className="h-3 w-3" /> : null}
-                              {capability.id}
+                              {capability.name}
                               {capability.effect !== "read" ? (
-                                <span className="opacity-60">· {capability.effect.replace("_", " ")}</span>
+                                <span className="opacity-60">· {effectLabel(capability.effect)}</span>
                               ) : null}
                             </button>
                           );
@@ -695,6 +774,7 @@ export function AgentForm({
                           }
                           placeholder="*/30 * * * *"
                         />
+                        <p className={helpClass}>{cronDescription(trigger.cron)}</p>
                       </div>
                     ) : null}
                     {trigger.type === "event" ? (

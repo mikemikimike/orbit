@@ -28,15 +28,55 @@ export type WorkerView = components["schemas"]["WorkerView"];
 export type Skill = components["schemas"]["Skill"];
 export type WorkerProfile = components["schemas"]["WorkerProfile"];
 export type WorkerBootstrap = components["schemas"]["WorkerBootstrap"];
+export type WorkSource = {
+  provider: "github" | "gitlab";
+  enabled: boolean;
+  connectionId?: string | null;
+  repository?: string | null;
+  labels?: string[];
+  claimLabel?: string;
+  doneLabel?: string;
+  failedLabel?: string;
+  maxItems?: number;
+  maxAttempts?: number;
+  pollSeconds?: number;
+  autoRun?: boolean;
+  groupId?: string | null;
+  project?: string | null;
+  boardId?: number | null;
+};
+
+export type TeamRepository = {
+  connectionId?: string | null;
+  repository: string;
+  path?: string;
+  primary?: boolean;
+  branch?: string | null;
+};
+
 export type AgentTeam = {
   id: string;
   orgId: string;
   name: string;
   description: string;
-  definition: { mode?: "pipeline" | "native"; instructions?: string; repository?: string | null; branch?: string | null; workerProfileId?: string | null; autoLaunch?: boolean; skills?: string[]; steps?: Array<{ agentId: string }> };
+  definition: {
+    mode?: "pipeline" | "native";
+    instructions?: string;
+    repository?: string | null;
+    branch?: string | null;
+    workSource?: WorkSource | null;
+    repositories?: TeamRepository[];
+    model?: { provider?: string | null; model?: string | null; management?: string | null } | null;
+    workerProfileId?: string | null;
+    autoLaunch?: boolean;
+    skills?: string[];
+    steps?: Array<{ agentId: string; model?: { provider?: string | null; model?: string | null; management?: string | null } | null }>;
+  };
   createdBy?: string | null;
   createdAt: string;
   updatedAt: string;
+  lastPollAt?: string | null;
+  lastPollError?: string | null;
 };
 
 export type TeamRun = {

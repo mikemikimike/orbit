@@ -64,6 +64,12 @@ spec:
             {{- toYaml .Values.web.extraEnv | nindent 12 }}
             {{- end }}
           volumeMounts:
+            {{- if .Values.caCertificates.enabled }}
+            - name: ca-bundle
+              mountPath: /etc/ssl/certs/ca-bundle.crt
+              subPath: {{ .Values.caCertificates.key }}
+              readOnly: true
+            {{- end }}
             - name: tmp
               mountPath: /tmp
           startupProbe:
@@ -87,6 +93,11 @@ spec:
           resources:
             {{- toYaml .Values.web.resources | nindent 12 }}
       volumes:
+        {{- if .Values.caCertificates.enabled }}
+        - name: ca-bundle
+          secret:
+            secretName: {{ .Values.caCertificates.secretName }}
+        {{- end }}
         - name: tmp
           emptyDir:
             sizeLimit: 128Mi

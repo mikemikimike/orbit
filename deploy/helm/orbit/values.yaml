@@ -1,7 +1,7 @@
 # ORBIT Helm values (local / test cluster).
 # Usage: helm upgrade --install orbit ./deploy/helm/orbit -n orbit --create-namespace -f values.yaml
 #
-# This file matches the private-registry workflow used for the mkd.local cluster.
+# Default values for the ORBIT Helm chart.
 # Production: copy values-prod.example.yaml and use an external database + OIDC.
 
 nameOverride: ""
@@ -27,7 +27,7 @@ api:
 
 worker:
   image: orbit-worker
-  tag: 0.6.0
+  tag: 0.7.0
   # Scoped token issued by the API (POST /api/v1/worker-tokens). Required.
   token: ""
   replicas: 1
@@ -51,7 +51,7 @@ worker:
 opencodeWorker:
   enabled: false
   image: orbit-worker-opencode
-  tag: 0.6.0
+  tag: 0.7.0
   # Token restricted to the opencode harness. Required when enabled.
   token: ""
   replicas: 1
@@ -80,7 +80,7 @@ opencodeWorker:
 
 web:
   image: orbit-web
-  tag: 0.6.0
+  tag: 0.7.0
   replicas: 1
   port: 3000
   resources:
@@ -96,7 +96,7 @@ web:
 launcher:
   enabled: false
   image: orbit-launcher
-  tag: 0.6.0
+  tag: 0.7.0
   token: ""
   imagePullSecret: ""
   resources:
@@ -225,6 +225,13 @@ podAnnotations: {}
 
 # Extra environment variables for all backend workloads (list of env objects).
 extraEnv: []
+
+# Custom CA certificates for environments with private CAs (e.g. corporate proxies).
+# Provide a Secret containing a `ca-bundle.crt` key (PEM, may contain multiple certs).
+caCertificates:
+  enabled: false
+  secretName: ""
+  key: "ca-bundle.crt"
 nodeSelector: {}
 tolerations: []
 affinity: {}

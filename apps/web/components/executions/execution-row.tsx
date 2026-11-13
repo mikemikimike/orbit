@@ -18,6 +18,10 @@ export function ExecutionRow({
     typeof execution.input === "object" && execution.input && "task" in execution.input
       ? String((execution.input as { task?: unknown }).task ?? "")
       : "";
+  const workName =
+    typeof execution.input === "object" && execution.input && "name" in execution.input
+      ? String((execution.input as { name?: unknown }).name ?? "")
+      : "";
 
   return (
     <Link
@@ -30,7 +34,7 @@ export function ExecutionRow({
       <ExecutionStatusBadge status={execution.status} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">
-          {showAgent ? execution.agentName : truncate(task || "Execution", 80)}
+          {workName || (showAgent ? execution.agentName : truncate(task || "Execution", 80))}
         </p>
         <p className="truncate text-[11px] text-muted-foreground">
           {showAgent ? truncate(task || "No task recorded", 90) : titleCase(execution.triggerSource)}

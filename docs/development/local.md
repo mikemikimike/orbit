@@ -71,7 +71,7 @@ docker compose --env-file .env -f deploy/compose/compose.yaml up -d launcher api
 ```
 
 Docker treats the registry IP and DNS name as different image names. The Compose
-launcher therefore aliases `192.168.1.201:5000` to `registry.mdk.local:5000` by default
+launcher therefore aliases `registry.example.com:5000` to `registry.example.com:5000` by default
 (`ORBIT_LAUNCHER_IMAGE_ALIASES`), so locally built/pulled images can be used offline.
 
 For Docker-launched OpenCode/Pi workers, set `ORBIT_OPENCODE_AUTH_HOST_PATH` or

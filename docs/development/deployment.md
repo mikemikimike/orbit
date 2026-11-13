@@ -21,39 +21,39 @@ docker build -f deploy/docker/web.Dockerfile -t orbit-web:dev .
 
 ## Helm
 
-The chart is tailored to the mkd.local / microk8s environment used for this project:
+The chart is tailored to the example.com / your-cluster environment used for this project:
 
-- private registry `192.168.1.201:5000` (HTTP, LAN-only; Docker may trust it as
-  `registry.mdk.local:5000`, which resolves to the same host)
+- private registry `registry.example.com:5000` (HTTP, LAN-only; Docker may trust it as
+  `registry.example.com:5000`, which resolves to the same host)
 - images built for `linux/amd64`
-- namespace `orbit`, ingress host `orbit.mdk.local`, ingress class `nginx`
+- namespace `orbit`, ingress host `orbit.example.com`, ingress class `nginx`
 
 ```bash
 # 1. Build and push images (native arm64 dev machine → amd64 cluster)
 TAG=0.1.0 ./scripts/build-images.sh
-PUSH_REGISTRY=registry.mdk.local:5000 TAG=0.1.0 ./scripts/push-images.sh
+PUSH_REGISTRY=registry.example.com:5000 TAG=0.1.0 ./scripts/push-images.sh
 
 # 2. Deploy (workers need scoped tokens)
 #    Start the API first, then issue tokens:
 MOCK_TOKEN=$(curl -s -X POST -H "Authorization: Bearer $DEV_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"name":"cluster-mock","harnesses":["mock"]}' \
-  http://orbit.mdk.local/api/v1/worker-tokens | jq -r .token)
+  http://orbit.example.com/api/v1/worker-tokens | jq -r .token)
 OPENCODE_TOKEN=$(curl -s -X POST -H "Authorization: Bearer $DEV_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"name":"cluster-opencode","harnesses":["opencode"]}' \
-  http://orbit.mdk.local/api/v1/worker-tokens | jq -r .token)
+  http://orbit.example.com/api/v1/worker-tokens | jq -r .token)
 
-KUBE_CONTEXT=microk8s NAMESPACE=orbit TAG=0.5.0 \
+KUBE_CONTEXT=your-cluster NAMESPACE=orbit TAG=0.5.0 \
   ./scripts/deploy.sh \
   --set worker.token="$MOCK_TOKEN" \
   --set opencodeWorker.token="$OPENCODE_TOKEN"
 
 # Equivalent explicit Helm command
-helm --kube-context microk8s upgrade --install orbit deploy/helm/orbit \
+helm --kube-context your-cluster upgrade --install orbit deploy/helm/orbit \
   --namespace orbit --create-namespace \
   -f deploy/helm/orbit/values.yaml \
-  --set imageRegistry=192.168.1.201:5000 \
+  --set imageRegistry=registry.example.com:5000 \
   --set api.tag=0.5.0 --set worker.tag=0.5.0 --set web.tag=0.5.0 \
   --set worker.token="$MOCK_TOKEN" --set opencodeWorker.token="$OPENCODE_TOKEN"
 ```
@@ -78,23 +78,23 @@ Ingress routes: `/docs`, `/healthz`, `/readyz` → `orbit-api`; `/api` → `orbi
 server-side when dev auth is enabled and forwarding OIDC/API bearer headers otherwise);
 `/` → `orbit-web`.
 The chart sets SSE-friendly nginx annotations (`proxy-buffering: off`, long
-read/send timeouts). Point `orbit.mdk.local` at the ingress address (or add an
+read/send timeouts). Point `orbit.example.com` at the ingress address (or add an
 `/etc/hosts`/split-DNS entry).
 
-Validation status: the chart has been deployed to the microk8s cluster
-(`http://orbit.mdk.local`, ingress address `192.168.1.200`) and smoke-tested end-to-end
+Validation status: the chart has been deployed to the your-cluster cluster
+(`http://orbit.example.com`, ingress address `INGRESS_IP`) and smoke-tested end-to-end
 (ingress → web proxy → API → Postgres → worker → mock harness → SSE). It was also
 deployed to a local test cluster.
 
 ### macOS "no route to host" while the cluster is up
 
-If `curl https://192.168.1.6:16443/version` works but `kubectl` fails with
-`dial tcp 192.168.1.6:16443: connect: no route to host`, macOS Local Network privacy is
+If `curl https://KUBE_API_IP:16443/version` works but `kubectl` fails with
+`dial tcp KUBE_API_IP:16443: connect: no route to host`, macOS Local Network privacy is
 likely blocking the `kubectl` binary (unsigned/third-party binaries can be denied even
 when the terminal app is allowed). Fix it in **System Settings → Privacy & Security →
 Local Network** by enabling your terminal and `kubectl`, or run the deployment from an
 allowed terminal. As a temporary workaround, forward the API through a loopback relay
-started by an allowed interpreter (`127.0.0.1:16444` → `192.168.1.6:16443`) and use a
+started by an allowed interpreter (`127.0.0.1:16444` → `KUBE_API_IP:16443`) and use a
 kubeconfig whose server is `https://127.0.0.1:16444`; kubectl then only needs loopback.
 
 Key values:
@@ -130,7 +130,7 @@ helm upgrade orbit deploy/helm/orbit -n orbit --reuse-values \
 
 An init container imports the credentials into a writable emptyDir; the main container
 runs as non-root and executes `opencode run --standalone --format json`. Tested with
-OpenCode v2.2.5. Rotate credentials by recreating the Secret and restarting the
+OpenCode v2.3.0. Rotate credentials by recreating the Secret and restarting the
 Deployment. For local Docker/OrbStack, mount the exported auth file similarly or run the
 worker with `ORBIT_WORKER_HARNESSES=opencode` and a writable `HOME`.
 
@@ -152,3 +152,65 @@ later phase.
 Phase 0 runs the mock harness in the worker. Phase 1 adds the container/Job dispatcher:
 the worker creates a per-execution Job in its own namespace using a ServiceAccount with
 only `pods`/`jobs` permissions in that namespace, with limits and a TTL for cleanup.
+
+## Building a custom worker image
+
+A worker image only needs the `orbit-worker` binary and a harness CLI. The
+`orbit-mcp-broker` binary is no longer required separately — it is now a
+subcommand of `orbit-worker` (`orbit-worker mcp-broker`).
+
+### Minimal Dockerfile
+
+```dockerfile
+FROM debian:bookworm-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates git \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 orbit \
+    && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin orbit
+
+# Copy the single worker binary (download from GitHub releases or build from source).
+COPY orbit-worker /usr/local/bin/orbit-worker
+RUN chmod 0755 /usr/local/bin/orbit-worker
+
+# Add your harness CLI here, e.g.:
+# RUN npm install -g @earendil-works/pi-coding-agent@1.5.2
+# or: RUN curl -fsSL ... -o /usr/local/bin/opencode && chmod 0755 /usr/local/bin/opencode
+
+USER 10001:10001
+ENV ORBIT_WORKSPACE_ROOT=/tmp/orbit-workspaces
+ENTRYPOINT ["/usr/local/bin/orbit-worker"]
+```
+
+### Required environment variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `ORBIT_API_URL` | yes | Control plane URL (e.g. `http://orbit-api:8080`) |
+| `ORBIT_WORKER_TOKEN` | yes | Worker auth token (issue via `POST /api/v1/worker-tokens` or a worker profile) |
+| `ORBIT_WORKER_HARNESSES` | yes | Comma-separated harness kinds this worker claims (`mock`, `opencode`, `pi`) |
+| `ORBIT_WORKER_TARGET` | yes | `local`, `docker`, or `kubernetes` (must match agent placement) |
+| `ORBIT_WORKSPACE_ROOT` | no | Writable scratch dir (default `/tmp/orbit-workspaces`) |
+| `ORBIT_WORKER_POLL_MS` | no | Poll interval in ms (default `1000`) |
+| `ORBIT_WORKER_CONCURRENCY` | no | Max concurrent executions (default `4`) |
+| `ORBIT_WORKER_PROFILE_ID` | no | Load a worker profile (agents, skills, auth) |
+
+### Obtaining the binary
+
+Pre-built binaries are attached to every GitHub release:
+
+- `orbit-worker-linux-amd64` — x86_64 Linux
+- `orbit-worker-linux-arm64` — ARM64 Linux
+
+Or build from source:
+
+```bash
+cargo build --release -p orbit-worker --bin orbit-worker
+# binary: target/release/orbit-worker
+```
+
+### Verifying connectivity
+
+After starting the worker, check `GET /api/v1/workers` — the worker should appear
+with `live: true` within 30 seconds. Executions with matching harness and placement
+will be claimed automatically.

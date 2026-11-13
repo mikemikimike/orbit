@@ -310,6 +310,9 @@ impl Store {
     ) -> StoreResult<Agent> {
         let current = self.get_agent(org_id, agent_id).await?;
         let current_status = AgentStatus::parse(&current.status).unwrap_or(AgentStatus::Draft);
+        if current_status == target {
+            return Ok(current);
+        }
         let allowed = match target {
             AgentStatus::Active => current_status.can_activate(),
             AgentStatus::Paused => current_status.can_pause(),

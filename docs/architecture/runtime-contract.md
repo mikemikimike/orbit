@@ -115,7 +115,7 @@ files, and forced teardown on timeout/cancel.
 ## Implementation status
 
 - `mock` — implemented, used for local development and contract tests.
-- `opencode` — **available**, tested against OpenCode **v2.2.5**:
+- `opencode` — **available**, tested against OpenCode **v2.3.0**:
   - `opencode run --standalone --format json` in a per-execution workspace
   - trusted instructions written to `AGENTS.md`; untrusted input passed in the prompt
   - NDJSON text/tool/usage/error events mapped to ORBIT harness events
@@ -131,7 +131,7 @@ files, and forced teardown on timeout/cancel.
   - limitation: ORBIT platform providers are not yet mapped into OpenCode's provider
     config (`supports_platform_providers=false`); use OpenCode-managed auth for now.
 - `pi` — **available** for host/local workers and the Docker dispatcher (tested against
-  Pi **1.5.0**): `pi --print --mode json`, session capture/resume, JSON event mapping,
+  Pi **1.5.2**): `pi --print --mode json`, session capture/resume, JSON event mapping,
   cancellation/timeout, trusted `--append-system-prompt`, and a platform-enforced
   read-only tool allowlist (`read,grep,find,ls`) at autonomy L1/L2. The adapter accepts
   `skills` paths and writes the execution-scoped `.pi/mcp.json` broker bridge; MCP tool

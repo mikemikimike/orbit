@@ -115,6 +115,18 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/agent-teams/{team_id}/queue/{item_id}/run",
             post(handlers::team_queue::run_item),
         )
+        .route(
+            "/api/v1/agent-teams/{team_id}/queue/{item_id}/retry",
+            post(handlers::team_queue::retry),
+        )
+        .route(
+            "/api/v1/agent-teams/{team_id}/queue/{item_id}/requeue",
+            post(handlers::team_queue::requeue),
+        )
+        .route(
+            "/api/v1/agent-teams/{team_id}/queue/{item_id}/cancel",
+            post(handlers::team_queue::cancel),
+        )
         .route("/api/v1/team-runs", get(handlers::teams::list_runs))
         .route("/api/v1/team-runs/{run_id}", get(handlers::teams::get_run))
         .route("/api/v1/harnesses", get(handlers::catalog::list_harnesses))
@@ -166,7 +178,12 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route(
             "/api/v1/worker-launches/{launch_id}",
-            get(handlers::worker_launches::get_launch),
+            get(handlers::worker_launches::get_launch)
+                .delete(handlers::worker_launches::delete_launch),
+        )
+        .route(
+            "/api/v1/worker-launches/{launch_id}/archive",
+            post(handlers::worker_launches::archive_launch),
         )
         .route(
             "/api/v1/worker-launches/{launch_id}/stop",
@@ -234,6 +251,10 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/dashboard/summary",
             get(handlers::dashboard::dashboard_summary),
         )
+        .route(
+            "/api/v1/settings/oidc",
+            get(handlers::settings::get_oidc).put(handlers::settings::update_oidc),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_auth,
@@ -265,6 +286,18 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/worker/executions/{execution_id}/complete",
             post(handlers::worker_api::complete),
+        )
+        .route(
+            "/api/v1/worker/memory/list",
+            post(handlers::worker_api::list_memory),
+        )
+        .route(
+            "/api/v1/worker/memory/store",
+            post(handlers::worker_api::store_memory),
+        )
+        .route(
+            "/api/v1/worker/env",
+            get(handlers::worker_api::resolve_env),
         )
         .route(
             "/api/v1/worker/executions/{execution_id}/cancel",

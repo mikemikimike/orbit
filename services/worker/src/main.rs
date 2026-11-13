@@ -1,5 +1,6 @@
 mod broker;
 mod client;
+mod mcp_broker;
 mod connectors;
 mod dispatch;
 mod git;
@@ -88,11 +89,29 @@ impl WorkerConfig {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
+
+    // Subcommand dispatch: `orbit-worker mcp-broker` runs the MCP stdio bridge
+    // so a single binary can be shipped in custom worker images.
+    if std::env::args().nth(1).as_deref() == Some("mcp-broker") {
+        return mcp_broker::run().await;
+    }
+
     orbit_api::telemetry::init("orbit-worker");
 
     let config = WorkerConfig::from_env().context("invalid worker configuration")?;
     let client = WorkerClient::new(&config.api_url, &config.worker_token)
         .context("invalid worker API configuration")?;
+
+    // Fetch mapped environment variables from the API and set them for this process.
+    // These are available to spawned harness subprocesses (scripts, tools, etc.).
+    if let Ok(env_vars) = client.resolve_env().await {
+        for (key, value) in &env_vars {
+            std::env::set_var(key, value);
+        }
+        if !env_vars.is_empty() {
+            tracing::info!(count = env_vars.len(), "loaded mapped environment variables");
+        }
+    }
     let registry = Arc::new(HarnessRegistry::builtin());
 
     // The API may still be migrating/seeding while a worker starts. Retry session

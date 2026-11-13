@@ -4,7 +4,7 @@ A practical, repeatable user flow for validating the web experience. Run it agai
 fastest environment available:
 
 - **Local Compose** — `http://localhost:3000` (recommended; see `docs/development/local.md`)
-- **Kubernetes** — `http://orbit.mdk.local` (slower, but validates ingress/proxy/SSE)
+- **Kubernetes** — `http://orbit.example.com` (slower, but validates ingress/proxy/SSE)
 
 Use a fresh database for the full flow (`docker compose ... down -v` locally). Dev auth is
 enabled, so the browser needs no login; the web container injects the dev token server-side.

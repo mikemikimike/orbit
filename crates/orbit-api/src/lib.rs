@@ -9,6 +9,7 @@ pub mod background;
 pub mod bootstrap;
 pub mod config;
 pub mod connectors;
+pub mod dispatcher;
 pub mod dto;
 pub mod error;
 pub mod extract;
@@ -18,7 +19,9 @@ pub mod openapi;
 pub mod request_id;
 pub mod routes;
 pub mod state;
+pub mod team_outcomes;
 pub mod telemetry;
+pub mod work_sources;
 pub mod worker_auth;
 
 pub use bootstrap::{initialize, Initialized};

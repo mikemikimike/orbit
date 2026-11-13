@@ -1,7 +1,13 @@
 "use client";
 
 import { API_BASE_URL, getAccessToken } from "./api";
-import type { AgentTeam, TeamRun, TeamRunDetail } from "./types";
+import type {
+  AgentTeam,
+  TeamRun,
+  TeamRunDetail,
+  TeamRepository,
+  WorkSource,
+} from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAccessToken();
@@ -36,6 +42,8 @@ type TeamInput = {
   instructions: string;
   repository?: string;
   branch?: string;
+  workSource?: WorkSource | null;
+  repositories?: TeamRepository[];
   workerProfileId?: string;
   autoLaunch?: boolean;
   skills: string[];
@@ -68,6 +76,7 @@ export function startTeamRun(
   task: string,
   repository?: string,
   autoApprove = false,
+  harnessOverride?: string,
 ): Promise<TeamRunDetail> {
   return request<TeamRunDetail>(`/api/v1/agent-teams/${teamId}/runs`, {
     method: "POST",
@@ -75,12 +84,14 @@ export function startTeamRun(
       task,
       payload: repository?.trim() ? { repository: repository.trim() } : {},
       autoApprove,
+      harnessOverride: harnessOverride || undefined,
     }),
   });
 }
 
-export function listTeamRuns(): Promise<TeamRun[]> {
-  return request<TeamRun[]>("/api/v1/team-runs");
+export function listTeamRuns(archived?: boolean): Promise<TeamRun[]> {
+  const query = archived === undefined ? "" : `?archived=${archived}`;
+  return request<TeamRun[]>(`/api/v1/team-runs${query}`);
 }
 
 export function getTeamRun(runId: string): Promise<TeamRunDetail> {
@@ -121,6 +132,36 @@ export function runTeamQueueItem(
 ): Promise<TeamRunDetail> {
   return request<TeamRunDetail>(
     `/api/v1/agent-teams/${teamId}/queue/${itemId}/run`,
+    { method: "POST", body: "{}" },
+  );
+}
+
+export function retryTeamQueueItem(
+  teamId: string,
+  itemId: string,
+): Promise<TeamQueueItem> {
+  return request<TeamQueueItem>(
+    `/api/v1/agent-teams/${teamId}/queue/${itemId}/retry`,
+    { method: "POST", body: "{}" },
+  );
+}
+
+export function requeueTeamQueueItem(
+  teamId: string,
+  itemId: string,
+): Promise<TeamQueueItem> {
+  return request<TeamQueueItem>(
+    `/api/v1/agent-teams/${teamId}/queue/${itemId}/requeue`,
+    { method: "POST", body: "{}" },
+  );
+}
+
+export function cancelTeamQueueItem(
+  teamId: string,
+  itemId: string,
+): Promise<TeamQueueItem> {
+  return request<TeamQueueItem>(
+    `/api/v1/agent-teams/${teamId}/queue/${itemId}/cancel`,
     { method: "POST", body: "{}" },
   );
 }

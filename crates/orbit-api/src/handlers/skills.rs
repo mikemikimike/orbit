@@ -199,6 +199,8 @@ fn validate_files(files: &serde_json::Value) -> Result<(), Vec<ValidationIssue>>
     if map.len() > 50 {
         issues.push(ValidationIssue::new("files", "at most 50 files per skill"));
     }
+    let allowed_script_exts = [".sh", ".bash", ".py", ".js", ".ts", ".rb", ".pl", ".go"];
+    let mut script_bytes = 0usize;
     for (path, value) in map {
         let safe = !path.starts_with('/')
             && !path.contains("..")
@@ -210,7 +212,34 @@ fn validate_files(files: &serde_json::Value) -> Result<(), Vec<ValidationIssue>>
                 format!("files.{path}"),
                 "use a relative file path with string content",
             ));
+            continue;
         }
+        let is_script = path.starts_with("scripts/") || path.contains("/scripts/");
+        if is_script {
+            let has_allowed_ext = allowed_script_exts.iter().any(|ext| path.ends_with(ext));
+            if !has_allowed_ext {
+                issues.push(ValidationIssue::new(
+                    format!("files.{path}"),
+                    format!("scripts must have an allowed extension: {}", allowed_script_exts.join(", ")),
+                ));
+            }
+            if let Some(content) = value.as_str() {
+                let bytes = content.len();
+                if bytes > 100_000 {
+                    issues.push(ValidationIssue::new(
+                        format!("files.{path}"),
+                        "script must be <= 100KB",
+                    ));
+                }
+                script_bytes += bytes;
+            }
+        }
+    }
+    if script_bytes > 1_000_000 {
+        issues.push(ValidationIssue::new(
+            "files",
+            "total script content must be <= 1MB",
+        ));
     }
     if issues.is_empty() {
         Ok(())

@@ -27,7 +27,7 @@ import { errorMessage } from "@orbit/api-client";
 
 export default function DashboardPage() {
   const dashboard = useDashboard();
-  const agents = useAgents({ limit: 4 });
+  const agents = useAgents({ status: "active", limit: 4 });
   const summary = dashboard.data?.summary;
   const usage = ((dashboard.data?.usage ?? {}) as { days?: Array<{ day: string; executions: number }> }).days ?? [];
 

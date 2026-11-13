@@ -85,7 +85,7 @@
 
   <rect x="910" y="228" width="226" height="86" rx="10" class="card-teal"/>
   <text x="928" y="248" class="box-title">orbit-worker-opencode</text>
-  <text x="928" y="265" class="box-line">OpenCode CLI v2.2.5</text>
+  <text x="928" y="265" class="box-line">OpenCode CLI v2.3.0</text>
   <text x="928" y="281" class="box-line">per-execution workspace</text>
   <text x="928" y="297" class="box-muted">AGENTS.md · NDJSON events · cancel</text>
 

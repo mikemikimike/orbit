@@ -47,7 +47,22 @@ pub async fn materialize(
                         if let Some(parent) = target.parent() {
                             let _ = tokio::fs::create_dir_all(parent).await;
                         }
-                        let _ = tokio::fs::write(target, content).await;
+                        let _ = tokio::fs::write(&target, content).await;
+                        // Make scripts executable.
+                        let is_script = path.starts_with("scripts/")
+                            || path.contains("/scripts/");
+                        if is_script {
+                            #[cfg(unix)]
+                            {
+                                use std::os::unix::fs::PermissionsExt;
+                                if let Ok(meta) = tokio::fs::metadata(&target).await {
+                                    let mut perms = meta.permissions();
+                                    perms.set_mode(0o755);
+                                    let _ = tokio::fs::set_permissions(&target, perms).await;
+                                }
+                            }
+                            tracing::info!(skill = %skill.slug, path = %path, "materialized executable script");
+                        }
                     }
                 }
             }

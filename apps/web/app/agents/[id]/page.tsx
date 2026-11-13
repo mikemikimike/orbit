@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -32,6 +34,7 @@ import { agentSpecSchema } from "@orbit/contracts";
 import { queryKeys, unwrap, useAgent, useAgentVersions, useExecutions } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 import { formatDateTime, formatDuration, relativeTime, titleCase } from "@/lib/utils";
+import { autonomyName, cronDescription } from "@/lib/presentation";
 
 export default function AgentDetailPage() {
   const params = useParams<{ id: string }>();
@@ -75,6 +78,21 @@ export default function AgentDetailPage() {
       ),
     onSuccess: () => {
       toast.success("Agent archived");
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents() });
+      router.push("/agents");
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const hardDelete = useMutation({
+    mutationFn: async () =>
+      unwrap(
+        await api.DELETE("/api/v1/agents/{agent_id}", {
+          params: { path: { agent_id: agentId }, query: { hard: true } },
+        }),
+      ),
+    onSuccess: () => {
+      toast.success("Agent deleted permanently");
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents() });
       router.push("/agents");
     },
@@ -160,7 +178,15 @@ export default function AgentDetailPage() {
                 >
                   <Zap /> Activate
                 </Button>
-              ) : null}
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={() => lifecycle.mutate("activate")}
+                  loading={lifecycle.isPending}
+                >
+                  <Zap /> Restore
+                </Button>
+              )}
               <RunAgentDialog agentId={data.id} agentName={data.name} disabled={!canRun} />
             </>
           }
@@ -173,7 +199,7 @@ export default function AgentDetailPage() {
           {titleCase(spec.harness.type)}
         </span>
         <span className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-[11px]">
-          <ShieldCheck className="h-3 w-3" /> Autonomy L{autonomy.level}
+          <ShieldCheck className="h-3 w-3" /> {autonomyName(autonomy.level)}
         </span>
         <span className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-[11px]">
           <Cable className="h-3 w-3" /> {spec.connectors.length} connectors
@@ -283,7 +309,9 @@ export default function AgentDetailPage() {
                         </span>
                         <span className="text-xs text-muted-foreground">
                           {trigger.kind === "schedule"
-                            ? String((trigger.config as { cron?: string }).cron ?? "")
+                            ? cronDescription(
+                                String((trigger.config as { cron?: string }).cron ?? ""),
+                              )
                             : trigger.kind === "event"
                               ? String((trigger.config as { subject?: string }).subject ?? "")
                               : ""}
@@ -303,10 +331,13 @@ export default function AgentDetailPage() {
           <Card className="border-destructive/30">
             <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-medium">Archive agent</p>
+                <p className="text-sm font-medium">
+                  {data.status === "archived" ? "Delete permanently" : "Archive agent"}
+                </p>
                 <p className="text-xs text-muted-foreground">
-                  Archiving preserves execution history. Hard deletion removes everything and cannot
-                  be undone.
+                  {data.status === "archived"
+                    ? "This removes the agent and its execution history. This cannot be undone."
+                    : "Archiving preserves execution history. Hard deletion removes everything and cannot be undone."}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -317,15 +348,19 @@ export default function AgentDetailPage() {
                     </Button>
                     <Button
                       variant="destructive"
-                      onClick={() => archive.mutate()}
-                      loading={archive.isPending}
+                      onClick={() =>
+                        data.status === "archived" ? hardDelete.mutate() : archive.mutate()
+                      }
+                      loading={archive.isPending || hardDelete.isPending}
                     >
-                      <Trash2 /> Confirm archive
+                      <Trash2 />{" "}
+                      {data.status === "archived" ? "Confirm delete" : "Confirm archive"}
                     </Button>
                   </>
                 ) : (
                   <Button variant="outline" onClick={() => setConfirmDelete(true)}>
-                    <Trash2 /> Archive
+                    <Trash2 />{" "}
+                    {data.status === "archived" ? "Delete permanently" : "Archive"}
                   </Button>
                 )}
               </div>

@@ -118,12 +118,7 @@ pub async fn hydrate(
             .to_string();
         let url = format!("{base_url}{X_SEARCH_PATH}");
 
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(20))
-            .build()
-            .map_err(|e| {
-                HarnessError::new(HarnessErrorKind::Internal, format!("http client: {e}"))
-            })?;
+        let client = orbit_security::client_with_custom_ca(std::time::Duration::from_secs(20));
         let response = client
             .get(&url)
             .bearer_auth(&credential.value)

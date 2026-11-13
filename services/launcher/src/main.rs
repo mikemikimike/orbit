@@ -451,9 +451,14 @@ async fn launch_kubernetes(
     if let Some(secret) = &state.image_pull_secret {
         spec["imagePullSecrets"] = json!([{ "name": secret }]);
     }
-    let manifest = json!({
-        "apiVersion": "v1",
-        "kind": "Pod",
+    let (api_version, kind) = if request.single_execution_id.is_some() {
+        ("batch/v1", "Job")
+    } else {
+        ("v1", "Pod")
+    };
+    let mut manifest = json!({
+        "apiVersion": api_version,
+        "kind": kind,
         "metadata": {
             "name": name,
             "namespace": state.namespace,
@@ -461,12 +466,27 @@ async fn launch_kubernetes(
         },
         "spec": spec
     });
+    // Jobs require a template wrapping the pod spec.
+    if request.single_execution_id.is_some() {
+        let pod_spec = manifest["spec"].clone();
+        manifest["spec"] = json!({
+            "ttlSecondsAfterFinished": 300,
+            "backoffLimit": 0,
+            "template": {
+                "metadata": {
+                    "labels": { "app.kubernetes.io/name": "orbit-worker", "orbit.launch-id": request.launch_id.to_string() }
+                },
+                "spec": pod_spec
+            }
+        });
+    }
+    let resource_type = if request.single_execution_id.is_some() { "job" } else { "pod" };
     let _ = Command::new(&state.kubectl)
         .args([
             "-n",
             &state.namespace,
             "delete",
-            "pod",
+            resource_type,
             &name,
             "--ignore-not-found",
         ])
@@ -501,26 +521,65 @@ async fn launch_kubernetes(
 }
 
 async fn kubernetes_status(state: &AppState, name: &str) -> LaunchStatus {
+    // Try job first, then pod.
     let output = Command::new(&state.kubectl)
         .args([
             "-n",
             &state.namespace,
             "get",
-            "pod",
+            "job",
             name,
             "-o",
-            "jsonpath={.status.phase}",
+            "jsonpath={.status.succeeded}|{.status.failed}|{.status.active}",
         ])
         .output()
         .await;
     let output = match output {
-        Ok(output) => output,
-        Err(error) => {
+        Ok(o) if o.status.success() => {
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            let parts: Vec<&str> = stdout.trim().split('|').collect();
+            let succeeded = parts.first().and_then(|s| s.parse::<i32>().ok()).unwrap_or(0);
+            let failed = parts.get(1).and_then(|s| s.parse::<i32>().ok()).unwrap_or(0);
+            let active = parts.get(2).and_then(|s| s.parse::<i32>().ok()).unwrap_or(0);
+            let status = if succeeded > 0 {
+                "stopped"
+            } else if failed > 0 {
+                "failed"
+            } else if active > 0 {
+                "running"
+            } else {
+                "starting"
+            };
             return LaunchStatus {
-                status: "failed".into(),
+                status: status.into(),
                 runtime_id: Some(name.into()),
                 worker_id: None,
-                error: Some(error.to_string()),
+                error: None,
+            };
+        }
+        _ => {
+            match Command::new(&state.kubectl)
+                .args([
+                    "-n",
+                    &state.namespace,
+                    "get",
+                    "pod",
+                    name,
+                    "-o",
+                    "jsonpath={.status.phase}",
+                ])
+                .output()
+                .await
+            {
+                Ok(output) => output,
+                Err(error) => {
+                    return LaunchStatus {
+                        status: "failed".into(),
+                        runtime_id: Some(name.into()),
+                        worker_id: None,
+                        error: Some(error.to_string()),
+                    }
+                }
             }
         }
     };

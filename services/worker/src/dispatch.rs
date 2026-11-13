@@ -110,7 +110,7 @@ pub async fn run(
         ("ORBIT_WORKSPACE_ROOT", "/tmp/orbit-workspaces".into()),
         (
             "ORBIT_MCP_BROKER_BIN",
-            "/usr/local/bin/orbit-mcp-broker".into(),
+            "/usr/local/bin/orbit-worker".into(),
         ),
         (
             "ORBIT_LOG_FORMAT",

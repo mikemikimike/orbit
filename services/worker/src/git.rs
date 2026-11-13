@@ -10,6 +10,49 @@ use tokio::process::Command;
 
 use crate::client::{WorkerClient, WorkerConnection};
 
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoSpec {
+    pub connection_id: Option<uuid::Uuid>,
+    pub repository: String,
+    #[serde(default)]
+    pub path: String,
+    #[serde(default)]
+    pub primary: bool,
+    #[serde(default)]
+    pub branch: Option<String>,
+}
+
+pub fn repo_specs(input: &Value) -> Vec<RepoSpec> {
+    input
+        .get("payload")
+        .and_then(|payload| payload.get("repositories"))
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| serde_json::from_value::<RepoSpec>(item.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn validate_repo_path(path: &str) -> anyhow::Result<()> {
+    if path.is_empty() {
+        return Ok(());
+    }
+    if path.starts_with('/') || path.starts_with('\\') || path.contains(":") {
+        anyhow::bail!("repository path must be a relative workspace path");
+    }
+    if path
+        .split('/')
+        .any(|segment| segment.is_empty() || segment == "." || segment == "..")
+    {
+        anyhow::bail!("repository path cannot escape the workspace");
+    }
+    Ok(())
+}
+
 fn git_available() -> bool {
     which("git")
 }
@@ -123,6 +166,9 @@ fn validate_repo(connection: &WorkerConnection, repo: &str) -> anyhow::Result<()
 }
 
 /// Clone the GitHub repository into the workspace before the harness starts.
+///
+/// Single-repository compatibility path. Multi-repository teams should use
+/// `checkout_workspace`, which reads the execution's repository list.
 pub async fn checkout(
     client: &WorkerClient,
     execution_id: uuid::Uuid,
@@ -133,21 +179,97 @@ pub async fn checkout(
     let Some(connection_id) = connection_id else {
         return Ok(None);
     };
+    let connection = client.connection(execution_id, connection_id).await?;
+    let Some(repo) = repo_name(&connection, input) else {
+        return Ok(Some(
+            "repository checkout skipped: no repository configured".into(),
+        ));
+    };
+    checkout_repository(
+        client,
+        execution_id,
+        connection_id,
+        &repo,
+        input_string(input, "branch").as_deref(),
+        workspace,
+    )
+    .await
+    .map(Some)
+}
+
+/// Check out the repository list from the execution payload sequentially.
+///
+/// A single repository preserves the current root layout for compatibility; multiple
+/// repositories are cloned into their declared workspace subdirectories.
+pub async fn checkout_workspace(
+    client: &WorkerClient,
+    execution_id: uuid::Uuid,
+    default_connection_id: Option<uuid::Uuid>,
+    input: &Value,
+    workspace: &Path,
+) -> anyhow::Result<Vec<String>> {
+    let specs = repo_specs(input);
+    if specs.is_empty() {
+        if let Some(note) = checkout(
+            client,
+            execution_id,
+            default_connection_id,
+            input,
+            workspace,
+        )
+        .await?
+        {
+            return Ok(vec![note]);
+        }
+        return Ok(Vec::new());
+    }
+
+    let single = specs.len() == 1;
+    let mut notes = Vec::new();
+    for spec in &specs {
+        validate_repo_path(&spec.path)?;
+        let target = if single && spec.path.is_empty() {
+            workspace.to_path_buf()
+        } else if spec.path.is_empty() {
+            workspace.join(spec.repository.split('/').next_back().unwrap_or("repo"))
+        } else {
+            workspace.join(&spec.path)
+        };
+        let connection_id = spec
+            .connection_id
+            .or(default_connection_id)
+            .ok_or_else(|| anyhow::anyhow!("repository '{}' has no connection", spec.repository))?;
+        notes.push(
+            checkout_repository(
+                client,
+                execution_id,
+                connection_id,
+                &spec.repository,
+                spec.branch.as_deref(),
+                &target,
+            )
+            .await?,
+        );
+    }
+    Ok(notes)
+}
+
+async fn checkout_repository(
+    client: &WorkerClient,
+    execution_id: uuid::Uuid,
+    connection_id: uuid::Uuid,
+    repo: &str,
+    branch: Option<&str>,
+    workspace: &Path,
+) -> anyhow::Result<String> {
     if workspace.join(".git").exists() {
-        return Ok(Some("repository already checked out".into()));
+        return Ok(format!("repository {repo} already checked out"));
     }
     if !git_available() {
         anyhow::bail!("repo.checkout requires git in the worker image");
     }
     let connection = client.connection(execution_id, connection_id).await?;
-    let Some(repo) = repo_name(&connection, input) else {
-        // The binding may be shared by coding and non-coding teams. A GitHub API-only
-        // team can list/comment on issues without a local checkout.
-        return Ok(Some(
-            "repository checkout skipped: no repository configured".into(),
-        ));
-    };
-    validate_repo(&connection, &repo)?;
+    validate_repo(&connection, repo)?;
     let token = connection
         .credential
         .as_ref()
@@ -170,13 +292,13 @@ pub async fn checkout(
         })
         .trim_end_matches('/');
     let username = git_username(&connection);
-    let branch = input_string(input, "branch");
+    tokio::fs::create_dir_all(workspace).await?;
     let mut command = Command::new("git");
     command
         .current_dir(workspace)
         .args(["clone", "--depth", "1"]);
-    if let Some(branch) = branch {
-        command.args(["--branch", &branch]);
+    if let Some(branch) = branch.filter(|branch| !branch.is_empty()) {
+        command.args(["--branch", branch]);
     }
     command.arg(format!("{clone_base}/{repo}.git")).arg(".");
     if let Some(token) = &token {
@@ -195,7 +317,7 @@ pub async fn checkout(
             String::from_utf8_lossy(&output.stderr).trim()
         );
     }
-    Ok(Some(format!("checked out {repo}")))
+    Ok(format!("checked out {repo}"))
 }
 
 /// Commit all workspace changes. Returns the commit subject/status.

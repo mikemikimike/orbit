@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
@@ -9,6 +9,7 @@ import {
   BookOpen,
   Boxes,
   Cable,
+  ChevronDown,
   Cpu,
   LayoutDashboard,
   Plus,
@@ -24,24 +25,51 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { getAccessToken } from "@/lib/api";
 import { useDashboard, useMeta } from "@/lib/queries";
 
-const NAV = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/agents", label: "Agents", icon: Bot },
-  { href: "/agent-teams", label: "Agent Teams", icon: Users },
-  { href: "/executions", label: "Executions", icon: Activity },
-  { href: "/approvals", label: "Approvals", icon: ShieldCheck },
-  { href: "/connections", label: "Connections", icon: Cable },
-  { href: "/harnesses", label: "Harnesses", icon: Cpu },
-  { href: "/models", label: "Providers", icon: Boxes },
-  { href: "/skills", label: "Skills", icon: BookOpen },
-  { href: "/workers", label: "Workers", icon: Server },
-  { href: "/settings", label: "Settings", icon: Settings },
+interface NavItem {
+  href: string;
+  label: string;
+  icon: any;
+}
+
+interface NavGroup {
+  label: string | null;
+  items: NavItem[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: null,
+    items: [
+      { href: "/", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/work", label: "Work", icon: Activity },
+      { href: "/agents", label: "Agents", icon: Bot },
+      { href: "/agent-teams", label: "Agent Teams", icon: Users },
+      { href: "/executions", label: "Executions", icon: Activity },
+      { href: "/approvals", label: "Approvals", icon: ShieldCheck },
+      { href: "/skills", label: "Skills", icon: BookOpen },
+    ],
+  },
+  {
+    label: "Library",
+    items: [
+      { href: "/connections", label: "Connectors", icon: Cable },
+      { href: "/harnesses", label: "Harnesses", icon: Cpu },
+      { href: "/models", label: "Providers", icon: Boxes },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { href: "/workers", label: "Workers", icon: Server },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
 ];
 
 const MOBILE_NAV = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/agents", label: "Agents", icon: Bot },
-  { href: "/agent-teams", label: "Agent Teams", icon: Users },
+  { href: "/agent-teams", label: "Teams", icon: Users },
   { href: "/executions", label: "Runs", icon: Activity },
   { href: "/approvals", label: "Approvals", icon: ShieldCheck },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -68,7 +96,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const dashboard = useDashboard();
   const pendingApprovals = dashboard.data?.summary.pendingApprovals ?? 0;
   const hideNewAgent = pathname.startsWith("/agents/new");
-  const current = NAV.filter((item) => isActive(pathname, item.href)).at(-1);
+  const current = NAV_GROUPS.flatMap((g) => g.items).filter((item) => isActive(pathname, item.href)).at(-1);
+
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const auth = (meta.data?.auth ?? {}) as { mode?: string };
@@ -92,32 +122,59 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </p>
           </div>
         </div>
-        <nav className="flex flex-1 flex-col gap-1 p-3">
-          {NAV.map((item) => {
-            const active = isActive(pathname, item.href);
+        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
+          {NAV_GROUPS.map((group, idx) => {
+            const containsActive = group.items.some((item) => isActive(pathname, item.href));
+            const isOpen = group.label === null || containsActive || !collapsed[group.label];
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                <span className="flex-1">{item.label}</span>
-                {item.href === "/approvals" && pendingApprovals > 0 ? (
-                  <span className="rounded-full bg-[hsl(var(--warning))] px-1.5 text-[10px] font-semibold text-white">
-                    {pendingApprovals}
-                  </span>
+              <div key={group.label ?? `group-${idx}`} className={idx > 0 ? "mt-4" : ""}>
+                {group.label ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCollapsed((prev) => ({ ...prev, [group.label!]: !prev[group.label!] }))
+                    }
+                    className="flex w-full items-center justify-between px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                  >
+                    {group.label}
+                    <ChevronDown className={cn("h-3 w-3 transition-transform", !isOpen && "-rotate-90")} />
+                  </button>
                 ) : null}
-              </Link>
+                {isOpen ? (
+                  <div className="space-y-1">
+                    {group.items.map((item) => {
+                      const active = isActive(pathname, item.href);
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={cn(
+                            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                            active
+                              ? "bg-accent text-accent-foreground"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          )}
+                        >
+                          <item.icon className="h-4 w-4" />
+                          <span className="flex-1">{item.label}</span>
+                          {item.href === "/approvals" && pendingApprovals > 0 ? (
+                            <span className="rounded-full bg-[hsl(var(--warning))] px-1.5 text-[10px] font-semibold text-white">
+                              {pendingApprovals}
+                            </span>
+                          ) : null}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
             );
           })}
         </nav>
         <div className="border-t p-3">
+          <div className="mb-2 flex justify-end">
+            <ThemeToggle />
+          </div>
           <div className="rounded-lg bg-muted/60 p-3">
             <p className="text-xs font-medium">Self-hosted</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">

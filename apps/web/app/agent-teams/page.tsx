@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, ListTodo, Pencil, Plus, Play, Trash2, Users, X } from "lucide-react";
@@ -31,6 +33,7 @@ import {
   queryKeys,
   useAgents,
   useAgentTeams,
+  useConnections,
   useSkills,
   useTeamRuns,
   useWorkerProfiles,
@@ -45,18 +48,25 @@ import {
   enqueueTeamItems,
   listTeamQueue,
   runTeamQueueItem,
+  retryTeamQueueItem,
+  requeueTeamQueueItem,
+  cancelTeamQueueItem,
   type TeamQueueItem,
   type TeamStepInput,
 } from "@/lib/teams";
-import type { AgentTeam, TeamRunDetail } from "@/lib/types";
-import { relativeTime } from "@/lib/utils";
+import type { AgentTeam, TeamRepository, TeamRunDetail, WorkSource } from "@/lib/types";
+import { relativeTime, titleCase } from "@/lib/utils";
 
 export default function AgentTeamsPage() {
   const teams = useAgentTeams();
-  const runs = useTeamRuns();
+  const [runsArchived, setRunsArchived] = useState<"active" | "archived" | "all">("active");
+  const runs = useTeamRuns(
+    runsArchived === "all" ? undefined : runsArchived === "archived",
+  );
   const agents = useAgents({ limit: 100 });
   const skills = useSkills();
   const workerProfiles = useWorkerProfiles();
+  const connections = useConnections();
   const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
@@ -71,6 +81,8 @@ export default function AgentTeamsPage() {
   );
   const [teamRepository, setTeamRepository] = useState("opsifyhq/orbit");
   const [teamBranch, setTeamBranch] = useState("");
+  const [workSource, setWorkSource] = useState<WorkSource | null>(null);
+  const [repositories, setRepositories] = useState<TeamRepository[]>([]);
   const [workerProfileId, setWorkerProfileId] = useState("");
   const [autoLaunch, setAutoLaunch] = useState(false);
   const [teamSkills, setTeamSkills] = useState<string[]>([]);
@@ -157,6 +169,39 @@ export default function AgentTeamsPage() {
     finally { setQueueBusy(false); }
   }
 
+  async function retryQueueItem(item: TeamQueueItem) {
+    if (!queueTeam) return;
+    setQueueBusy(true);
+    try {
+      await retryTeamQueueItem(queueTeam.id, item.id);
+      setQueueItems(await listTeamQueue(queueTeam.id));
+      toast.success("Queue item queued for retry");
+    } catch (error) { toast.error(errorMessage(error)); }
+    finally { setQueueBusy(false); }
+  }
+
+  async function requeueQueueItem(item: TeamQueueItem) {
+    if (!queueTeam) return;
+    setQueueBusy(true);
+    try {
+      await requeueTeamQueueItem(queueTeam.id, item.id);
+      setQueueItems(await listTeamQueue(queueTeam.id));
+      toast.success("Queue item requeued");
+    } catch (error) { toast.error(errorMessage(error)); }
+    finally { setQueueBusy(false); }
+  }
+
+  async function cancelQueueItem(item: TeamQueueItem) {
+    if (!queueTeam) return;
+    setQueueBusy(true);
+    try {
+      await cancelTeamQueueItem(queueTeam.id, item.id);
+      setQueueItems(await listTeamQueue(queueTeam.id));
+      toast.success("Queue item cancelled");
+    } catch (error) { toast.error(errorMessage(error)); }
+    finally { setQueueBusy(false); }
+  }
+
   const save = useMutation({
     mutationFn: () => {
       const payload = {
@@ -166,6 +211,8 @@ export default function AgentTeamsPage() {
         instructions,
         repository: teamRepository.trim() || undefined,
         branch: teamBranch.trim() || undefined,
+        workSource,
+        repositories,
         workerProfileId: workerProfileId || undefined,
         autoLaunch,
         skills: teamSkills,
@@ -194,6 +241,8 @@ export default function AgentTeamsPage() {
     );
     setTeamRepository("opsifyhq/orbit");
     setTeamBranch("");
+    setWorkSource(null);
+    setRepositories([]);
     setWorkerProfileId("");
     setAutoLaunch(false);
     setTeamSkills([]);
@@ -209,6 +258,8 @@ export default function AgentTeamsPage() {
     setInstructions(team.definition.instructions ?? "");
     setTeamRepository(team.definition.repository ?? "");
     setTeamBranch(team.definition.branch ?? "");
+    setWorkSource(team.definition.workSource ?? null);
+    setRepositories(team.definition.repositories ?? []);
     setWorkerProfileId(team.definition.workerProfileId ?? "");
     setAutoLaunch(team.definition.autoLaunch ?? false);
     setTeamSkills(team.definition.skills ?? []);
@@ -308,6 +359,31 @@ export default function AgentTeamsPage() {
                       {team.definition.branch ? ` · ${team.definition.branch}` : ""}
                     </p>
                   ) : null}
+                  {team.definition.model?.model ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      team model: <span className="font-mono">{team.definition.model.provider ?? ""}/{team.definition.model.model}</span>
+                    </p>
+                  ) : null}
+                  {(team.definition.steps ?? []).some((step) => step.model?.model) ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      per-step models: {(team.definition.steps ?? []).filter((s) => s.model?.model).length}
+                    </p>
+                  ) : null}
+                  {team.definition.workSource?.enabled ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      work source: {team.definition.workSource.provider} ·{" "}
+                      {team.definition.workSource.repository ??
+                        team.definition.workSource.project ??
+                        team.definition.workSource.groupId ??
+                        ""}
+                      {team.lastPollError ? " · last poll failed" : ""}
+                    </p>
+                  ) : null}
+                  {team.definition.repositories?.length ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      multi-repo: {team.definition.repositories.length} repositories
+                    </p>
+                  ) : null}
                   {team.definition.autoLaunch ? (
                     <p className="text-[11px] text-muted-foreground">auto-launch worker enabled</p>
                   ) : null}
@@ -359,6 +435,18 @@ export default function AgentTeamsPage() {
             Sequential handoffs; each step is recorded as a normal execution.
           </p>
         </div>
+        <div className="flex items-center gap-2">
+          {(["active", "archived", "all"] as const).map((value) => (
+            <Button
+              key={value}
+              size="sm"
+              variant={runsArchived === value ? "default" : "outline"}
+              onClick={() => setRunsArchived(value)}
+            >
+              {value === "active" ? "Active" : value === "archived" ? "Archived" : "All"}
+            </Button>
+          ))}
+        </div>
         {runs.isLoading ? (
           <Skeleton className="h-20 rounded-xl" />
         ) : !runs.data?.length ? (
@@ -375,7 +463,7 @@ export default function AgentTeamsPage() {
                       {String(item.input.task ?? "Agent team run")}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
-                      {relativeTime(item.createdAt)} · {item.status}
+                      {relativeTime(item.createdAt)} · {titleCase(item.status)}
                     </p>
                     {item.error ? <p className="text-[11px] text-destructive">{item.error}</p> : null}
                   </div>
@@ -444,6 +532,265 @@ export default function AgentTeamsPage() {
               Used as the structured checkout target. A run can override it. Putting a
               repository only in the instruction does not affect checkout.
             </p>
+            <div className="space-y-2 rounded-lg border p-3">
+              <label className="flex items-start gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={Boolean(workSource?.enabled)}
+                  onChange={(event) =>
+                    setWorkSource((current) => ({
+                      provider: current?.provider ?? "github",
+                      enabled: event.target.checked,
+                      connectionId: current?.connectionId ?? null,
+                      labels: current?.labels ?? ["agent-ready"],
+                      claimLabel: current?.claimLabel ?? "agent-in-progress",
+                      doneLabel: current?.doneLabel ?? "agent-done",
+                      failedLabel: current?.failedLabel ?? "agent-failed",
+                      maxItems: current?.maxItems ?? 5,
+                      maxAttempts: current?.maxAttempts ?? 1,
+                      pollSeconds: current?.pollSeconds ?? 60,
+                      autoRun: current?.autoRun ?? false,
+                    }))
+                  }
+                />
+                <span>
+                  <span className="font-medium">Work source (automatic issue pickup)</span>
+                  <span className="mt-0.5 block text-muted-foreground">
+                    Polls the selected connector, claims matching issues and enqueues them.
+                  </span>
+                </span>
+              </label>
+              {workSource?.enabled ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label>Provider</Label>
+                    <select
+                      className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+                      value={workSource.provider}
+                      onChange={(event) =>
+                        setWorkSource((current) =>
+                          current ? { ...current, provider: event.target.value as WorkSource["provider"] } : current,
+                        )
+                      }
+                    >
+                      <option value="github">GitHub</option>
+                      <option value="gitlab">GitLab</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Connection</Label>
+                    <select
+                      className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+                      value={workSource.connectionId ?? ""}
+                      onChange={(event) =>
+                        setWorkSource((current) =>
+                          current ? { ...current, connectionId: event.target.value || null } : current,
+                        )
+                      }
+                    >
+                      <option value="">Select connection…</option>
+                      {(connections.data ?? [])
+                        .filter((connection) => connection.connectorSlug === workSource.provider)
+                        .map((connection) => (
+                          <option key={connection.id} value={connection.id}>
+                            {connection.name} · {connection.connectorSlug}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  {workSource.provider === "github" ? (
+                    <div className="space-y-1">
+                      <Label>Repository</Label>
+                      <Input
+                        value={workSource.repository ?? ""}
+                        onChange={(event) =>
+                          setWorkSource((current) =>
+                            current ? { ...current, repository: event.target.value } : current,
+                          )
+                        }
+                        placeholder="owner/repo"
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-1">
+                        <Label>Project</Label>
+                        <Input
+                          value={workSource.project ?? ""}
+                          onChange={(event) =>
+                            setWorkSource((current) =>
+                              current ? { ...current, project: event.target.value } : current,
+                            )
+                          }
+                          placeholder="group/project"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Group (alternative to project)</Label>
+                        <Input
+                          value={workSource.groupId ?? ""}
+                          onChange={(event) =>
+                            setWorkSource((current) =>
+                              current ? { ...current, groupId: event.target.value } : current,
+                            )
+                          }
+                          placeholder="group"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Board ID (optional)</Label>
+                        <Input
+                          value={workSource.boardId ?? ""}
+                          onChange={(event) =>
+                            setWorkSource((current) =>
+                              current
+                                ? { ...current, boardId: event.target.value ? Number(event.target.value) : null }
+                                : current,
+                            )
+                          }
+                          placeholder="123"
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div className="space-y-1">
+                    <Label>Ready labels (comma-separated)</Label>
+                    <Input
+                      value={(workSource.labels ?? []).join(",")}
+                      onChange={(event) =>
+                        setWorkSource((current) =>
+                          current
+                            ? { ...current, labels: event.target.value.split(",").map((label) => label.trim()).filter(Boolean) }
+                            : current,
+                        )
+                      }
+                      placeholder="agent-ready"
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      <Label>Max items</Label>
+                      <Input
+                        type="number"
+                        value={workSource.maxItems ?? 5}
+                        onChange={(event) =>
+                          setWorkSource((current) =>
+                            current ? { ...current, maxItems: Number(event.target.value) } : current,
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Max attempts</Label>
+                      <Input
+                        type="number"
+                        value={workSource.maxAttempts ?? 1}
+                        onChange={(event) =>
+                          setWorkSource((current) =>
+                            current ? { ...current, maxAttempts: Number(event.target.value) } : current,
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Poll seconds</Label>
+                      <Input
+                        type="number"
+                        value={workSource.pollSeconds ?? 60}
+                        onChange={(event) =>
+                          setWorkSource((current) =>
+                            current ? { ...current, pollSeconds: Number(event.target.value) } : current,
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                  <label className="flex items-start gap-2 rounded-lg border p-3 text-xs">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={Boolean(workSource.autoRun)}
+                      onChange={(event) =>
+                        setWorkSource((current) =>
+                          current ? { ...current, autoRun: event.target.checked } : current,
+                        )
+                      }
+                    />
+                    <span>
+                      <span className="font-medium">Auto-run</span>
+                      <span className="mt-0.5 block text-muted-foreground">
+                        Start pending queue items automatically after discovery.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              ) : null}
+            </div>
+            <div className="space-y-2 rounded-lg border p-3">
+              <div className="flex items-center justify-between">
+                <Label>Multi-repo workspace</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setRepositories((current) => [
+                      ...current,
+                      { repository: "", path: "", primary: current.length === 0, connectionId: null },
+                    ])
+                  }
+                >
+                  <Plus /> Add repository
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Leave empty to use the single repository above. A single primary repository
+                keeps the current root checkout layout.
+              </p>
+              {repositories.map((repository, index) => (
+                <div key={index} className="grid gap-2 rounded-lg border p-2 sm:grid-cols-[1fr_1fr_auto_auto]">
+                  <Input
+                    value={repository.repository}
+                    onChange={(event) =>
+                      setRepositories((current) =>
+                        current.map((item, i) => (i === index ? { ...item, repository: event.target.value } : item)),
+                      )
+                    }
+                    placeholder="owner/repo"
+                  />
+                  <Input
+                    value={repository.path ?? ""}
+                    onChange={(event) =>
+                      setRepositories((current) =>
+                        current.map((item, i) => (i === index ? { ...item, path: event.target.value } : item)),
+                      )
+                    }
+                    placeholder="workspace path (e.g. lib)"
+                  />
+                  <label className="flex items-center gap-1 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(repository.primary)}
+                      onChange={(event) =>
+                        setRepositories((current) =>
+                          current.map((item, i) => (i === index ? { ...item, primary: event.target.checked } : item)),
+                        )
+                      }
+                    />
+                    primary
+                  </label>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setRepositories((current) => current.filter((_, i) => i !== index))}
+                  >
+                    <X />
+                  </Button>
+                </div>
+              ))}
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Worker profile (optional)</Label>
@@ -548,7 +895,7 @@ export default function AgentTeamsPage() {
               {steps.map((step, index) => (
                 <div key={index} className="flex items-center gap-2">
                   <span className="w-16 text-[11px] text-muted-foreground">
-                    {index === 0 ? "primary" : mode === "native" ? "subagent" : `step ${index + 1}`}
+                    {index === 0 ? "primary" : "subagent"}
                   </span>
                   <select
                     className="flex h-9 flex-1 rounded-lg border border-input bg-card px-3 text-sm"
@@ -667,12 +1014,29 @@ export default function AgentTeamsPage() {
                 <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
                   <div>
                     <p className="font-mono text-xs">{item.externalKey}</p>
-                    <p className="text-[11px] text-muted-foreground">{item.repository ?? "team repository"} · {item.status}</p>
+                    <p className="text-[11px] text-muted-foreground">{item.repository ?? "team repository"} · {titleCase(item.status)}</p>
                     {item.error ? <p className="text-[11px] text-destructive">{item.error}</p> : null}
                   </div>
-                  <Button size="sm" variant="outline" disabled={item.status === "running" || queueBusy} onClick={() => void runQueueItem(item)}>
-                    <Play /> Run
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" disabled={item.status === "running" || queueBusy} onClick={() => void runQueueItem(item)}>
+                      <Play /> Run
+                    </Button>
+                    {item.status === "failed" || item.status === "cancelled" ? (
+                      <Button size="sm" variant="outline" disabled={queueBusy} onClick={() => void retryQueueItem(item)}>
+                        Retry
+                      </Button>
+                    ) : null}
+                    {item.status === "failed" || item.status === "cancelled" ? (
+                      <Button size="sm" variant="ghost" disabled={queueBusy} onClick={() => void requeueQueueItem(item)}>
+                        Requeue
+                      </Button>
+                    ) : null}
+                    {item.status === "running" ? (
+                      <Button size="sm" variant="ghost" className="text-destructive" disabled={queueBusy} onClick={() => void cancelQueueItem(item)}>
+                        Cancel
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>

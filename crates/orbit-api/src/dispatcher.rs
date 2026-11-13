@@ -1,0 +1,389 @@
+//! Agent Team work-source dispatcher.
+//!
+//! Runs in the control plane (`orbit-api`) and turns matching GitHub/GitLab issues into
+//! durable queue items. A per-team Postgres advisory lock guarantees that two API
+//! replicas never dispatch the same issue for the same team at the same time; the
+//! `(team_id, external_key)` unique constraint guarantees it is never enqueued twice.
+
+use chrono::Utc;
+use serde_json::Value;
+use uuid::Uuid;
+
+use orbit_security::AuthContext;
+use orbit_store::team_queue::TeamQueueItem;
+use orbit_store::AgentTeam;
+
+use crate::handlers::teams::{parse_definition, TeamDefinition};
+use crate::state::AppState;
+use crate::work_sources::{self, WorkSourceDefinition};
+
+pub async fn dispatch_tick(state: &AppState) -> anyhow::Result<()> {
+    let teams = state
+        .store
+        .list_agent_teams_with_enabled_work_source()
+        .await?;
+    for team in teams {
+        if let Err(error) = dispatch_team(state, team).await {
+            tracing::warn!(error = %error, "work source dispatch failed");
+        }
+    }
+    Ok(())
+}
+
+async fn dispatch_team(state: &AppState, team: AgentTeam) -> anyhow::Result<()> {
+    let definition = parse_definition(&team).map_err(|error| anyhow::anyhow!(error.message))?;
+    let Some(source) = definition.work_source.clone() else {
+        return Ok(());
+    };
+    if !source.enabled {
+        return Ok(());
+    }
+    if !poll_due(&team, &source) {
+        return Ok(());
+    }
+
+    let lock_id = advisory_lock_id(team.id);
+    let mut conn = state.store.pool().acquire().await?;
+    let locked: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock($1)")
+        .bind(lock_id)
+        .fetch_one(&mut *conn)
+        .await?;
+    if !locked {
+        tracing::debug!(team_id = %team.id, "work source dispatch skipped: lock held by another replica");
+        return Ok(());
+    }
+
+    let result = dispatch_team_locked(state, &team, &definition, &source).await;
+    let unlock: Result<bool, _> = sqlx::query_scalar("SELECT pg_advisory_unlock($1)")
+        .bind(lock_id)
+        .fetch_one(&mut *conn)
+        .await;
+    if let Err(error) = unlock {
+        let _ = conn.close().await;
+        tracing::warn!(error = %error, team_id = %team.id, "failed to release advisory lock; closed connection");
+    }
+    result
+}
+
+async fn dispatch_team_locked(
+    state: &AppState,
+    team: &AgentTeam,
+    definition: &TeamDefinition,
+    source: &WorkSourceDefinition,
+) -> anyhow::Result<()> {
+    let existing = state
+        .store
+        .list_team_queue_external_keys(team.id)
+        .await?
+        .into_iter()
+        .collect::<std::collections::HashSet<_>>();
+
+    let connector = WorkSourceConnection::new(state, team.org_id, source).await?;
+    let client = connector.client.clone();
+    let base_url = connector.base_url.clone();
+    let token = connector.token.clone();
+
+    let issues = match source.provider.as_str() {
+        "github" => {
+            work_sources::list_github_issues(&client, &base_url, token.as_deref(), source).await?
+        }
+        "gitlab" => {
+            work_sources::list_gitlab_issues(&client, &base_url, token.as_deref(), source).await?
+        }
+        other => anyhow::bail!("unsupported work source provider '{other}'"),
+    };
+
+    let mut last_error: Option<String> = None;
+    let mut dispatched = 0usize;
+    for issue in issues {
+        if existing.contains(&issue.key) {
+            continue;
+        }
+        if dispatched >= source.max_items.max(1) as usize {
+            break;
+        }
+        let claim = match source.provider.as_str() {
+            "github" => claim_github(&client, &base_url, token.as_deref(), source, &issue).await,
+            "gitlab" => claim_gitlab(&client, &base_url, token.as_deref(), source, &issue).await,
+            _ => unreachable!(),
+        };
+        if let Err(error) = claim {
+            last_error = Some(format!("{error}"));
+            continue;
+        }
+
+        let payload = serde_json::json!({
+            "task": issue.title,
+            "url": issue.url,
+            "provider": source.provider,
+            "number": issue.number,
+            "labels": issue.labels,
+        });
+        let repository = issue
+            .repository
+            .clone()
+            .or_else(|| issue.project.clone())
+            .or_else(|| source.repository.clone())
+            .or_else(|| source.project.clone());
+        let enqueued = state
+            .store
+            .try_enqueue_team_item(
+                team.org_id,
+                team.id,
+                &issue.key,
+                repository.as_deref(),
+                &payload,
+                source.max_attempts.clamp(1, 10) as i32,
+            )
+            .await?;
+        match enqueued {
+            Some(_) => dispatched += 1,
+            None => {
+                // Lost a race against a previous insert despite the lock; release the claim.
+                let _ = release_claim(&client, &base_url, token.as_deref(), source, &issue).await;
+            }
+        }
+    }
+
+    if let Some(error) = last_error.as_deref() {
+        state
+            .store
+            .set_team_poll_status(team.org_id, team.id, Some(error))
+            .await?;
+    } else {
+        state
+            .store
+            .set_team_poll_status(team.org_id, team.id, None)
+            .await?;
+    }
+
+    if source.auto_run {
+        auto_run_pending(state, team, definition, source).await?;
+    }
+    Ok(())
+}
+
+async fn auto_run_pending(
+    state: &AppState,
+    team: &AgentTeam,
+    _definition: &TeamDefinition,
+    source: &WorkSourceDefinition,
+) -> anyhow::Result<()> {
+    let pending = state.store.list_team_queue(team.org_id, team.id).await?;
+    let max = source.max_items.clamp(1, 100) as usize;
+    let auth = crate::bootstrap::system_context(team.org_id);
+    let mut started = 0usize;
+    for item in pending {
+        if started >= max {
+            break;
+        }
+        if item.status != "pending" {
+            continue;
+        }
+        if let Err(error) = start_queue_item(state, &auth, team, &item).await {
+            tracing::warn!(
+                error = %error,
+                queue_item = %item.id,
+                "failed to auto-run queue item"
+            );
+            state
+                .store
+                .set_team_queue_status(team.org_id, item.id, "failed", Some(&error.message))
+                .await?;
+            continue;
+        }
+        started += 1;
+    }
+    Ok(())
+}
+
+async fn start_queue_item(
+    state: &AppState,
+    auth: &AuthContext,
+    team: &AgentTeam,
+    item: &TeamQueueItem,
+) -> Result<crate::handlers::teams::TeamRunDetail, crate::error::ApiError> {
+    crate::handlers::team_queue::start_queue_item(state, auth, team, item).await
+}
+
+struct WorkSourceConnection {
+    base_url: String,
+    token: Option<String>,
+    client: reqwest::Client,
+}
+
+impl WorkSourceConnection {
+    async fn new(
+        state: &AppState,
+        org_id: Uuid,
+        source: &WorkSourceDefinition,
+    ) -> anyhow::Result<Self> {
+        let connection_id = source
+            .connection_id
+            .ok_or_else(|| anyhow::anyhow!("work source has no connection"))?;
+        let connection = state.store.get_connection(org_id, connection_id).await?;
+        let token = match &connection.credential_ref {
+            Some(reference) => state
+                .store
+                .get_secret_value(reference)
+                .await?
+                .map(|secret| secret.expose().to_string()),
+            None => None,
+        };
+        let base_url = match source.provider.as_str() {
+            "github" => connection
+                .config
+                .get("baseUrl")
+                .and_then(Value::as_str)
+                .unwrap_or("https://api.github.com")
+                .trim_end_matches('/')
+                .to_string(),
+            "gitlab" => connection
+                .config
+                .get("baseUrl")
+                .and_then(Value::as_str)
+                .unwrap_or("https://gitlab.com/api/v4")
+                .trim_end_matches('/')
+                .to_string(),
+            other => anyhow::bail!("unsupported work source provider '{other}'"),
+        };
+        Ok(Self {
+            base_url,
+            token,
+            client: orbit_security::client_with_custom_ca(std::time::Duration::from_secs(20)),
+        })
+    }
+}
+
+async fn claim_github(
+    client: &reqwest::Client,
+    base_url: &str,
+    token: Option<&str>,
+    source: &WorkSourceDefinition,
+    issue: &work_sources::ExternalIssue,
+) -> anyhow::Result<()> {
+    let repository = issue
+        .repository
+        .clone()
+        .or_else(|| source.repository.clone())
+        .ok_or_else(|| anyhow::anyhow!("GitHub issue has no repository"))?;
+    let mut labels: Vec<String> = issue
+        .labels
+        .iter()
+        .filter(|label| !source.labels.contains(label) && *label != &source.claim_label)
+        .cloned()
+        .collect();
+    labels.push(source.claim_label.clone());
+    labels.sort();
+    labels.dedup();
+    work_sources::update_github_labels(client, base_url, token, &repository, issue.number, &labels)
+        .await?;
+    Ok(())
+}
+
+async fn release_claim(
+    client: &reqwest::Client,
+    base_url: &str,
+    token: Option<&str>,
+    source: &WorkSourceDefinition,
+    issue: &work_sources::ExternalIssue,
+) -> anyhow::Result<()> {
+    let repository = issue
+        .repository
+        .clone()
+        .or_else(|| source.repository.clone())
+        .ok_or_else(|| anyhow::anyhow!("GitHub issue has no repository"))?;
+    let mut labels: Vec<String> = issue
+        .labels
+        .iter()
+        .filter(|label| *label != &source.claim_label)
+        .cloned()
+        .collect();
+    labels.extend(source.labels.clone());
+    labels.sort();
+    labels.dedup();
+    work_sources::update_github_labels(client, base_url, token, &repository, issue.number, &labels)
+        .await?;
+    Ok(())
+}
+
+async fn claim_gitlab(
+    client: &reqwest::Client,
+    base_url: &str,
+    token: Option<&str>,
+    source: &WorkSourceDefinition,
+    issue: &work_sources::ExternalIssue,
+) -> anyhow::Result<()> {
+    let project = issue
+        .project
+        .clone()
+        .or_else(|| source.project.clone())
+        .ok_or_else(|| anyhow::anyhow!("GitLab issue has no project"))?;
+    work_sources::update_gitlab_labels(
+        client,
+        base_url,
+        token,
+        &project,
+        issue.number,
+        std::slice::from_ref(&source.claim_label),
+        &source.labels,
+    )
+    .await?;
+    Ok(())
+}
+
+fn advisory_lock_id(team_id: Uuid) -> i64 {
+    let bytes: [u8; 8] = team_id.as_bytes()[..8]
+        .try_into()
+        .expect("uuid has at least 8 bytes");
+    i64::from_be_bytes(bytes)
+}
+
+fn poll_due(team: &AgentTeam, source: &WorkSourceDefinition) -> bool {
+    match team.last_poll_at {
+        None => true,
+        Some(last_poll_at) => {
+            let seconds = source.poll_seconds.clamp(5, 86_400);
+            let due = last_poll_at + chrono::Duration::seconds(seconds);
+            due <= Utc::now()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lock_id_is_stable() {
+        let id = Uuid::parse_str("00000000-0000-0000-0000-000000000000").unwrap();
+        assert_eq!(advisory_lock_id(id), 0);
+        let other = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        assert_eq!(advisory_lock_id(other), 0, "last 8 bytes are ignored");
+    }
+
+    #[test]
+    fn poll_due_after_interval() {
+        let mut team = AgentTeam {
+            id: Uuid::now_v7(),
+            org_id: Uuid::now_v7(),
+            name: "t".into(),
+            description: String::new(),
+            definition: serde_json::json!({}),
+            created_by: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_poll_at: None,
+            last_poll_error: None,
+        };
+        let source = WorkSourceDefinition {
+            poll_seconds: 60,
+            ..Default::default()
+        };
+        assert!(poll_due(&team, &source));
+        team.last_poll_at = Some(Utc::now());
+        assert!(!poll_due(&team, &source));
+        team.last_poll_at = Some(Utc::now() - chrono::Duration::seconds(61));
+        assert!(poll_due(&team, &source));
+    }
+}

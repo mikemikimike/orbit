@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Boxes, Copy, Pencil, Plus, Rocket, ScrollText, Server, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -32,6 +33,7 @@ import {
   useProviders,
   useSkills,
   useWorkerLaunches,
+  useConnections,
   useWorkerProfiles,
 } from "@/lib/queries";
 import {
@@ -49,14 +51,17 @@ const DEFAULT_IMAGES: Record<string, string> = {
   mock: "192.168.1.201:5000/orbit-worker",
 };
 
-export default function WorkersPage() {
+function WorkersPageInner() {
   const profiles = useWorkerProfiles();
   const launches = useWorkerLaunches();
   const providers = useProviders();
   const agents = useAgents({ limit: 100 });
   const skills = useSkills();
+  const connections = useConnections();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
+  const [prefilled, setPrefilled] = useState(false);
   const [editing, setEditing] = useState<WorkerProfile | null>(null);
   const [bootstrapProfile, setBootstrapProfile] = useState<WorkerProfile | null>(null);
   const [logsLaunch, setLogsLaunch] = useState<{ id: string; name: string } | null>(null);
@@ -73,8 +78,19 @@ export default function WorkersPage() {
   const [provider, setProvider] = useState("opencode-go");
   const [model, setModel] = useState("deepseek-v4-pro");
   const [authSecret, setAuthSecret] = useState("");
+  const [envMappings, setEnvMappings] = useState<Array<{ envVar: string; connectionId: string; secretKey: string }>>([]);
   const [agentIds, setAgentIds] = useState<string[]>([]);
   const [skillSlugs, setSkillSlugs] = useState<string[]>([]);
+
+  // Pre-fill from Work wizard query params.
+  if (searchParams.get("create") === "1" && !prefilled) {
+    setPrefilled(true);
+    const harnessParam = searchParams.get("harness");
+    const placementParam = searchParams.get("placement");
+    if (harnessParam) setHarness(harnessParam);
+    if (placementParam) setTarget(placementParam === "kubernetes" ? "kubernetes" : placementParam === "docker" ? "docker" : "local");
+    setOpen(true);
+  }
 
   const harnessProviders = (providers.data ?? []).filter(
     (candidate) => candidate.kind === "harness_managed",
@@ -105,6 +121,11 @@ export default function WorkersPage() {
         model: model || undefined,
         authSecretName: authSecret || undefined,
         env: editing?.env ?? {},
+        envMappings: envMappings.map((m) => ({
+          envVar: m.envVar,
+          connectionId: m.connectionId || null,
+          secretKey: m.secretKey || null,
+        })),
         resources: editing?.resources ?? {},
       } as never;
       if (editing) {
@@ -134,10 +155,11 @@ export default function WorkersPage() {
     setTarget("docker");
     setDriver("process");
     setImage(DEFAULT_IMAGES.opencode);
-    setTag("0.5.1");
+    setTag("latest");
     setProvider("opencode-go");
     setModel("deepseek-v4-pro");
     setAuthSecret("");
+    setEnvMappings([]);
     setAgentIds([]);
     setSkillSlugs([]);
     setOpen(true);
@@ -154,6 +176,8 @@ export default function WorkersPage() {
     setProvider(profile.provider ?? "");
     setModel(profile.model ?? "");
     setAuthSecret(profile.authSecretName ?? "");
+    const mappings = (profile as { envMappings?: Array<{ envVar: string; connectionId?: string; secretKey?: string }> }).envMappings ?? [];
+    setEnvMappings(mappings.map((m) => ({ envVar: m.envVar ?? "", connectionId: m.connectionId ?? "", secretKey: m.secretKey ?? "" })));
     setAgentIds(profile.agentIds);
     setSkillSlugs(profile.skillSlugs);
     setOpen(true);
@@ -444,6 +468,14 @@ export default function WorkersPage() {
                     setProvider("");
                     setModel("");
                   }
+                  // Auto-suggest auth secret for harness-managed providers.
+                  if (nextHarness === "opencode" && !authSecret) {
+                    setAuthSecret("orbit-opencode-auth");
+                  } else if (nextHarness === "pi" && !authSecret) {
+                    setAuthSecret("orbit-pi-auth");
+                  } else if (nextHarness === "mock") {
+                    setAuthSecret("");
+                  }
                 }}
               >
                 <option value="pi">Pi</option>
@@ -565,15 +597,115 @@ export default function WorkersPage() {
               </p>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label>Auth secret name (external)</Label>
+              <Label>Harness auth secret (optional)</Label>
               <Input
                 value={authSecret}
                 onChange={(event) => setAuthSecret(event.target.value)}
-                placeholder="orbit-pi-auth or orbit-opencode-auth"
+                placeholder="e.g. orbit-opencode-auth"
               />
+              <p className="text-[11px] text-muted-foreground">
+                Only needed for harness-managed providers (e.g. OpenCode Go). Leave blank
+                if you use ORBIT-managed providers (vLLM, OpenAI, etc.) — credentials are
+                injected at runtime.
+              </p>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label>Agents ({agentIds.length} selected)</Label>
+              <div className="flex items-center justify-between">
+                <Label>Environment variable mappings</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setEnvMappings((current) => [...current, { envVar: "", connectionId: "", secretKey: "" }])}
+                >
+                  + Add mapping
+                </Button>
+              </div>
+              {envMappings.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground">
+                  No env var mappings. Add one to inject connection secrets as environment variables.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {envMappings.map((mapping, index) => (
+                    <div key={index} className="grid gap-2 rounded-lg border p-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+                      <Input
+                        value={mapping.envVar}
+                        onChange={(e) =>
+                          setEnvMappings((current) =>
+                            current.map((m, i) => (i === index ? { ...m, envVar: e.target.value } : m)),
+                          )
+                        }
+                        placeholder="ENV_VAR_NAME"
+                        className="font-mono text-xs"
+                      />
+                      <select
+                        className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-xs"
+                        value={mapping.connectionId}
+                        onChange={(e) =>
+                          setEnvMappings((current) =>
+                            current.map((m, i) => (i === index ? { ...m, connectionId: e.target.value } : m)),
+                          )
+                        }
+                      >
+                        <option value="">Select connection…</option>
+                        {(connections.data ?? []).map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} · {c.connectorSlug}
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        value={mapping.secretKey}
+                        onChange={(e) =>
+                          setEnvMappings((current) =>
+                            current.map((m, i) => (i === index ? { ...m, secretKey: e.target.value } : m)),
+                          )
+                        }
+                        placeholder="secret key (e.g. password)"
+                        className="text-xs"
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={() =>
+                          setEnvMappings((current) => current.filter((_, i) => i !== index))
+                        }
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                Maps connection credentials to environment variables. The worker fetches these
+                at startup and injects them into the process and all spawned scripts.
+              </p>
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <div className="flex items-center justify-between">
+                <Label>Agents ({agentIds.length} selected)</Label>
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setAgentIds((agents.data?.items ?? []).map((a) => a.id))}
+                  >
+                    Select all
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setAgentIds([])}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
               <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border p-2">
                 {(agents.data?.items ?? []).map((agent) => (
                   <label key={agent.id} className="flex items-center justify-between gap-2 text-xs">
@@ -591,7 +723,27 @@ export default function WorkersPage() {
               </div>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label>Shared skills ({skillSlugs.length} selected)</Label>
+              <div className="flex items-center justify-between">
+                <Label>Shared skills ({skillSlugs.length} selected)</Label>
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setSkillSlugs((skills.data ?? []).map((s) => s.slug))}
+                  >
+                    Select all
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setSkillSlugs([])}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
               <div className="max-h-32 space-y-1 overflow-y-auto rounded-lg border p-2">
                 {(skills.data ?? []).map((skill) => (
                   <label key={skill.id} className="flex items-center justify-between gap-2 text-xs">
@@ -620,6 +772,14 @@ export default function WorkersPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function WorkersPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-muted-foreground">Loading…</div>}>
+      <WorkersPageInner />
+    </Suspense>
   );
 }
 

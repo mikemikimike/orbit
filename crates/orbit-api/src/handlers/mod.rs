@@ -7,6 +7,7 @@ pub mod dashboard;
 pub mod executions;
 pub mod health;
 pub mod skills;
+pub mod settings;
 pub mod team_queue;
 pub mod teams;
 pub mod triggers;
@@ -49,7 +50,7 @@ pub(crate) async fn load_agent_detail(
         .await?;
     let (executions, _, _) = state
         .store
-        .list_executions(auth.org_id, 5, None, None, Some(agent.id))
+        .list_executions(auth.org_id, 5, None, None, Some(agent.id), None)
         .await?;
 
     Ok(AgentDetail {

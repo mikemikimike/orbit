@@ -14,14 +14,17 @@ COPY crates/orbit-harness/Cargo.toml crates/orbit-harness/Cargo.toml
 COPY crates/orbit-api/Cargo.toml crates/orbit-api/Cargo.toml
 COPY services/api/Cargo.toml services/api/Cargo.toml
 COPY services/worker/Cargo.toml services/worker/Cargo.toml
+COPY services/launcher/Cargo.toml services/launcher/Cargo.toml
 COPY services/mcp-broker/Cargo.toml services/mcp-broker/Cargo.toml
 RUN mkdir -p crates/orbit-domain/src crates/orbit-contracts/src crates/orbit-store/src \
       crates/orbit-events/src crates/orbit-security/src crates/orbit-harness/src \
-      crates/orbit-api/src services/api/src services/worker/src services/mcp-broker/src \
+      crates/orbit-api/src services/api/src services/worker/src services/launcher/src \
+      services/mcp-broker/src \
     && for d in crates/orbit-domain crates/orbit-contracts crates/orbit-store crates/orbit-events \
               crates/orbit-security crates/orbit-harness crates/orbit-api; do echo "" > "$d/src/lib.rs"; done \
     && echo "fn main() {}" > services/api/src/main.rs \
     && echo "fn main() {}" > services/worker/src/main.rs \
+    && echo "fn main() {}" > services/launcher/src/main.rs \
     && echo "fn main() {}" > services/mcp-broker/src/main.rs \
     && cargo fetch --locked
 
@@ -31,6 +34,7 @@ RUN cargo build --release --locked -p orbit-api-server --bin orbit-api
 
 FROM debian:bookworm-slim AS harness
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 orbit \

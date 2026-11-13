@@ -25,6 +25,7 @@ import { api } from "@/lib/api";
 import { queryKeys, unwrap, useConnections, useConnectors } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 import { formatDate, relativeTime, titleCase } from "@/lib/utils";
+import { capabilityLabel, effectLabel } from "@/lib/presentation";
 import type { ConnectionView } from "@/lib/types";
 
 export default function ConnectionsPage() {
@@ -131,7 +132,7 @@ export default function ConnectionsPage() {
     <div className="space-y-5 animate-fade-in">
       <PageHeader
         eyebrow="Integrations"
-        title="Connections"
+        title="Connectors"
         description="Authorized accounts for external services. Credentials are encrypted at rest and capabilities are enforced by ORBIT."
         actions={
           <Button onClick={openCreate}>
@@ -184,8 +185,8 @@ export default function ConnectionsPage() {
                   <div className="flex flex-wrap gap-1">
                     {connection.scopes.length ? (
                       connection.scopes.map((scope) => (
-                        <Badge key={scope} variant="outline">
-                          {scope}
+                        <Badge key={scope} variant="outline" title={scope}>
+                          {capabilityLabel(scope)}
                         </Badge>
                       ))
                     ) : (
@@ -331,7 +332,7 @@ export default function ConnectionsPage() {
                           : "rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
                       }
                     >
-                      {capability.id} · {capability.effect.replace("_", " ")}
+                      {capability.name} · {effectLabel(capability.effect)}
                     </button>
                   );
                 })}

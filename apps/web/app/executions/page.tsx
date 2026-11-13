@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Activity, Filter, Users } from "lucide-react";
@@ -25,7 +27,12 @@ const STATUSES = [
 
 export default function ExecutionsPage() {
   const [status, setStatus] = useState("");
-  const executions = useExecutions({ status: status || undefined, limit: 50 });
+  const [archived, setArchived] = useState<"active" | "archived" | "all">("active");
+  const executions = useExecutions({
+    status: status || undefined,
+    limit: 50,
+    archived: archived === "all" ? undefined : archived === "archived",
+  });
   const groups = useMemo(() => {
     const items = executions.data?.items ?? [];
     const grouped = new Map<string, typeof items>();
@@ -58,6 +65,19 @@ export default function ExecutionsPage() {
               onClick={() => setStatus(item.value)}
             >
               {item.label}
+            </Button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">View:</span>
+          {(["active", "archived", "all"] as const).map((value) => (
+            <Button
+              key={value}
+              size="sm"
+              variant={archived === value ? "default" : "outline"}
+              onClick={() => setArchived(value)}
+            >
+              {value === "active" ? "Active" : value === "archived" ? "Archived" : "All"}
             </Button>
           ))}
         </div>

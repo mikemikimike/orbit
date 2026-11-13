@@ -52,13 +52,14 @@ impl Store {
         model: Option<&str>,
         auth_secret_name: Option<&str>,
         env: &serde_json::Value,
+        env_mappings: &serde_json::Value,
         resources: &serde_json::Value,
     ) -> StoreResult<WorkerProfile> {
         sqlx::query_as::<_, WorkerProfile>(
             r#"
             INSERT INTO worker_profiles (id, org_id, name, harness_kind, target, execution_driver,
-                image, image_tag, agent_ids, skill_slugs, provider, model, auth_secret_name, env, resources)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                image, image_tag, agent_ids, skill_slugs, provider, model, auth_secret_name, env, env_mappings, resources)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             RETURNING *
             "#,
         )
@@ -76,6 +77,7 @@ impl Store {
         .bind(model)
         .bind(auth_secret_name)
         .bind(env)
+        .bind(env_mappings)
         .bind(resources)
         .fetch_one(&self.pool)
         .await
@@ -105,6 +107,7 @@ impl Store {
         model: Option<&str>,
         auth_secret_name: Option<&str>,
         env: &serde_json::Value,
+        env_mappings: &serde_json::Value,
         resources: &serde_json::Value,
     ) -> StoreResult<WorkerProfile> {
         sqlx::query_as::<_, WorkerProfile>(
@@ -113,7 +116,7 @@ impl Store {
             SET name = $3, harness_kind = $4, target = $5, execution_driver = $6,
                 image = $7, image_tag = $8, agent_ids = $9, skill_slugs = $10,
                 provider = $11, model = $12, auth_secret_name = $13, env = $14,
-                resources = $15, updated_at = now()
+                env_mappings = $15, resources = $16, updated_at = now()
             WHERE org_id = $1 AND id = $2
             RETURNING *
             "#,
@@ -132,6 +135,7 @@ impl Store {
         .bind(model)
         .bind(auth_secret_name)
         .bind(env)
+        .bind(env_mappings)
         .bind(resources)
         .fetch_optional(&self.pool)
         .await?

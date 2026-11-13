@@ -126,6 +126,18 @@ impl From<StoreError> for ApiError {
             StoreError::NotFound(what) => ApiError::not_found(what),
             StoreError::Conflict(message) => ApiError::conflict(message),
             StoreError::Invalid(message) => ApiError::bad_request(message),
+            StoreError::Database(err) => {
+                if let Some(db) = err.as_database_error() {
+                    if db.is_foreign_key_violation() {
+                        let constraint = db.constraint().unwrap_or("foreign key");
+                        return ApiError::conflict(format!(
+                            "this item is still referenced by {constraint}; remove the reference before deleting it"
+                        ));
+                    }
+                }
+                tracing::error!(error = %err, "store error");
+                ApiError::internal("a storage error occurred")
+            }
             other => {
                 tracing::error!(error = %other, "store error");
                 ApiError::internal("a storage error occurred")

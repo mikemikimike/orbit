@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use orbit_security::SecretCipher;
 
+pub mod agent_memory;
 pub mod agent_teams;
 pub mod agents;
 pub mod approvals;
@@ -21,6 +22,7 @@ pub mod dashboard;
 pub mod executions;
 pub mod identity;
 pub mod models;
+pub mod platform_settings;
 pub mod secrets;
 pub mod skills;
 pub mod team_queue;

@@ -100,10 +100,9 @@ impl PiSettings {
                 }
             }
             orbit_contracts::ModelSelection::Platform {
-                provider_name,
                 model,
                 ..
-            } => Some(format!("{provider_name}/{model}")),
+            } => Some(model),
         }
     }
 
@@ -455,9 +454,13 @@ impl PiHarnessAdapter {
             })?;
         }
         let model = settings.model_selector(request.model.as_ref());
+        let is_platform = matches!(
+            request.model.as_ref().map(|m| &m.selection),
+            Some(orbit_contracts::ModelSelection::Platform { .. })
+        );
         let system_append = build_system_append(&request);
         let prompt = build_prompt(&request);
-        let args = settings.cli_args(
+        let mut args = settings.cli_args(
             &prompt,
             request.autonomy,
             session_ref.as_deref(),
@@ -465,11 +468,37 @@ impl PiHarnessAdapter {
             &system_append,
             &session_dir,
         );
+        if is_platform {
+            let mut new_args = Vec::new();
+            let mut i = 0;
+            while i < args.len() {
+                if args[i] == "--model" {
+                    new_args.push("--provider".to_string());
+                    new_args.push("openai".to_string());
+                }
+                new_args.push(args[i].clone());
+                i += 1;
+            }
+            args = new_args;
+        }
 
         let mut command = Command::new(settings.binary());
         command.args(&args);
         command.current_dir(&workspace);
         command.env("PWD", &workspace);
+        // Platform-managed providers: inject endpoint + credential via env vars.
+        // Pi's built-in OpenAI provider reads OPENAI_API_KEY and OPENAI_BASE_URL.
+        if let Some(model) = &request.model {
+            if let (orbit_contracts::ModelSelection::Platform { .. }, Some(endpoint), Some(credential)) =
+                (&model.selection, &model.endpoint, &model.credential)
+            {
+                command.env("OPENAI_API_KEY", credential.expose());
+                command.env("OPENAI_BASE_URL", &endpoint.base_url);
+                for (key, value) in &endpoint.headers {
+                    command.env(format!("OPENAI_HEADER_{}", key.to_uppercase().replace('-', "_")), value);
+                }
+            }
+        }
         command.stdin(Stdio::null());
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());

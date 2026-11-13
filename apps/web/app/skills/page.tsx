@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -47,6 +47,26 @@ export default function SkillsPage() {
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [content, setContent] = useState(TEMPLATE);
+  const [filesText, setFilesText] = useState("{}");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files;
+    if (!files) return;
+    let current: Record<string, string> = {};
+    try { current = JSON.parse(filesText); } catch { current = {}; }
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
+        current[file.name] = content;
+        setFilesText(JSON.stringify(current, null, 2));
+      };
+      reader.readAsText(file);
+    });
+    // Reset input so the same file can be uploaded again.
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
 
   const reset = () => {
     setEditing(null);
@@ -54,6 +74,7 @@ export default function SkillsPage() {
     setSlug("");
     setDescription("");
     setContent(TEMPLATE);
+    setFilesText("{}");
   };
 
   const save = useMutation({
@@ -62,13 +83,13 @@ export default function SkillsPage() {
         return unwrap(
           await api.PATCH("/api/v1/skills/{skill_id}", {
             params: { path: { skill_id: editing.id } },
-            body: { name, description, content },
+            body: { name, description, content, files: (() => { try { return JSON.parse(filesText); } catch { return undefined; } })() },
           }),
         );
       }
       return unwrap(
         await api.POST("/api/v1/skills", {
-          body: { name, slug, description, content, files: {} },
+          body: { name, slug, description, content, files: (() => { try { return JSON.parse(filesText); } catch { return {}; } })() },
         }),
       );
     },
@@ -164,6 +185,7 @@ export default function SkillsPage() {
                       setSlug(skill.slug);
                       setDescription(skill.description);
                       setContent(skill.content);
+    setFilesText(JSON.stringify(skill.files ?? {}, null, 2));
                       setOpen(true);
                     }}
                   >
@@ -246,6 +268,31 @@ export default function SkillsPage() {
                 onChange={(event) => setContent(event.target.value)}
               />
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label>Bundled files (JSON: path → content)</Label>
+              <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                Upload files
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+            </div>
+            <Textarea
+              className="min-h-[120px] font-mono text-xs"
+              value={filesText}
+              onChange={(event) => setFilesText(event.target.value)}
+              placeholder='{"scripts/run.sh": "#!/bin/bash\necho hello"}'
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Include scripts under <code className="font-mono">scripts/</code>. Allowed extensions:
+              .sh, .bash, .py, .js, .ts, .rb, .pl, .go.
+            </p>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>

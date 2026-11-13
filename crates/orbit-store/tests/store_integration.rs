@@ -722,6 +722,7 @@ async fn skills_profiles_and_agent_scoped_claims() {
             Some("deepseek-v4-pro"),
             Some("orbit-pi-auth"),
             &serde_json::json!({}),
+            &serde_json::json!([]),
             &serde_json::json!({}),
         )
         .await

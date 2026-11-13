@@ -44,6 +44,37 @@ impl Store {
         .await?)
     }
 
+    /// Teams with an enabled work source, for the background dispatcher.
+    pub async fn list_agent_teams_with_enabled_work_source(&self) -> StoreResult<Vec<AgentTeam>> {
+        Ok(sqlx::query_as::<_, AgentTeam>(
+            "SELECT * FROM agent_teams WHERE definition -> 'workSource' ->> 'enabled' = 'true'",
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn set_team_poll_status(
+        &self,
+        org_id: Uuid,
+        team_id: Uuid,
+        last_error: Option<&str>,
+    ) -> StoreResult<AgentTeam> {
+        sqlx::query_as::<_, AgentTeam>(
+            r#"
+            UPDATE agent_teams
+            SET last_poll_at = now(), last_poll_error = $3, updated_at = now()
+            WHERE org_id = $1 AND id = $2
+            RETURNING *
+            "#,
+        )
+        .bind(org_id)
+        .bind(team_id)
+        .bind(last_error)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("agent team".into()))
+    }
+
     pub async fn get_agent_team(&self, org_id: Uuid, team_id: Uuid) -> StoreResult<AgentTeam> {
         sqlx::query_as::<_, AgentTeam>("SELECT * FROM agent_teams WHERE org_id = $1 AND id = $2")
             .bind(org_id)
@@ -124,13 +155,36 @@ impl Store {
             .ok_or_else(|| StoreError::NotFound("team run".into()))
     }
 
-    pub async fn list_team_runs(&self, org_id: Uuid) -> StoreResult<Vec<TeamRun>> {
+    pub async fn list_team_runs(
+        &self,
+        org_id: Uuid,
+        archived: Option<bool>,
+    ) -> StoreResult<Vec<TeamRun>> {
         Ok(sqlx::query_as::<_, TeamRun>(
-            "SELECT * FROM team_runs WHERE org_id = $1 ORDER BY created_at DESC LIMIT 100",
+            "SELECT * FROM team_runs WHERE org_id = $1 AND ($2::boolean IS NULL OR ($2 = FALSE AND archived_at IS NULL) OR ($2 = TRUE AND archived_at IS NOT NULL)) ORDER BY created_at DESC LIMIT 100",
         )
         .bind(org_id)
+        .bind(archived)
         .fetch_all(&self.pool)
         .await?)
+    }
+
+    /// Archive terminal team runs whose last activity predates `cutoff`.
+    pub async fn archive_team_runs_before(&self, cutoff: chrono::DateTime<Utc>) -> StoreResult<u64> {
+        let result = sqlx::query(
+            r#"
+            UPDATE team_runs
+            SET archived_at = now(), updated_at = now()
+            WHERE archived_at IS NULL
+              AND finished_at IS NOT NULL
+              AND finished_at < $1
+              AND status IN ('succeeded', 'failed', 'cancelled')
+            "#,
+        )
+        .bind(cutoff)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
     }
 
     pub async fn list_running_team_runs(&self) -> StoreResult<Vec<TeamRun>> {

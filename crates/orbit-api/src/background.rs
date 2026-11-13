@@ -36,20 +36,47 @@ pub fn spawn(state: AppState) {
         }
     });
 
+    let team_state = state.clone();
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(2));
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             ticker.tick().await;
-            match state.store.list_running_team_runs().await {
+            match team_state.store.list_running_team_runs().await {
                 Ok(runs) => {
                     for run in runs {
-                        if let Err(error) = crate::handlers::teams::advance(&state, run).await {
+                        if let Err(error) = crate::handlers::teams::advance(&team_state, run).await {
                             tracing::warn!(%error, "team run advance failed");
                         }
                     }
                 }
                 Err(error) => tracing::warn!(%error, "team run polling failed"),
+            }
+        }
+    });
+
+    let dispatcher_state = state.clone();
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(15));
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticker.tick().await;
+            if let Err(error) = crate::dispatcher::dispatch_tick(&dispatcher_state).await {
+                tracing::error!(%error, "work source dispatcher tick failed");
+            }
+        }
+    });
+
+    let pruner_state = state.clone();
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(3600));
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticker.tick().await;
+            match pruner_state.store.prune_expired_memory().await {
+                Ok(n) if n > 0 => tracing::info!(count = n, "pruned expired memory entries"),
+                Ok(_) => {}
+                Err(error) => tracing::warn!(%error, "memory pruning failed"),
             }
         }
     });
@@ -65,6 +92,24 @@ async fn scheduler_tick(state: &AppState) -> anyhow::Result<()> {
 }
 
 async fn fire_trigger(state: &AppState, trigger: Trigger) -> anyhow::Result<()> {
+    let result = fire_trigger_inner(state, trigger.clone()).await;
+    match &result {
+        Ok(()) => {
+            let _ = state.store.record_trigger_success(trigger.id).await;
+        }
+        Err(error) => {
+            tracing::warn!(%error, trigger_id = %trigger.id, "scheduled trigger failed");
+            if let Ok(disabled) = state.store.record_trigger_failure(trigger.id).await {
+                if disabled {
+                    tracing::warn!(trigger_id = %trigger.id, "trigger auto-disabled after consecutive failures");
+                }
+            }
+        }
+    }
+    result
+}
+
+async fn fire_trigger_inner(state: &AppState, trigger: Trigger) -> anyhow::Result<()> {
     let next = trigger
         .config
         .get("cron")

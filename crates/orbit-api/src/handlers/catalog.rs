@@ -314,10 +314,7 @@ pub async fn probe_provider(
         None => None,
     };
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| ApiError::internal(e.to_string()))?;
+    let client = orbit_security::client_with_custom_ca(std::time::Duration::from_secs(10));
     let url = format!("{}/models", base_url.trim_end_matches('/'));
     let mut request = client.get(&url);
     if let Some(credential) = &credential {

@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Extension;
 use axum::Json;
@@ -15,6 +15,7 @@ use uuid::Uuid;
 use orbit_security::{AuthContext, Permission};
 use orbit_store::WorkerLaunch;
 
+use crate::dto::ArchiveListQuery;
 use crate::error::ApiError;
 use crate::state::AppState;
 
@@ -156,9 +157,10 @@ async fn refresh(state: &AppState, launch: WorkerLaunch) -> WorkerLaunch {
 pub async fn list_launches(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
+    Query(query): Query<ArchiveListQuery>,
 ) -> Result<Json<Vec<WorkerLaunch>>, ApiError> {
     auth.require(Permission::HarnessesRead)?;
-    let launches = state.store.list_worker_launches(auth.org_id).await?;
+    let launches = state.store.list_worker_launches(auth.org_id, query.archived).await?;
     let mut refreshed = Vec::with_capacity(launches.len());
     for launch in launches {
         refreshed.push(refresh(&state, launch).await);
@@ -202,7 +204,7 @@ pub(crate) async fn launch_profile_internal(
     if single_execution_id.is_none() {
         if let Some(existing) = state
             .store
-            .list_worker_launches(auth.org_id)
+            .list_worker_launches(auth.org_id, None)
             .await?
             .into_iter()
             .find(|launch| {
@@ -386,4 +388,30 @@ pub async fn launch_logs(
     )
     .await?;
     Ok(Json(logs))
+}
+
+#[utoipa::path(delete, path = "/api/v1/worker-launches/{launch_id}", tag = "workers", responses((status = 204)))]
+pub async fn delete_launch(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(launch_id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    auth.require(Permission::SettingsWrite)?;
+    state.store.delete_worker_launch(auth.org_id, launch_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(post, path = "/api/v1/worker-launches/{launch_id}/archive", tag = "workers", responses((status = 200, body = WorkerLaunch)))]
+pub async fn archive_launch(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(launch_id): Path<Uuid>,
+) -> Result<Json<WorkerLaunch>, ApiError> {
+    auth.require(Permission::SettingsWrite)?;
+    Ok(Json(
+        state
+            .store
+            .archive_worker_launch(auth.org_id, launch_id)
+            .await?,
+    ))
 }

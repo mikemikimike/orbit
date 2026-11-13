@@ -54,13 +54,36 @@ impl Store {
         .ok_or_else(|| StoreError::NotFound("worker launch".into()))
     }
 
-    pub async fn list_worker_launches(&self, org_id: Uuid) -> StoreResult<Vec<WorkerLaunch>> {
+    pub async fn list_worker_launches(
+        &self,
+        org_id: Uuid,
+        archived: Option<bool>,
+    ) -> StoreResult<Vec<WorkerLaunch>> {
         Ok(sqlx::query_as::<_, WorkerLaunch>(
-            "SELECT * FROM worker_launches WHERE org_id = $1 ORDER BY created_at DESC LIMIT 100",
+            "SELECT * FROM worker_launches WHERE org_id = $1 AND ($2::boolean IS NULL OR ($2 = FALSE AND archived_at IS NULL) OR ($2 = TRUE AND archived_at IS NOT NULL)) ORDER BY created_at DESC LIMIT 100",
         )
         .bind(org_id)
+        .bind(archived)
         .fetch_all(&self.pool)
         .await?)
+    }
+
+    /// Archive terminal worker launches whose last activity predates `cutoff`.
+    pub async fn archive_worker_launches_before(&self, cutoff: chrono::DateTime<Utc>) -> StoreResult<u64> {
+        let result = sqlx::query(
+            r#"
+            UPDATE worker_launches
+            SET archived_at = now(), updated_at = now()
+            WHERE archived_at IS NULL
+              AND stopped_at IS NOT NULL
+              AND stopped_at < $1
+              AND status IN ('stopped', 'failed')
+            "#,
+        )
+        .bind(cutoff)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -99,6 +122,38 @@ impl Store {
         .bind(error)
         .bind(started_at)
         .bind(stopped_at)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("worker launch".into()))
+    }
+}
+
+impl Store {
+    pub async fn delete_worker_launch(&self, org_id: Uuid, launch_id: Uuid) -> StoreResult<()> {
+        let result = sqlx::query("DELETE FROM worker_launches WHERE org_id = $1 AND id = $2")
+            .bind(org_id)
+            .bind(launch_id)
+            .execute(&self.pool)
+            .await?;
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound("worker launch".into()));
+        }
+        Ok(())
+    }
+}
+
+impl Store {
+    pub async fn archive_worker_launch(&self, org_id: Uuid, launch_id: Uuid) -> StoreResult<WorkerLaunch> {
+        sqlx::query_as::<_, WorkerLaunch>(
+            r#"
+            UPDATE worker_launches
+            SET archived_at = now(), updated_at = now()
+            WHERE org_id = $1 AND id = $2
+            RETURNING *
+            "#,
+        )
+        .bind(org_id)
+        .bind(launch_id)
         .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| StoreError::NotFound("worker launch".into()))

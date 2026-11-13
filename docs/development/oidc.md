@@ -12,7 +12,7 @@ provider-specific code is required beyond the issuer URL and client registration
 | Audience | `ORBIT_OIDC_AUDIENCE` | `orbit` |
 | Client ID | `ORBIT_OIDC_CLIENT_ID` | `orbit` |
 | Client secret | `ORBIT_OIDC_CLIENT_SECRET` | optional for public PKCE clients |
-| Redirect URI | `ORBIT_OIDC_REDIRECT_URI` | `http://orbit.mdk.local/auth/callback` |
+| Redirect URI | `ORBIT_OIDC_REDIRECT_URI` | `http://orbit.example.com/auth/callback` |
 | Scopes | `ORBIT_OIDC_SCOPES` | `openid profile email` |
 | JWKS | `ORBIT_OIDC_JWKS_URL` | issuer keys URL |
 
@@ -38,7 +38,7 @@ staticClients:
     name: ORBIT
     secret: optional-for-confidential-client
     redirectURIs:
-      - http://orbit.mdk.local/auth/callback
+      - http://orbit.example.com/auth/callback
 ```
 
 Set:
@@ -47,7 +47,7 @@ Set:
 ORBIT_OIDC_ISSUER=https://dex.mdk.local
 ORBIT_OIDC_AUDIENCE=orbit
 ORBIT_OIDC_CLIENT_ID=orbit
-ORBIT_OIDC_REDIRECT_URI=http://orbit.mdk.local/auth/callback
+ORBIT_OIDC_REDIRECT_URI=http://orbit.example.com/auth/callback
 ORBIT_OIDC_JWKS_URL=https://dex.mdk.local/keys
 ```
 
@@ -61,8 +61,8 @@ Create an OpenID Connect client:
 - Client ID: `orbit`
 - Client authentication: off for public PKCE client, or on with a client secret
 - Standard flow: enabled
-- Valid redirect URI: `http://orbit.mdk.local/auth/callback`
-- Web origins: `http://orbit.mdk.local`
+- Valid redirect URI: `http://orbit.example.com/auth/callback`
+- Web origins: `http://orbit.example.com`
 
 Issuer:
 
@@ -99,7 +99,7 @@ auth:
     issuer: https://dex.mdk.local
     audience: orbit
     clientId: orbit
-    redirectUri: http://orbit.mdk.local/auth/callback
+    redirectUri: http://orbit.example.com/auth/callback
     jwksUrl: https://dex.mdk.local/keys
     scopes: "openid profile email"
     autoProvision: true

@@ -122,6 +122,7 @@ impl Store {
         cursor: Option<&str>,
         status: Option<&str>,
         agent_id: Option<Uuid>,
+        archived: Option<bool>,
     ) -> StoreResult<(Vec<ExecutionRecord>, Option<String>, i64)> {
         let (cursor_ts, cursor_id) = match cursor {
             Some(raw) => match decode_cursor(raw)? {
@@ -137,8 +138,9 @@ impl Store {
               AND ($2::text IS NULL OR status = $2)
               AND ($3::uuid IS NULL OR agent_id = $3)
               AND ($4::timestamptz IS NULL OR (created_at, id) < ($4::timestamptz, $5::uuid))
+              AND ($6::boolean IS NULL OR ($6 = FALSE AND archived_at IS NULL) OR ($6 = TRUE AND archived_at IS NOT NULL))
             ORDER BY created_at DESC, id DESC
-            LIMIT $6
+            LIMIT $7
             "#,
         )
         .bind(org_id)
@@ -146,6 +148,7 @@ impl Store {
         .bind(agent_id)
         .bind(cursor_ts)
         .bind(cursor_id)
+        .bind(archived)
         .bind(limit + 1)
         .fetch_all(&self.pool)
         .await?;
@@ -156,16 +159,36 @@ impl Store {
             WHERE org_id = $1
               AND ($2::text IS NULL OR status = $2)
               AND ($3::uuid IS NULL OR agent_id = $3)
+              AND ($4::boolean IS NULL OR ($4 = FALSE AND archived_at IS NULL) OR ($4 = TRUE AND archived_at IS NOT NULL))
             "#,
         )
         .bind(org_id)
         .bind(status)
         .bind(agent_id)
+        .bind(archived)
         .fetch_one(&self.pool)
         .await?;
 
         let (rows, next) = page_of(rows, limit, |e| (e.created_at, e.id));
         Ok((rows, next, total))
+    }
+
+    /// Archive terminal executions whose last activity predates `cutoff`.
+    pub async fn archive_executions_before(&self, cutoff: chrono::DateTime<Utc>) -> StoreResult<u64> {
+        let result = sqlx::query(
+            r#"
+            UPDATE executions
+            SET archived_at = now(), updated_at = now()
+            WHERE archived_at IS NULL
+              AND finished_at IS NOT NULL
+              AND finished_at < $1
+              AND status IN ('succeeded', 'failed', 'timed_out', 'cancelled', 'rejected')
+            "#,
+        )
+        .bind(cutoff)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
     }
 
     /// Atomically claim a queued execution. Returns `None` if another worker won.

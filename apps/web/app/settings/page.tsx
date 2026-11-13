@@ -217,6 +217,21 @@ export default function SettingsPage() {
       </div>
 
       <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-primary" /> OIDC / SSO
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-[11px] text-muted-foreground">
+            Configure OpenID Connect for single sign-on. Stored in the platform settings
+            and applied on next login. Leave blank to keep environment defaults.
+          </p>
+          <OidcSettingsForm />
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <KeyRound className="h-4 w-4 text-primary" /> API tokens
@@ -372,6 +387,118 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+
+function OidcSettingsForm() {
+  const [issuer, setIssuer] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [redirectUri, setRedirectUri] = useState("");
+  const [scopes, setScopes] = useState("openid profile email");
+  const [audience, setAudience] = useState("");
+  const [jwksUrl, setJwksUrl] = useState("");
+  const [autoProvision, setAutoProvision] = useState(true);
+  const [defaultRole, setDefaultRole] = useState("viewer");
+  const [loaded, setLoaded] = useState(false);
+
+  const load = async () => {
+    try {
+      const result = await api.GET("/api/v1/settings/oidc" as never);
+      const data = (result as { data?: Record<string, unknown> }).data ?? {};
+      setIssuer(String(data.issuer ?? ""));
+      setClientId(String(data.clientId ?? ""));
+      setRedirectUri(String(data.redirectUri ?? ""));
+      setScopes(String(data.scopes ?? "openid profile email"));
+      setAudience(String(data.audience ?? ""));
+      setJwksUrl(String(data.jwksUrl ?? ""));
+      setAutoProvision(Boolean(data.autoProvision ?? true));
+      setDefaultRole(String(data.defaultRole ?? "viewer"));
+      setLoaded(true);
+    } catch {
+      setLoaded(true);
+    }
+  };
+
+  if (!loaded) {
+    void load();
+    return <p className="text-sm text-muted-foreground">Loading…</p>;
+  }
+
+  async function save() {
+    try {
+      await (api.PUT as (path: string, init: unknown) => Promise<unknown>)(
+        "/api/v1/settings/oidc",
+        {
+          body: {
+            settings: {
+              issuer,
+              clientId,
+              redirectUri,
+              scopes,
+              audience,
+              jwksUrl,
+              autoProvision,
+              defaultRole,
+            },
+          },
+        },
+      );
+      toast.success("OIDC settings saved");
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  }
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="space-y-1.5 sm:col-span-2">
+        <Label>Issuer URL</Label>
+        <Input value={issuer} onChange={(e) => setIssuer(e.target.value)} placeholder="https://accounts.example.com" />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Client ID</Label>
+        <Input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="orbit-web" />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Redirect URI</Label>
+        <Input value={redirectUri} onChange={(e) => setRedirectUri(e.target.value)} placeholder="http://localhost:3000/auth/callback" />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Scopes</Label>
+        <Input value={scopes} onChange={(e) => setScopes(e.target.value)} placeholder="openid profile email" />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Audience</Label>
+        <Input value={audience} onChange={(e) => setAudience(e.target.value)} placeholder="orbit-api" />
+      </div>
+      <div className="space-y-1.5">
+        <Label>JWKS URL</Label>
+        <Input value={jwksUrl} onChange={(e) => setJwksUrl(e.target.value)} placeholder="https://accounts.example.com/.well-known/jwks.json" />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Default role</Label>
+        <Input value={defaultRole} onChange={(e) => setDefaultRole(e.target.value)} placeholder="viewer" />
+      </div>
+      <label className="flex items-start gap-2 rounded-lg border p-3 text-xs sm:col-span-2">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={autoProvision}
+          onChange={(e) => setAutoProvision(e.target.checked)}
+        />
+        <span>
+          <span className="font-medium">Auto-provision users</span>
+          <span className="mt-0.5 block text-muted-foreground">
+            Create a local user on first OIDC login.
+          </span>
+        </span>
+      </label>
+      <div className="sm:col-span-2">
+        <Button onClick={() => void save()}>Save OIDC settings</Button>
+      </div>
+    </div>
+  );
+}
+
 
 function Row({ label, value }: { label: string; value: string }) {
   return (

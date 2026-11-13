@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bot, Plus, Search } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +12,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AgentCard } from "@/components/agents/agent-card";
-import { useAgents } from "@/lib/queries";
+import { api } from "@/lib/api";
+import { queryKeys, unwrap, useAgents } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -23,10 +26,42 @@ const FILTERS = [
 ];
 
 export default function AgentsPage() {
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState("active");
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const agents = useAgents({ status: status || undefined, q: query || undefined, limit: 50 });
+  const queryClient = useQueryClient();
+
+  const invalidateAgents = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.agents() });
+
+  const restore = useMutation({
+    mutationFn: async (agentId: string) =>
+      unwrap(
+        await api.POST("/api/v1/agents/{agent_id}/activate", {
+          params: { path: { agent_id: agentId } },
+        }),
+      ),
+    onSuccess: () => {
+      toast.success("Agent restored");
+      void invalidateAgents();
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const hardDelete = useMutation({
+    mutationFn: async (agentId: string) =>
+      unwrap(
+        await api.DELETE("/api/v1/agents/{agent_id}", {
+          params: { path: { agent_id: agentId }, query: { hard: true } },
+        }),
+      ),
+    onSuccess: () => {
+      toast.success("Agent deleted permanently");
+      void invalidateAgents();
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -88,7 +123,20 @@ export default function AgentsPage() {
         <>
           <div className="grid gap-3 sm:grid-cols-2">
             {agents.data.items.map((agent) => (
-              <AgentCard key={agent.id} agent={agent} />
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                onRestore={(id) => restore.mutate(id)}
+                onDelete={(id) => {
+                  if (
+                    window.confirm(
+                      `Permanently delete ${agent.name}? This removes the agent and its execution history and cannot be undone.`,
+                    )
+                  ) {
+                    hardDelete.mutate(id);
+                  }
+                }}
+              />
             ))}
           </div>
           <p className="text-center text-xs text-muted-foreground">
@@ -98,7 +146,15 @@ export default function AgentsPage() {
       ) : (
         <EmptyState
           icon={<Bot className="h-7 w-7" />}
-          title={query || status ? "No agents match this filter" : "No agents yet"}
+          title={
+            query
+              ? "No agents match this search"
+              : status === "active"
+                ? "No active agents"
+                : status
+                  ? "No agents match this filter"
+                  : "No agents yet"
+          }
           description="Create an agent with instructions, a harness, a model and optional connectors. You can test it as a draft."
           action={
             <Button asChild>

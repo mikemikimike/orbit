@@ -143,6 +143,7 @@ export function useExecutions(params: {
   agentId?: string;
   limit?: number;
   cursor?: string;
+  archived?: boolean;
 } = {}) {
   return useQuery<ExecutionPage>({
     queryKey: queryKeys.executions(params),
@@ -155,6 +156,7 @@ export function useExecutions(params: {
               cursor: params.cursor,
               status: params.status,
               agent_id: params.agentId,
+              archived: params.archived,
             },
           },
         }),
@@ -271,10 +273,10 @@ export function useAgentTeams() {
   });
 }
 
-export function useTeamRuns() {
+export function useTeamRuns(archived?: boolean) {
   return useQuery<TeamRun[]>({
-    queryKey: queryKeys.teamRuns,
-    queryFn: listTeamRuns,
+    queryKey: [...queryKeys.teamRuns, archived ?? "all"],
+    queryFn: () => listTeamRuns(archived),
     refetchInterval: 3_000,
   });
 }

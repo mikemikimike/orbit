@@ -1,6 +1,6 @@
 //! Agent teams: sequential role handoffs materialized as normal executions.
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Extension;
 use axum::Json;
@@ -11,13 +11,19 @@ use orbit_domain::{HarnessKind, TriggerSource, ValidationIssue};
 use orbit_security::{AuthContext, Permission};
 use orbit_store::{AgentTeam, TeamRun, TeamStep};
 
+use crate::dto::ArchiveListQuery;
 use crate::error::ApiError;
 use crate::state::AppState;
+use crate::work_sources::{
+    validate_repositories, validate_work_source, RepositorySpec, WorkSourceDefinition,
+};
 
 #[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamStepInput {
     pub agent_id: Uuid,
+    #[serde(default)]
+    pub model: Option<TeamModelOverride>,
 }
 
 #[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
@@ -41,6 +47,15 @@ pub struct CreateTeamRequest {
     /// Optional base/working branch for repository checkout.
     #[serde(default)]
     pub branch: Option<String>,
+    /// Team-level model override (optional).
+    #[serde(default)]
+    pub model: Option<TeamModelOverride>,
+    /// Automatic issue discovery/claiming configuration.
+    #[serde(default)]
+    pub work_source: Option<WorkSourceDefinition>,
+    /// Multi-repository workspace. When empty, `repository`/`branch` are used.
+    #[serde(default)]
+    pub repositories: Vec<RepositorySpec>,
     /// Worker profile used for automatic launch.
     #[serde(default)]
     pub worker_profile_id: Option<Uuid>,
@@ -63,6 +78,9 @@ pub struct CreateTeamRunRequest {
     /// Explicitly allow bound writes for this run without per-call approvals (L4).
     #[serde(default)]
     pub auto_approve: bool,
+    /// Override the agent's stored harness for this run.
+    #[serde(default)]
+    pub harness_override: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
@@ -84,18 +102,37 @@ pub struct TeamDefinition {
     #[serde(default)]
     pub branch: Option<String>,
     #[serde(default)]
+    pub work_source: Option<WorkSourceDefinition>,
+    #[serde(default)]
+    pub repositories: Vec<RepositorySpec>,
+    #[serde(default)]
     pub worker_profile_id: Option<Uuid>,
     #[serde(default)]
     pub auto_launch: bool,
     #[serde(default)]
     pub skills: Vec<String>,
+    #[serde(default)]
+    pub model: Option<TeamModelOverride>,
     pub steps: Vec<TeamStepDefinition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamModelOverride {
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub management: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamStepDefinition {
     pub agent_id: Uuid,
+    #[serde(default)]
+    pub model: Option<TeamModelOverride>,
 }
 
 fn default_mode() -> String {
@@ -105,6 +142,54 @@ fn default_mode() -> String {
 pub(crate) fn parse_definition(team: &AgentTeam) -> Result<TeamDefinition, ApiError> {
     serde_json::from_value(team.definition.clone())
         .map_err(|error| ApiError::internal(format!("team definition is invalid: {error}")))
+}
+
+async fn validate_work_source_connection(
+    state: &AppState,
+    org_id: Uuid,
+    source: &WorkSourceDefinition,
+    issues: &mut Vec<ValidationIssue>,
+) {
+    if !source.enabled {
+        return;
+    }
+    let Some(connection_id) = source.connection_id else {
+        return;
+    };
+    match state
+        .store
+        .get_connection_with_connector(org_id, connection_id)
+        .await
+    {
+        Ok(connection) => {
+            if connection.connector_slug != source.provider {
+                issues.push(ValidationIssue::new(
+                    "workSource.connectionId",
+                    format!(
+                        "connection belongs to '{}', not '{}'",
+                        connection.connector_slug, source.provider
+                    ),
+                ));
+            } else if connection.connection.status != "active" {
+                issues.push(ValidationIssue::new(
+                    "workSource.connectionId",
+                    format!("connection '{}' is not active", connection.connection.name),
+                ));
+            }
+        }
+        Err(_) => issues.push(ValidationIssue::new(
+            "workSource.connectionId",
+            format!("unknown connection '{connection_id}'"),
+        )),
+    }
+}
+
+fn work_source_to_json(source: &WorkSourceDefinition) -> serde_json::Value {
+    serde_json::to_value(source).unwrap_or(serde_json::Value::Null)
+}
+
+fn repositories_to_json(repositories: &[RepositorySpec]) -> serde_json::Value {
+    serde_json::json!(repositories)
 }
 
 async fn validate_native_primary(
@@ -171,6 +256,12 @@ pub async fn create_team(
         }
     }
     let mut issues = Vec::new();
+    if let Some(source) = &body.work_source {
+        issues.extend(validate_work_source(source));
+    }
+    if !body.repositories.is_empty() {
+        issues.extend(validate_repositories(&body.repositories));
+    }
     let mut agent_ids = std::collections::BTreeSet::new();
     for step in &body.steps {
         if !agent_ids.insert(step.agent_id) {
@@ -204,6 +295,9 @@ pub async fn create_team(
             ));
         }
     }
+    if let Some(source) = &body.work_source {
+        validate_work_source_connection(&state, auth.org_id, source, &mut issues).await;
+    }
     validate_native_primary(&state, auth.org_id, &body.mode, &body.steps, &mut issues).await;
     if !issues.is_empty() {
         return Err(ApiError::validation(issues));
@@ -213,11 +307,15 @@ pub async fn create_team(
         "instructions": body.instructions.trim(),
         "repository": body.repository.as_deref().map(str::trim).filter(|value| !value.is_empty()),
         "branch": body.branch.as_deref().map(str::trim).filter(|value| !value.is_empty()),
+        "workSource": body.work_source.as_ref().map(work_source_to_json),
+        "repositories": repositories_to_json(&body.repositories),
+        "model": body.model,
         "workerProfileId": body.worker_profile_id,
         "autoLaunch": body.auto_launch,
         "skills": body.skills,
         "steps": body.steps.iter().map(|step| serde_json::json!({
             "agentId": step.agent_id,
+            "model": step.model,
         })).collect::<Vec<_>>()
     });
     let team = state
@@ -266,6 +364,12 @@ pub async fn update_team(
         }
     }
     let mut issues = Vec::new();
+    if let Some(source) = &body.work_source {
+        issues.extend(validate_work_source(source));
+    }
+    if !body.repositories.is_empty() {
+        issues.extend(validate_repositories(&body.repositories));
+    }
     let mut agent_ids = std::collections::BTreeSet::new();
     for step in &body.steps {
         if !agent_ids.insert(step.agent_id) {
@@ -299,6 +403,9 @@ pub async fn update_team(
             ));
         }
     }
+    if let Some(source) = &body.work_source {
+        validate_work_source_connection(&state, auth.org_id, source, &mut issues).await;
+    }
     validate_native_primary(&state, auth.org_id, &body.mode, &body.steps, &mut issues).await;
     if !issues.is_empty() {
         return Err(ApiError::validation(issues));
@@ -308,11 +415,15 @@ pub async fn update_team(
         "instructions": body.instructions.trim(),
         "repository": body.repository.as_deref().map(str::trim).filter(|value| !value.is_empty()),
         "branch": body.branch.as_deref().map(str::trim).filter(|value| !value.is_empty()),
+        "workSource": body.work_source.as_ref().map(work_source_to_json),
+        "repositories": repositories_to_json(&body.repositories),
+        "model": body.model,
         "workerProfileId": body.worker_profile_id,
         "autoLaunch": body.auto_launch,
         "skills": body.skills,
         "steps": body.steps.iter().map(|step| serde_json::json!({
             "agentId": step.agent_id,
+            "model": step.model,
         })).collect::<Vec<_>>()
     });
     Ok(Json(
@@ -409,8 +520,28 @@ pub(crate) async fn start_step(
         .ok_or_else(|| ApiError::internal("team step index out of range"))?;
     let agent = state.store.get_agent(run.org_id, step.agent_id).await?;
     let version = state.store.get_current_version(run.org_id, &agent).await?;
-    let spec: orbit_domain::AgentSpec = serde_json::from_value(version.spec.clone())
+    let mut spec: orbit_domain::AgentSpec = serde_json::from_value(version.spec.clone())
         .map_err(|error| ApiError::internal(format!("stored agent spec is invalid: {error}")))?;
+
+    // Apply model override from team or step definition.
+    let step_def = definition.steps.get(step_index);
+    let model_override = step_def
+        .and_then(|s| s.model.clone())
+        .or_else(|| definition.model.clone());
+    if let Some(override_model) = model_override {
+        if let Some(provider) = override_model.provider {
+            spec.model.provider = Some(provider);
+        }
+        if let Some(model) = override_model.model {
+            spec.model.model = Some(model);
+        }
+        if let Some(management) = override_model.management {
+            spec.model.management = match management.as_str() {
+                "platform" => orbit_domain::ModelManagement::Platform,
+                _ => orbit_domain::ModelManagement::Harness,
+            };
+        }
+    }
     let task = run
         .input
         .get("task")
@@ -425,12 +556,41 @@ pub(crate) async fn start_step(
         .map(|value| value.to_string())
         .unwrap_or_else(|| "null".into());
     let task_text = if previous_output.is_none() {
-        format!("Team goal: {instructions}\n\n{task}")
+        if instructions.trim().is_empty() {
+            task.to_string()
+        } else {
+            format!("{task}\n\nTeam context: {instructions}")
+        }
     } else {
-        format!(
-            "Team goal: {instructions}\n\nRole: {}\n\nOriginal task: {task}\n\nPrevious step output:\n{previous}",
-            agent.name
-        )
+        if instructions.trim().is_empty() {
+            format!("Role: {}\n\nOriginal task: {task}\n\nPrevious step output:\n{previous}", agent.name)
+        } else {
+            format!(
+                "Role: {}\n\nOriginal task: {task}\n\nTeam context: {instructions}\n\nPrevious step output:\n{previous}",
+                agent.name
+            )
+        }
+    };
+    let task_text = if definition.repositories.len() > 1 {
+        let manifest = definition
+            .repositories
+            .iter()
+            .map(|repository| {
+                format!(
+                    "- {} (workspace path: {})",
+                    repository.repository,
+                    if repository.path.is_empty() {
+                        "."
+                    } else {
+                        &repository.path
+                    }
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("{task_text}\n\nWorkspace repositories:\n{manifest}")
+    } else {
+        task_text
     };
     let native = definition.mode == "native";
     if native && spec.harness.kind != HarnessKind::OpenCode {
@@ -458,6 +618,8 @@ pub(crate) async fn start_step(
             "previous": previous_output,
             "repository": run.input.get("payload").and_then(|value| value.get("repository")).cloned(),
             "branch": run.input.get("payload").and_then(|value| value.get("branch")).cloned(),
+            "repositories": run.input.get("payload").and_then(|value| value.get("repositories")).cloned(),
+            "harnessOverride": run.input.get("payload").and_then(|value| value.get("harnessOverride")).cloned(),
         },
         "provenance": {
             "source": "team",
@@ -475,7 +637,13 @@ pub(crate) async fn start_step(
             agent_id: agent.id,
             agent_version_id: version.id,
             agent_name: &agent.name,
-            harness_kind: spec.harness.kind,
+            harness_kind: run
+                .input
+                .get("payload")
+                .and_then(|value| value.get("harnessOverride"))
+                .and_then(|value| value.as_str())
+                .and_then(|value| value.parse::<orbit_domain::HarnessKind>().ok())
+                .unwrap_or(spec.harness.kind),
             trigger_source: TriggerSource::Manual,
             placement: spec.harness.placement.as_str(),
             trigger_id: None,
@@ -547,6 +715,12 @@ pub async fn create_run(
             payload["branch"] = serde_json::json!(branch);
         }
     }
+    if !definition.repositories.is_empty() && payload.get("repositories").is_none() {
+        payload["repositories"] = serde_json::json!(definition.repositories);
+    }
+    if let Some(harness_override) = &body.harness_override {
+        payload["harnessOverride"] = serde_json::json!(harness_override);
+    }
     let input = serde_json::json!({
         "task": task,
         "instructions": definition.instructions,
@@ -593,9 +767,10 @@ pub async fn create_run(
 pub async fn list_runs(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
+    Query(query): Query<ArchiveListQuery>,
 ) -> Result<Json<Vec<TeamRun>>, ApiError> {
     auth.require(Permission::HarnessesRead)?;
-    Ok(Json(state.store.list_team_runs(auth.org_id).await?))
+    Ok(Json(state.store.list_team_runs(auth.org_id, query.archived).await?))
 }
 
 pub async fn get_run(
@@ -645,10 +820,14 @@ pub(crate) async fn advance(state: &AppState, run: TeamRun) -> anyhow::Result<()
                 .store
                 .update_team_run(run.id, "succeeded", execution.output.as_ref(), None)
                 .await?;
-            let _ = state
-                .store
-                .set_team_queue_status_by_run(run.id, "succeeded", None)
-                .await;
+            crate::team_outcomes::close_queue_loop(
+                state,
+                &run,
+                "succeeded",
+                execution.output.as_ref(),
+                None,
+            )
+            .await?;
             return Ok(());
         }
         let next = (current.step_index as usize) + 1;
@@ -692,6 +871,14 @@ pub(crate) async fn advance(state: &AppState, run: TeamRun) -> anyhow::Result<()
                 .store
                 .update_team_run(run.id, "succeeded", execution.output.as_ref(), None)
                 .await?;
+            crate::team_outcomes::close_queue_loop(
+                state,
+                &run,
+                "succeeded",
+                execution.output.as_ref(),
+                None,
+            )
+            .await?;
         }
     } else {
         state
@@ -715,6 +902,17 @@ pub(crate) async fn advance(state: &AppState, run: TeamRun) -> anyhow::Result<()
                 )),
             )
             .await?;
+        crate::team_outcomes::close_queue_loop(
+            state,
+            &run,
+            "failed",
+            execution.output.as_ref(),
+            Some(&format!(
+                "step '{}' finished with {}",
+                current.name, execution.status
+            )),
+        )
+        .await?;
     }
     Ok(())
 }

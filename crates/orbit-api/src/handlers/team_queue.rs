@@ -10,6 +10,7 @@ use uuid::Uuid;
 use orbit_domain::ValidationIssue;
 use orbit_security::{AuthContext, Permission};
 use orbit_store::team_queue::TeamQueueItem;
+use orbit_store::AgentTeam;
 
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -101,7 +102,18 @@ pub async fn run_item(
     if item.status == "running" {
         return Err(ApiError::conflict("queue item is already running"));
     }
-    let definition = crate::handlers::teams::parse_definition(&team)?;
+    let detail = start_queue_item(&state, &auth, &team, &item).await?;
+    Ok((StatusCode::CREATED, Json(detail)))
+}
+
+/// Create a TeamRun for a queue item and mark the item running.
+pub(crate) async fn start_queue_item(
+    state: &AppState,
+    auth: &AuthContext,
+    team: &AgentTeam,
+    item: &TeamQueueItem,
+) -> Result<crate::handlers::teams::TeamRunDetail, ApiError> {
+    let definition = crate::handlers::teams::parse_definition(team)?;
     let task = item
         .payload
         .get("task")
@@ -125,6 +137,9 @@ pub async fn run_item(
             payload["repository"] = serde_json::json!(repository);
         }
     }
+    if !definition.repositories.is_empty() && payload.get("repositories").is_none() {
+        payload["repositories"] = serde_json::json!(definition.repositories);
+    }
     let input = serde_json::json!({
         "task": task,
         "instructions": definition.instructions,
@@ -138,14 +153,14 @@ pub async fn run_item(
         .store
         .create_team_run(auth.org_id, team.id, &input, Some(auth.user_id))
         .await?;
-    let step = crate::handlers::teams::start_step(&state, &run, &definition, 0, None).await?;
+    let step = crate::handlers::teams::start_step(state, &run, &definition, 0, None).await?;
     if definition.auto_launch {
         if let (Some(profile_id), Some(execution_id)) =
             (definition.worker_profile_id, step.execution_id)
         {
             crate::handlers::worker_launches::launch_profile_internal(
-                &state,
-                &auth,
+                state,
+                auth,
                 profile_id,
                 Some(execution_id),
             )
@@ -156,11 +171,82 @@ pub async fn run_item(
         .store
         .set_team_queue_run(auth.org_id, item.id, run.id, "running")
         .await?;
-    Ok((
-        StatusCode::CREATED,
-        Json(crate::handlers::teams::TeamRunDetail {
-            run,
-            steps: vec![step],
-        }),
+    Ok(crate::handlers::teams::TeamRunDetail {
+        run,
+        steps: vec![step],
+    })
+}
+
+async fn fetch_item(
+    state: &AppState,
+    auth: &AuthContext,
+    team_id: Uuid,
+    item_id: Uuid,
+) -> Result<TeamQueueItem, ApiError> {
+    let _team = state.store.get_agent_team(auth.org_id, team_id).await?;
+    let item = state
+        .store
+        .get_team_queue_item(auth.org_id, item_id)
+        .await?;
+    if item.team_id != team_id {
+        return Err(ApiError::not_found("queue item"));
+    }
+    Ok(item)
+}
+
+pub async fn retry(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path((team_id, item_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<TeamQueueItem>, ApiError> {
+    auth.require(Permission::ExecutionsCreate)?;
+    let item = fetch_item(&state, &auth, team_id, item_id).await?;
+    if item.status == "running" {
+        return Err(ApiError::conflict("running items must be cancelled first"));
+    }
+    Ok(Json(
+        state
+            .store
+            .retry_team_queue_item(auth.org_id, item_id, None)
+            .await?,
     ))
+}
+
+pub async fn requeue(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path((team_id, item_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<TeamQueueItem>, ApiError> {
+    auth.require(Permission::ExecutionsCreate)?;
+    let item = fetch_item(&state, &auth, team_id, item_id).await?;
+    if item.status == "running" {
+        return Err(ApiError::conflict("running items must be cancelled first"));
+    }
+    Ok(Json(
+        state
+            .store
+            .requeue_team_queue_item(auth.org_id, item_id)
+            .await?,
+    ))
+}
+
+pub async fn cancel(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path((team_id, item_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<TeamQueueItem>, ApiError> {
+    auth.require(Permission::ExecutionsCreate)?;
+    let item = fetch_item(&state, &auth, team_id, item_id).await?;
+    let run_id = item.team_run_id;
+    let updated = state
+        .store
+        .cancel_team_queue_item(auth.org_id, item_id, Some("cancelled by operator"))
+        .await?;
+    if let Some(run_id) = run_id {
+        let _ = state
+            .store
+            .update_team_run(run_id, "cancelled", None, Some("queue item cancelled"))
+            .await;
+    }
+    Ok(Json(updated))
 }

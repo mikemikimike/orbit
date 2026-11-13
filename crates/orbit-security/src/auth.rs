@@ -265,10 +265,7 @@ const ALLOWED_ALGORITHMS: [Algorithm; 6] = [
 
 impl JwtValidator {
     pub fn new(config: &OidcConfig) -> Result<Self, SecurityError> {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(10))
-            .build()
-            .map_err(|e| SecurityError::Internal(e.to_string()))?;
+        let client = crate::http::client_with_custom_ca(Duration::from_secs(10));
         Ok(Self {
             issuer: config.issuer.clone(),
             audience: config.audience.clone(),

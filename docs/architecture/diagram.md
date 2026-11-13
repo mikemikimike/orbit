@@ -15,7 +15,7 @@ A high-resolution PNG is available at [`orbit-overview.png`](orbit-overview.png)
 
 | Status | Components |
 |---|---|
-| **Implemented** | API, PostgreSQL schema, NATS/memory bus, mock harness, OpenCode v2.2.5, X read hydration, SSE, audit, encrypted secrets |
+| **Implemented** | API, PostgreSQL schema, NATS/memory bus, mock harness, OpenCode v2.3.0, X read hydration, SSE, audit, encrypted secrets |
 | **In progress** | Execution-scoped tool broker, GitHub capabilities, approval UI |
 | **Planned** | GitLab actions, X posting, webhook verification, long-running service mode, swarm simulations, per-execution container isolation |
 
@@ -210,7 +210,7 @@ flowchart TB
   end
 
   subgraph K8s["Kubernetes (Helm)"]
-    Ing["Ingress<br/>orbit.mdk.local"] --> SvcWeb["Service: web"]
+    Ing["Ingress<br/>orbit.example.com"] --> SvcWeb["Service: web"]
     Ing -->|"/api, /docs, /healthz"| SvcApi["Service: api"]
     WebD["Deployment: web"] --> SvcWeb
     ApiD["Deployment: api"] --> SvcApi

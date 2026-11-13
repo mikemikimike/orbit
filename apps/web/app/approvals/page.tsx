@@ -26,6 +26,7 @@ import { api } from "@/lib/api";
 import { queryKeys, unwrap, useApprovals } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 import { formatDateTime, relativeTime, titleCase } from "@/lib/utils";
+import { capabilityLabel, effectLabel } from "@/lib/presentation";
 import type { ApprovalWithExecution } from "@/lib/types";
 
 interface ReviewState {
@@ -290,7 +291,7 @@ function ApprovalDetails({ approval }: { approval: ApprovalWithExecution }) {
         </span>
         <span>
           <span className="text-muted-foreground">effect:</span>{" "}
-          {action.effect ? action.effect.replace("_", " ") : "—"}
+          {effectLabel(action.effect)}
         </span>
       </div>
       {rows.length ? (
@@ -375,5 +376,5 @@ function actionRows(
 
 function capabilityOf(approval: ApprovalWithExecution): string {
   const action = (approval.requestedAction ?? {}) as { capability?: string };
-  return action.capability ?? "unknown capability";
+  return capabilityLabel(action.capability);
 }

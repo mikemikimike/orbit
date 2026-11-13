@@ -39,6 +39,8 @@ pub struct CreateWorkerProfileRequest {
     #[serde(default)]
     pub env: serde_json::Value,
     #[serde(default)]
+    pub env_mappings: serde_json::Value,
+    #[serde(default)]
     pub resources: serde_json::Value,
 }
 
@@ -318,6 +320,7 @@ pub async fn create_profile(
             body.model.as_deref(),
             body.auth_secret_name.as_deref(),
             &body.env,
+            &body.env_mappings,
             &body.resources,
         )
         .await?;
@@ -404,6 +407,7 @@ pub async fn update_profile(
             body.model.as_deref(),
             body.auth_secret_name.as_deref(),
             &body.env,
+            &body.env_mappings,
             &body.resources,
         )
         .await?;
