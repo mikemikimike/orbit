@@ -24,7 +24,7 @@ contract.
 ┌───────────────┴──────────────────────────────────────────────────────┐
 │ C. Execution Plane                                                   │
 │    Isolated harness workers / containers / Kubernetes Jobs            │
-│    opencode · claude-code · pi · generic · mock                       │
+│    opencode · pi · mock (available) · claude-code / generic (planned) │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -54,7 +54,7 @@ harnesses are launched as isolated containers/Jobs (`HarnessDispatcher`).
 | `orbit-store` | PostgreSQL repositories, migrations, transactions |
 | `orbit-events` | `EventBus` abstraction, in-memory and NATS JetStream drivers |
 | `orbit-security` | Auth context, token hashing, OIDC validation, `SecretStore`, AES-GCM |
-| `orbit-harness` | Harness registry and adapters (mock implemented, opencode scaffold) |
+| `orbit-harness` | Harness registry and adapters (mock, opencode, pi available; claude_code/generic planned) |
 | `orbit-api` | HTTP router, handlers, OpenAPI document, SSE |
 | `services/api` | Control-plane binary |
 | `services/worker` | Execution-plane supervisor binary |

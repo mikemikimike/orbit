@@ -10,12 +10,12 @@ A high-resolution PNG is available at [`orbit-overview.png`](orbit-overview.png)
 |---|---|
 | **Agent Experience** | Web UI (and future Expo app). Configuration, monitoring, approvals. No business logic or durable state. |
 | **Control Plane** | `orbit-api`: auth, agents and immutable versions, providers, connections, executions, approvals, audit, SSE. PostgreSQL is the durable source of truth. NATS JetStream accelerates events; DB polling is the recovery path. |
-| **Execution Plane** | `orbit-worker` (mock/scheduler) and `orbit-worker-opencode` (real OpenCode). Workers claim only their configured harnesses. The policy-enforcing tool broker runs per execution. |
+| **Execution Plane** | `orbit-worker` (mock/scheduler), `orbit-worker-opencode` (OpenCode v2.3.0), `orbit-worker-pi` (Pi v1.5.2). Workers claim only their configured harnesses. The policy-enforcing tool broker runs per execution. |
 | **External systems** | GitHub, X, GitLab, webhooks and model providers. All actions go through the broker; credentials never reach the harness. |
 
 | Status | Components |
 |---|---|
-| **Implemented** | API, PostgreSQL schema, NATS/memory bus, mock harness, OpenCode v2.3.0, Pi v1.5.2, X read hydration, SSE, audit, encrypted secrets, tool broker, GitHub capabilities, approval UI, Agent Teams (queue, dispatcher, multi-repo), memory, K8s Jobs, OIDC, custom CA, dark/light mode |
+| **Implemented** | API, PostgreSQL schema, NATS/memory bus, mock harness, OpenCode v2.3.0, Pi v1.5.2, X read hydration, SSE, audit, encrypted secrets, tool broker, GitHub capabilities, approval UI, Agent Teams (queue, dispatcher, multi-repo, close-the-loop), memory, K8s Jobs, OIDC, custom CA, dark/light mode, env var mappings, scripts in skills, per-agent models, Work wizard |
 | **In progress** | GitLab actions, webhook verification, long-running service mode |
 | **Planned** | X posting, swarm simulations, per-execution container isolation (Docker), Claude Code adapter |
 
@@ -37,7 +37,8 @@ flowchart LR
   subgraph Execution["Execution Plane"]
     Worker["orbit-worker<br/>mock · scheduler"]
     OCWorker["orbit-worker-opencode"]
-    Harness["OpenCode CLI<br/>(isolated workspace)"]
+    PiWorker["orbit-worker-pi"]
+    Harness["OpenCode / Pi CLI<br/>(isolated workspace)"]
     Broker["Policy-enforcing<br/>tool broker"]
   end
 
@@ -53,8 +54,10 @@ flowchart LR
   API <--> Bus
   Bus --> Worker
   Bus --> OCWorker
+  Bus --> PiWorker
   Worker <--> DB
   OCWorker <--> DB
+  PiWorker <--> DB
   OCWorker -->|"spawn per execution"| Harness
   Harness <-->|"MCP tools"| Broker
   Broker -->|"HTTPS + leased credentials"| GitHub
@@ -216,6 +219,7 @@ flowchart TB
     ApiD["Deployment: api"] --> SvcApi
     WorkerD["Deployment: worker<br/>ORBIT_WORKER_HARNESSES=mock"]
     OpencodeD["Deployment: worker-opencode<br/>ORBIT_WORKER_HARNESSES=opencode"]
+    PiD["Deployment: worker-pi<br/>ORBIT_WORKER_HARNESSES=pi"]
     Pg[("PostgreSQL<br/>bundled or external")]
     Nats[("NATS<br/>bundled or external")]
     Secret["Secrets: DB URL, master key,<br/>OIDC, OpenCode auth export"]
@@ -224,6 +228,8 @@ flowchart TB
     WorkerD <--> Pg
     OpencodeD <--> Pg
     OpencodeD <--> Nats
+    PiD <--> Pg
+    PiD <--> Nats
     OpencodeD -.-> Secret
   end
 ```
