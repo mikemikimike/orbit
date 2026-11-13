@@ -2,7 +2,7 @@
 
 ![ORBIT architecture overview](orbit-overview.svg)
 
-A high-resolution PNG is available at [`orbit-overview.png`](orbit-overview.png).
+A PNG export is available at [`orbit-overview.png`](orbit-overview.png) (may lag behind the SVG).
 
 ## Reading the diagram
 
