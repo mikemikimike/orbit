@@ -15,7 +15,8 @@ endpoint.
 
 OpenCode Go is **not** a harness and not a generic provider: it is represented as a
 `harness_managed` provider whose credential is stored in `secret_ref` and handed to the
-OpenCode adapter (Phase 1). It is never hardcoded in the UI or domain.
+OpenCode adapter. Provider names and model inventories are never hardcoded in the UI or
+domain; both are discovered from the provider registry.
 
 ### `openai_compatible` configuration
 
@@ -53,8 +54,9 @@ tmpfs files; they are never written to logs, execution events or the frontend.
 
 ## Part B — Connectors
 
-Source: `crates/orbit-contracts/src/connector.rs` (design contract), implementation in
-Phase 2.
+Source: `crates/orbit-contracts/src/connector.rs` (trait + DTOs), manifests in
+`crates/orbit-api/src/connectors.rs`, execution-plane clients in
+`services/worker/src/{github,gitlab}.rs`.
 
 ### Concepts
 
@@ -90,28 +92,44 @@ Phase 2.
 #[async_trait]
 pub trait Connector: Send + Sync {
     fn manifest(&self) -> &ConnectorManifest;
-    async fn validate_connection(&self, conn: &ConnectionContext) -> Result<(), ConnectorError>;
-    async fn invoke(&self, ctx: ConnectorContext, call: CapabilityCall)
+    async fn validate_connection(&self, context: &ConnectorContext) -> Result<(), ConnectorError>;
+    async fn invoke(&self, context: ConnectorContext, call: CapabilityCall)
         -> Result<CapabilityResult, ConnectorError>;
-    async fn verify_webhook(&self, headers: &HeaderMap, body: &[u8], secret: &SecretLease)
-        -> Result<Option<ConnectorEvent>, ConnectorError>;
+    async fn verify_webhook(&self, headers: &http::HeaderMap, body: &[u8],
+        secret: Option<&SecretLease>) -> Result<Option<ConnectorEvent>, ConnectorError>;
 }
 ```
+
+**Current implementation note:** the built-in GitHub and GitLab connectors are invoked by
+the worker's policy-enforcing tool broker (`services/worker/src/broker.rs`) through the
+`github.rs` / `gitlab.rs` clients rather than as `Connector` trait objects. The trait
+remains the target contract for third-party connectors. X read hydration is a separate
+pre-execution step.
 
 `ConnectorContext` contains only platform-approved grants; the connector SDK enforces
 that `call.capability` is in the grant list before executing. MCP servers are one
 transport option (`mcp` capability provider), not the only connector mechanism.
 
-### Implemented MVP scope
+### Implemented scope
 
-- Connector registry with seeded manifests (mock, generic-webhook, telegram, gitlab, x).
-- Connections stored with encrypted credentials; create/list/delete.
+- **Manifests** seeded for `mock`, `telegram`, `github`, `gitlab`, `x`, `webhook`.
+- **Connections** stored with encrypted credentials; create / list / update / delete.
+  The API never returns the credential (`hasCredential` only).
+- **GitHub** through the tool broker: `issues.list`, `issues.get`, `issues.comment`,
+  `issues.create`, `issues.update`, `pulls.list`, `pulls.get`, `pulls.create`,
+  `checks.list` (reads implemented, writes approval-gated and needing live E2E).
+- **GitLab** through the tool broker: `projects.list`, `group_issues.list`,
+  `boards.list`, `issues.*`, `merge_requests.*`, `pipelines.status`. API-token auth.
 - **X read hydration**: before an execution, the worker resolves `x` bindings with the
-  `posts.search` capability, loads the selected connection's bearer token, calls
-  `GET https://api.x.com/2/tweets/search/recent`, and injects up to 10 posts into the
-  harness input as `externalContext` with `provenance.trusted=false`. The query comes from
+  `posts.search` capability, loads the connection's bearer token, calls
+  `GET /2/tweets/search/recent`, and injects up to 10 posts into the harness input as
+  `externalContext` with `provenance.trusted=false`. The query comes from
   `payload.query`, then `connection.config.query`, then the task text.
-- Failures (missing credential/query, API 401/403, network) fail the execution with an
-  actionable message; bindings without a connection are skipped with a recorded event.
-- Writes/posting, OAuth flows, webhook verification, general capability invocation, MCP
-  and the connector SDK remain Phase 2.
+- **Repository tools** (`repo.checkout`, `repo.commit`, `repo.push`) run in the worker
+  over a per-execution workspace; git credentials are injected through `GIT_ASKPASS` in
+  the child process only.
+- **Capability enforcement**: the broker evaluates `evaluate_capability` (autonomy ×
+  effect × grant) before every call; writes below L4 create approvals.
+
+Not yet implemented: X posting, Telegram `messages.send` invocation, OAuth flows, webhook
+verification, and a third-party connector SDK.

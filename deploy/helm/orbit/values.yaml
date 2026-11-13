@@ -8,7 +8,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 # Private registry (HTTP on the LAN) used by the cluster.
-imageRegistry: 192.168.1.201:5000
+imageRegistry: registry.example.com:5000
 imagePullPolicy: IfNotPresent
 imagePullSecrets: []
 
@@ -188,11 +188,13 @@ externalNats:
 
 # ─── Platform ────────────────────────────────────────────────
 platform:
-  environment: production
+  # This default chart targets local/test clusters (bundled DB/NATS, dev auth).
+  # Use values-prod.example.yaml for a production deployment.
+  environment: development
   seedDemo: true
   logFormat: json
-  corsOrigins: "http://orbit.mdk.local"
-  publicBaseUrl: "http://orbit.mdk.local"
+  corsOrigins: "http://orbit.example.com"
+  publicBaseUrl: "http://orbit.example.com"
   bodyLimitBytes: "2097152"
 
 # Optional Vault wiring (secret retrieval is Phase 2; values are injected as env so
@@ -205,7 +207,7 @@ vault:
 # ─── Ingress ─────────────────────────────────────────────────
 ingress:
   enabled: true
-  host: orbit.mdk.local
+  host: orbit.example.com
   ingressClassName: nginx
   tls:
     enabled: false

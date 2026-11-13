@@ -3,7 +3,7 @@
 # - External PostgreSQL and NATS (no bundled stateful services)
 # - OIDC authentication with externally managed secrets
 # - Private registry, pinned image tags, multiple replicas
-# - TLS ingress at orbit.mdk.local
+# - TLS ingress at orbit.example.com
 #
 # Usage:
 #   helm upgrade --install orbit ./deploy/helm/orbit \
@@ -13,7 +13,7 @@
 nameOverride: ""
 fullnameOverride: ""
 
-imageRegistry: 192.168.1.201:5000
+imageRegistry: registry.example.com:5000
 imagePullPolicy: IfNotPresent
 imagePullSecrets: []
 
@@ -115,8 +115,8 @@ platform:
   environment: production
   seedDemo: false
   logFormat: json
-  corsOrigins: "https://orbit.mdk.local"
-  publicBaseUrl: "https://orbit.mdk.local"
+  corsOrigins: "https://orbit.example.com"
+  publicBaseUrl: "https://orbit.example.com"
   bodyLimitBytes: "2097152"
 
 vault:
@@ -126,7 +126,7 @@ vault:
 
 ingress:
   enabled: true
-  host: orbit.mdk.local
+  host: orbit.example.com
   ingressClassName: nginx
   tls:
     enabled: true

@@ -224,8 +224,9 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-[11px] text-muted-foreground">
-            Configure OpenID Connect for single sign-on. Stored in the platform settings
-            and applied on next login. Leave blank to keep environment defaults.
+            Configure OpenID Connect for single sign-on. Stored in the platform settings,
+            merged over environment values in OIDC mode and applied when the API starts
+            (restart the API after saving). Leave blank to keep environment defaults.
           </p>
           <OidcSettingsForm />
         </CardContent>

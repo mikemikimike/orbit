@@ -70,9 +70,9 @@ launcher runs with the Docker socket and exposes Launch/Stop/Logs in Workers:
 docker compose --env-file .env -f deploy/compose/compose.yaml up -d launcher api
 ```
 
-Docker treats the registry IP and DNS name as different image names. The Compose
-launcher therefore aliases `registry.example.com:5000` to `registry.example.com:5000` by default
-(`ORBIT_LAUNCHER_IMAGE_ALIASES`), so locally built/pulled images can be used offline.
+If your registry is reachable under both an IP and a DNS name, Docker treats them as
+different image references. Set `ORBIT_LAUNCHER_IMAGE_ALIASES` (comma-separated
+`from=to` pairs) so the launcher rewrites the image name before starting a container.
 
 For Docker-launched OpenCode/Pi workers, set `ORBIT_OPENCODE_AUTH_HOST_PATH` or
 `ORBIT_PI_AGENT_HOST_DIR` to the **host** path the Docker daemon should mount. The
@@ -121,8 +121,8 @@ the host worker claims only `opencode` executions.
 docker compose -f deploy/compose/compose.dev.yaml up -d
 cp .env.example .env
 
-cargo run -p orbit-api      # terminal 1
-cargo run -p orbit-worker   # terminal 2
+cargo run -p orbit-api-server   # terminal 1
+cargo run -p orbit-worker       # terminal 2
 pnpm install && pnpm --filter @orbit/web dev   # terminal 3
 ```
 

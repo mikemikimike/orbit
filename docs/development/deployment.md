@@ -21,17 +21,17 @@ docker build -f deploy/docker/web.Dockerfile -t orbit-web:dev .
 
 ## Helm
 
-The chart is tailored to the example.com / your-cluster environment used for this project:
+The default values assume a private registry and an nginx ingress:
 
-- private registry `registry.example.com:5000` (HTTP, LAN-only; Docker may trust it as
-  `registry.example.com:5000`, which resolves to the same host)
-- images built for `linux/amd64`
-- namespace `orbit`, ingress host `orbit.example.com`, ingress class `nginx`
+- `imageRegistry` points at your own registry (set it to your registry host)
+- images are built for `linux/amd64`
+- default namespace `orbit`, ingress class `nginx`, ingress host `orbit.example.com`
+  (override with `--set ingress.host=…`)
 
 ```bash
-# 1. Build and push images (native arm64 dev machine → amd64 cluster)
-TAG=0.1.0 ./scripts/build-images.sh
-PUSH_REGISTRY=registry.example.com:5000 TAG=0.1.0 ./scripts/push-images.sh
+# 1. Build (linux/amd64) and push images to your registry
+TAG=0.7.0 ./scripts/build-images.sh
+PUSH_REGISTRY=registry.example.com:5000 TAG=0.7.0 ./scripts/push-images.sh
 
 # 2. Deploy (workers need scoped tokens)
 #    Start the API first, then issue tokens:
@@ -44,7 +44,7 @@ OPENCODE_TOKEN=$(curl -s -X POST -H "Authorization: Bearer $DEV_TOKEN" \
   -d '{"name":"cluster-opencode","harnesses":["opencode"]}' \
   http://orbit.example.com/api/v1/worker-tokens | jq -r .token)
 
-KUBE_CONTEXT=your-cluster NAMESPACE=orbit TAG=0.5.0 \
+KUBE_CONTEXT=your-cluster NAMESPACE=orbit TAG=0.7.0 \
   ./scripts/deploy.sh \
   --set worker.token="$MOCK_TOKEN" \
   --set opencodeWorker.token="$OPENCODE_TOKEN"
@@ -54,7 +54,7 @@ helm --kube-context your-cluster upgrade --install orbit deploy/helm/orbit \
   --namespace orbit --create-namespace \
   -f deploy/helm/orbit/values.yaml \
   --set imageRegistry=registry.example.com:5000 \
-  --set api.tag=0.5.0 --set worker.tag=0.5.0 --set web.tag=0.5.0 \
+  --set api.tag=0.7.0 --set worker.tag=0.7.0 --set web.tag=0.7.0 \
   --set worker.token="$MOCK_TOKEN" --set opencodeWorker.token="$OPENCODE_TOKEN"
 ```
 
@@ -70,8 +70,9 @@ helm upgrade orbit deploy/helm/orbit -n orbit -f values.yaml \
   --set launcher.enabled=true --set launcher.token="$LAUNCHER_TOKEN"
 ```
 
-Launch images must be pullable by the cluster. Kubernetes launches create one Pod per
-launch with `ORBIT_API_URL` + the profile token and mount the harness auth Secret.
+Launch images must be pullable by the cluster. Each launch sets `ORBIT_API_URL` and the
+profile's worker token: long-lived profiles run as a Pod, single-execution launches run
+as a Job with a TTL for cleanup. Harness auth is mounted from a Secret when configured.
 
 Ingress routes: `/docs`, `/healthz`, `/readyz` → `orbit-api`; `/api` → `orbit-web`
 (the web container proxies `/api/*` to the API at harness, injecting the dev token
@@ -81,10 +82,8 @@ The chart sets SSE-friendly nginx annotations (`proxy-buffering: off`, long
 read/send timeouts). Point `orbit.example.com` at the ingress address (or add an
 `/etc/hosts`/split-DNS entry).
 
-Validation status: the chart has been deployed to the your-cluster cluster
-(`http://orbit.example.com`, ingress address `INGRESS_IP`) and smoke-tested end-to-end
-(ingress → web proxy → API → Postgres → worker → mock harness → SSE). It was also
-deployed to a local test cluster.
+The chart has been smoke-tested end-to-end on a single-node Kubernetes cluster
+(ingress → web proxy → API → PostgreSQL → worker → mock harness → SSE).
 
 ### macOS "no route to host" while the cluster is up
 
@@ -98,15 +97,19 @@ started by an allowed interpreter (`127.0.0.1:16444` → `KUBE_API_IP:16443`) an
 kubeconfig whose server is `https://127.0.0.1:16444`; kubectl then only needs loopback.
 
 Key values:
-- `externalDatabase.enabled` / `postgresql.enabled` (bundled Bitnami dependency is
-  opt-in; production should use an external managed database).
+- `externalDatabase.enabled` / `postgresql.enabled` — the chart can bundle a
+  single-replica PostgreSQL for test clusters; production should use a managed database.
 - `externalNats.enabled` / `nats.enabled`.
-- `oidc.*` — issuer, client id, scopes, and either an existing secret or plain values
-  for a test cluster.
+- `auth.mode` / `auth.oidc.*` — `dev` or `oidc`; issuer, client id, scopes and JWKS URL.
+  OIDC can also be configured at runtime under Settings.
 - `secrets.existingSecret` — chart does not manage secret material in production;
   `ORBIT_MASTER_KEY`, `ORBIT_DATABASE_URL`, OIDC client secret live there.
-- `harnessWorker.*` — replicas, resources, harness allowlist, isolation settings.
-- `ingress.*` — nginx annotations include SSE buffering disabled.
+- `worker.*` / `opencodeWorker.*` — replicas, resources, harness allowlist and the
+  scoped worker token; `opencodeWorker.enabled` adds the OpenCode worker.
+- `launcher.*` — optional worker launcher (creates worker Pods/Jobs in-cluster).
+- `caCertificates.*` — mount a private CA bundle into every workload and set
+  `SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE` / `NODE_EXTRA_CA_CERTS`.
+- `ingress.*` — nginx annotations keep SSE buffering disabled.
 
 The chart requires no cluster-admin permissions and creates a namespaced ServiceAccount.
 
@@ -147,11 +150,22 @@ with token automounting disabled and namespaced Deployments/Services/Ingress onl
 Vault integration is env wiring only (`VAULT_ADDR`); the Vault secret backend lands in a
 later phase.
 
-## Kubernetes harness execution
+## Kubernetes job-per-execution
 
-Phase 0 runs the mock harness in the worker. Phase 1 adds the container/Job dispatcher:
-the worker creates a per-execution Job in its own namespace using a ServiceAccount with
-only `pods`/`jobs` permissions in that namespace, with limits and a TTL for cleanup.
+The optional launcher (`launcher.enabled=true`) creates workloads in the target
+namespace:
+
+- **Long-lived worker profiles** are started as a `Pod` (one worker per launch).
+- **Single-execution launches** are started as a `Job` with `restartPolicy: Never`,
+  `backoffLimit: 0` and `ttlSecondsAfterFinished: 300`, so the pod is isolated per
+  execution and cleaned up automatically.
+
+The launcher only needs `get/list/create/delete` on `pods` and `get` on `secrets` in its
+namespace (see [kubernetes-launcher.md](kubernetes-launcher.md)). The control plane
+never receives cluster credentials.
+
+The base worker can also run the harness in a local Docker container per execution
+(`ORBIT_EXECUTION_DRIVER=docker`).
 
 ## Building a custom worker image
 

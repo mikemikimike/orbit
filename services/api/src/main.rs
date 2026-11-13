@@ -42,10 +42,13 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("bootstrap failed")?;
 
-    let jwt = match config.auth.mode {
+    // Settings saved through the UI are applied on startup (restart to take effect).
+    let auth_config =
+        orbit_api::handlers::settings::apply_stored_oidc(&store, config.auth.clone()).await;
+
+    let jwt = match auth_config.mode {
         orbit_security::AuthMode::Oidc => {
-            let oidc = config
-                .auth
+            let oidc = auth_config
                 .oidc
                 .as_ref()
                 .context("OIDC configuration missing")?;
@@ -60,7 +63,7 @@ async fn main() -> anyhow::Result<()> {
         store,
         bus,
         registry,
-        auth: Arc::new(config.auth.clone()),
+        auth: Arc::new(auth_config),
         jwt,
         default_org_id: initialized.default_org_id,
         dev_identity: initialized.dev_identity.map(Arc::new),

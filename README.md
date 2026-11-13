@@ -66,18 +66,31 @@ deployment topology): [`docs/architecture/diagram.md`](docs/architecture/diagram
 
 ## Quick start (Docker Compose)
 
+Workers authenticate with a scoped token, so start the API first and issue one:
+
 ```bash
-cp .env.example .env          # adjust secrets for anything beyond local dev
-docker compose -f deploy/compose/compose.yaml up --build
+cp .env.example .env
+# 1) infrastructure + API
+docker compose -f deploy/compose/compose.yaml up -d --build db nats api
+
+# 2) issue a worker token for the mock harness and save it
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/worker-tokens \
+  -H 'Authorization: Bearer orbit-dev-token' \
+  -H 'content-type: application/json' \
+  -d '{"name":"local-mock","harnesses":["mock"]}' | jq -r .token)
+echo "ORBIT_WORKER_TOKEN=$TOKEN" >> .env
+
+# 3) start the worker and web app
+docker compose -f deploy/compose/compose.yaml up -d
 ```
 
 - Web UI: http://localhost:3000
 - API: http://localhost:8080/api/v1 · docs: http://localhost:8080/docs
-- Postgres: `localhost:5432` (`orbit`/`orbit`, db `orbit`)
+- PostgreSQL: `localhost:5432` (`orbit`/`orbit`, db `orbit`)
 - NATS: `localhost:4222`, monitoring `http://localhost:8222`
 
 The stack seeds demo agents (mock harness). Open an agent → **Run agent** → watch the
-live execution timeline.
+live execution timeline, or use **Work** to create a run through the wizard.
 
 ## OpenCode + X quick start
 
@@ -95,19 +108,23 @@ the browser.
 
 ## Kubernetes (Helm)
 
-The chart targets the example.com private registry and ingress conventions:
-
 ```bash
-# build + push linux/amd64 images to the private registry
-TAG=0.1.0 ./scripts/build-images.sh
-TAG=0.1.0 ./scripts/push-images.sh
+# build and push linux/amd64 images to your registry
+REGISTRY=registry.example.com:5000 TAG=0.7.0 ./scripts/build-images.sh
+PUSH_REGISTRY=registry.example.com:5000 TAG=0.7.0 ./scripts/push-images.sh
 
-# deploy (default host orbit.example.com)
+# deploy (ingress host defaults to orbit.example.com)
 helm upgrade --install orbit deploy/helm/orbit \
-  --kube-context your-cluster \
   --namespace orbit --create-namespace \
-  -f deploy/helm/orbit/values.yaml
+  -f deploy/helm/orbit/values.yaml \
+  --set imageRegistry=registry.example.com:5000 \
+  --set worker.token="$WORKER_TOKEN" \
+  --set ingress.host=orbit.example.com
 ```
+
+The chart refuses to render without `worker.token`; issue one from a running API with
+`POST /api/v1/worker-tokens`. `./scripts/deploy.sh` automates this and reuses existing
+tokens from the cluster.
 
 `values.yaml` bundles PostgreSQL and NATS for test clusters and uses dev auth. For
 production, start from `deploy/helm/orbit/values-prod.example.yaml` (external DB/NATS,
@@ -139,9 +156,9 @@ pnpm --filter @orbit/web dev       # terminal 3 (proxies /api to localhost:8080)
 cargo test --workspace
 ORBIT_TEST_DATABASE_URL=postgres://orbit:orbit@localhost:5432/orbit cargo test --workspace
 pnpm --filter @orbit/web typecheck && pnpm --filter @orbit/web build
-helm lint deploy/helm/orbit
-helm template orbit deploy/helm/orbit -n orbit | kubectl apply --dry-run=client -f -
-./scripts/smoke-k8s.sh http://localhost:8080
+helm lint deploy/helm/orbit --set worker.token=lint
+helm template orbit deploy/helm/orbit -n orbit --set worker.token=lint >/dev/null
+API_URL=http://localhost:8080 ./scripts/smoke-k8s.sh
 ```
 
 ## Repository layout

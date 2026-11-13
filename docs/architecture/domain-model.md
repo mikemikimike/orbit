@@ -5,16 +5,43 @@
 ```
 organization 1─* user
 organization 1─* agent 1─* agent_version
-agent       1─* agent_instance *─1 harness
-agent       1─* trigger
-agent       1─* execution *─1 agent_version
-execution   1─* execution_event
-execution   1─* approval
+agent        1─* agent_instance *─1 harness
+agent        1─* trigger
+agent        1─* execution *─1 agent_version
+execution    1─* execution_event
+execution    1─* approval
 organization 1─* connection *─1 connector
 organization 1─* provider
 organization 1─* policy
 organization 1─* audit_log
+organization 1─* agent_team 1─* team_run 1─* team_step *─1 execution
+agent_team   1─* team_queue_item *─1 team_run
+organization 1─* skill
+organization 1─* worker_profile 1─* worker_launch
+organization 1─* worker_token
+organization 1─* api_token
+organization 1─* secret
+agent        1─* agent_memory
 ```
+
+## Tables
+
+Every table is scoped by `org_id` unless it is global infrastructure.
+
+| Table | Entity |
+|---|---|
+| `organizations`, `users` | tenant and members |
+| `agents`, `agent_versions`, `agent_instances`, `harnesses` | agent definitions, immutable versions, long-running instances, harness registry |
+| `providers`, `connectors`, `connections`, `secrets` | model providers, connector manifests, authorized accounts, encrypted secrets |
+| `executions`, `execution_events`, `approvals` | runs, append-only events, human decisions |
+| `triggers`, `policies`, `processed_events` | scheduled/event triggers, policy documents, bus idempotency ledger |
+| `agent_teams`, `team_runs`, `team_steps`, `team_queue_items` | Agent Teams, runs, steps, durable work queue |
+| `agent_memory` | short-term/summary agent memory |
+| `skills` | reusable SKILL.md packages |
+| `worker_profiles`, `worker_tokens`, `worker_launches`, `worker_heartbeats` | execution-plane configuration, credentials, instances, liveness |
+| `api_tokens`, `audit_logs`, `platform_settings` | user tokens, audit trail, platform configuration |
+
+Migrations live in `crates/orbit-store/migrations` and are append-only.
 
 ## Entities
 
@@ -52,8 +79,10 @@ model supports both long-running and ephemeral execution.
 ### Harness (registration)
 `kind ∈ {mock, opencode, claude_code, pi, generic}`. Carries a capability document
 (`supports_sessions`, `supports_resume`, `supports_streaming`, `supports_cancel`,
-`supports_long_running`, `max_timeout_seconds`, …). Health is reported by workers via
-heartbeats; the control plane never probes harness internals directly.
+`supports_instances`, `supports_tool_events`, `supports_usage_reporting`,
+`harness_managed_providers`, `supports_platform_providers`, `execution_modes`,
+`max_timeout_seconds`, `max_memory_mb`). Health is reported by workers via heartbeats;
+the control plane never probes harness internals directly.
 
 ### Provider
 Model provider configuration **separate from harnesses**. `kind ∈
@@ -70,25 +99,25 @@ backend `SecretStore`; API responses redact them (`has_credential: true`).
   not by the model.
 
 ### Trigger
-`kind ∈ {manual, schedule, webhook, event, agent}`. Config validated per kind
-(cron expression for `schedule`, HMAC secret reference for `webhook`, subject filter for
-`event`). Triggers can be disabled without deleting them.
+`kind ∈ {manual, schedule, webhook, event}` (enforced by a CHECK constraint). Config is
+validated per kind: a 5-field cron expression for `schedule`, a subject filter for
+`event`, an HMAC secret reference for `webhook`. Triggers can be disabled without being
+deleted, and a trigger auto-disables after `max_failures` consecutive failures.
 
 ### Execution
 Lifecycle:
 
 ```
-queued → dispatched → running → succeeded
-                    ├─→ failed
-                    ├─→ timed_out
-                    ├─→ cancelled
-                    └─→ awaiting_approval → running | rejected
+queued → dispatched → running → succeeded | failed | timed_out | cancelled
+                              └─→ awaiting_approval → running | rejected
 ```
 
-Fields: `trigger_source`, `input`, `output`, `error`, `session_ref`, `usage`,
-`started_at`, `finished_at`, `idempotency_key` (unique). Terminal states are final.
-Transitions are guarded in SQL (`UPDATE … WHERE status = ANY(allowed)`), so concurrent
-workers cannot double-claim.
+Fields: `trigger_source`, `placement`, `input`, `output`, `error`, `session_ref`,
+`usage`, `skills`, `started_at`, `finished_at`, `archived_at`, `team_run_id`,
+`team_step_index`, `idempotency_key` (unique). Terminal states are final and never
+mutated. Claiming is a SQL compare-and-set (`UPDATE … WHERE status = 'queued'`), so
+concurrent workers cannot double-claim. `archived_at` hides old terminal executions
+from the default view without deleting history.
 
 ### ExecutionEvent
 Append-only, per-execution monotonic `seq`: `kind ∈ {log, status, tool_call, output,
@@ -97,6 +126,42 @@ error, metric}`, `level`, `message`, `data`. Drives the SSE stream and the UI ti
 ### AuditLog
 Append-only records of security-relevant actions (agent changes, secret changes,
 connection grants, approvals, executions).
+
+### Agent Team / TeamRun / TeamStep / TeamQueueItem
+- **AgentTeam**: `definition` JSONB holds mode (`pipeline` | `native`), instructions,
+  ordered steps (agent + optional model override), skills, optional work source,
+  multi-repository list, optional worker profile and `autoLaunch`. Tracks
+  `last_poll_at` / `last_poll_error`.
+- **TeamRun**: one orchestration run; terminal states `succeeded | failed | cancelled`.
+  Carries `archived_at`.
+- **TeamStep**: one agent step of a run (unique `run_id, step_index`), linked to the
+  execution it created.
+- **TeamQueueItem**: durable work item, unique per `(team_id, external_key)` so an issue
+  is never queued twice. Status `pending | running | succeeded | failed | cancelled`;
+  tracks `attempts` / `max_attempts` for retry.
+
+### Skill
+Reusable SKILL.md package: `slug`, `content`, JSONB `files` (path → text, including
+`scripts/*`), monotonic `version`.
+
+### WorkerProfile / WorkerToken / WorkerLaunch / WorkerHeartbeat
+- **WorkerProfile**: pins harness kind, target, execution driver, image + tag, agent
+  allowlist, skill allowlist, optional provider/model, optional auth secret name, static
+  `env`, `env_mappings` (connection/secret → env var), resources and `enabled`.
+- **WorkerToken**: scoped, revocable, hashed worker credential (optionally bound to a
+  profile and a single execution).
+- **WorkerLaunch**: a launcher-managed instance (`pending | starting | running |
+  stopped | failed`) with runtime id, worker id and `archived_at`.
+- **WorkerHeartbeat**: live worker registry (harnesses, target, hostname, last seen).
+
+### ApiToken / Secret / PlatformSetting / ProcessedEvent
+- **ApiToken**: hashed `orbit_sk_…` token with scopes and revocation.
+- **Secret**: AES-256-GCM ciphertext keyed by an opaque `reference`.
+- **PlatformSetting**: key/value JSONB for platform config such as OIDC.
+- **ProcessedEvent**: idempotency ledger for bus delivery.
+
+### AgentMemory
+Short-term or summary memory for an agent, with optional `expires_at`; pruned hourly.
 
 ## Invariants
 

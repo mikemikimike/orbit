@@ -37,13 +37,13 @@ harnesses are launched as isolated containers/Jobs (`HarnessDispatcher`).
 | Component | Local (Compose) | Kubernetes (Helm) |
 |---|---|---|
 | `orbit-api` | container, port 8080 | Deployment + Service + Ingress |
-| `orbit-worker` | container | Deployment (or Job-per-execution later) |
+| `orbit-worker` | container | Deployment (mock) or Job per execution |
 | `orbit-worker-opencode` | container | Deployment (OpenCode CLI bundled) |
 | `orbit-worker-pi` | container | Deployment (Pi CLI bundled) |
 | web | container, port 3000 | Deployment + Service + Ingress |
 | PostgreSQL | container | external or bundled (opt-in) |
 | NATS JetStream | container | external or bundled (opt-in) |
-| Harness processes | mock in worker; OpenCode/Pi via subprocess sandbox | Jobs/Pods via dispatcher |
+| Harness processes | mock in-process; OpenCode/Pi as subprocess in a per-execution workspace | Pod/Job per worker; Job per single execution via the launcher |
 
 ## 3. Code structure
 
@@ -76,9 +76,12 @@ Manual execution:
 6. The frontend stream (`GET /api/v1/executions/{id}/events/stream`) replays persisted
    events and then tails new ones (SSE, `Last-Event-ID` supported).
 
-Event-triggered execution uses the same path: trigger → normalized event → trigger
-matcher → policy check → `executions` row → bus. Retention and deduplication live in
-PostgreSQL (`processed_events`, unique `idempotency_key`), not in memory.
+Scheduled and team-driven executions use the same queued path. Background loops live in
+`orbit-api`: the scheduler claims due cron triggers (`FOR UPDATE SKIP LOCKED`), the team
+advancer moves pipeline runs forward, the work-source dispatcher enqueues issues, and the
+reaper fails orphaned executions. A worker only needs `ORBIT_API_URL` and a scoped
+`ORBIT_WORKER_TOKEN` — no database, bus or master-key access. Retention and deduplication
+live in PostgreSQL (`processed_events`, unique `idempotency_key`), not in memory.
 
 ## 5. Isolation & security
 
@@ -101,21 +104,21 @@ PostgreSQL (`processed_events`, unique `idempotency_key`), not in memory.
   the registry; no domain/API changes.
 - **New provider kind** → add a `ProviderKind` variant with a config struct and
   capability set; harness adapters translate it to their own provider format.
-- **New connector** → implement the connector trait (Phase 2) and register capabilities;
-  API and UI read the registry.
+- **New connector** → add a manifest in `crates/orbit-api/src/connectors.rs` and a
+  client in the worker; the API and UI read the registry automatically.
 - **New infrastructure** → Compose and Helm consume the same env-var contract.
 
 ## 7. Mobile readiness
 
-The backend is a pure HTTP/JSON + SSE API with token-based auth (bearer access token,
-refresh token, and API keys), versioned under `/api/v1`, with keyset pagination and a
-stable error envelope. No cookie-only or browser-specific behavior is required, so an
+The backend is a pure HTTP/JSON + SSE API with bearer-token auth (OIDC access tokens,
+`orbit_sk_…` API tokens and separate `orbit_wk_…` worker tokens), versioned under
+`/api/v1`, with keyset pagination and a stable error envelope. No cookie-only or browser-specific behavior is required, so an
 Expo/React Native client can share `packages/api-client` and `packages/contracts`.
 
 ## 8. Observability
 
 - Structured JSON logs (`tracing`) with request IDs and trace IDs.
 - `GET /healthz` (liveness) and `GET /readyz` (DB + event bus readiness).
-- `GET /metrics` Prometheus text endpoint (Phase 0: core counters; OTel export seam).
+- `GET /metrics` Prometheus text endpoint (core counters; OpenTelemetry export seam).
 - Execution events carry `execution_id`, `agent_id`, `harness`, and timestamps for
   correlation across control and execution planes.

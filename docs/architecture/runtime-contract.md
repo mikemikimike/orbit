@@ -120,21 +120,23 @@ files, and forced teardown on timeout/cancel.
   - trusted instructions written to `AGENTS.md`; untrusted input passed in the prompt
   - NDJSON text/tool/usage/error events mapped to ORBIT harness events
   - session IDs captured; `--session` used for resume; cancellation kills the process group
-  - credentials are harness-managed via `opencode auth export` imported by an init
-    container; ORBIT never passes raw provider keys in CLI arguments
-  - `PWD` and the process working directory are pinned to the per-execution workspace
-    (prevents inheriting the worker's repository directory)
-  - GitHub read (`issues.list`) verified through the MCP tool broker against a public
-    repository; write actions are approval-gated and pending the approvals UI
+  - `PWD` and the working directory are pinned to the per-execution workspace
+  - harness-managed providers via `opencode auth export` imported from a mounted Secret;
+    ORBIT never passes raw provider keys in CLI arguments
+  - **platform providers supported**: ORBIT-resolved OpenAI-compatible endpoints (vLLM,
+    Ollama, gateways) are written into `opencode.json` with their base URL, headers and
+    leased credential (`supports_platform_providers=true`)
+  - GitHub tools (read and approval-gated write) verified end-to-end through the MCP
+    tool broker
   - contract + real-harness test: `crates/orbit-harness/tests/opencode_e2e.rs`
     (`ORBIT_OPENCODE_E2E=1`, ignored by default to avoid model spend)
-  - limitation: ORBIT platform providers are not yet mapped into OpenCode's provider
-    config (`supports_platform_providers=false`); use OpenCode-managed auth for now.
-- `pi` — **available** for host/local workers and the Docker dispatcher (tested against
-  Pi **1.5.2**): `pi --print --mode json`, session capture/resume, JSON event mapping,
-  cancellation/timeout, trusted `--append-system-prompt`, and a platform-enforced
-  read-only tool allowlist (`read,grep,find,ls`) at autonomy L1/L2. The adapter accepts
-  `skills` paths and writes the execution-scoped `.pi/mcp.json` broker bridge; MCP tool
-  parity with OpenCode and the Pi worker container/Helm deployment are still being
-  verified. `make worker-pi` runs it on the host.
-- `claude_code` — registered as a capability descriptor only (Phase 2).
+- `pi` — **available**, tested against Pi **1.5.2**:
+  - `pi --print --mode json`, session capture/resume, JSON event mapping,
+    cancellation/timeout and trusted `--append-system-prompt`
+  - platform-enforced read-only tool allowlist (`read,grep,find,ls`) at autonomy L1/L2
+  - **platform providers supported**: endpoint and leased credential injected as
+    `OPENAI_API_KEY` / `OPENAI_BASE_URL`, with `--provider openai` when a platform model
+    is selected (`supports_platform_providers=true`)
+  - writes the execution-scoped `.pi/mcp.json` broker bridge and accepts `--skill` paths
+  - ships as its own worker image (`deploy/docker/worker-pi.Dockerfile`)
+- `claude_code` — registered as a capability descriptor only, fails closed (planned).

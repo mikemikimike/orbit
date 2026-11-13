@@ -74,6 +74,14 @@ Set the same five variables plus `ORBIT_OIDC_JWKS_URL` if your deployment does n
 discovery at the issuer. ORBIT’s API validates the JWT audience against
 `ORBIT_OIDC_AUDIENCE` and auto-provisions users when enabled.
 
+## Configure from the UI
+
+Once the platform is reachable, OIDC can also be configured under **Settings → OIDC / SSO**
+(`GET`/`PUT /api/v1/settings/oidc`). Values are stored in `platform_settings`, merged over
+the environment configuration in OIDC mode, and applied when the API starts — restart the
+API after saving. `ORBIT_OIDC_CLIENT_SECRET` is never stored by the UI; keep
+confidential-client secrets in the deployment Secret.
+
 ## Web flow
 
 ```text

@@ -48,6 +48,8 @@ helm --kube-context "${KUBE_CONTEXT}" upgrade --install "${RELEASE}" deploy/helm
   --set launcher.tag="${TAG}" \
   --set opencodeWorker.tag="${TAG}" \
   --set ingress.host="${INGRESS_HOST}" \
+  --set platform.corsOrigins="http://${INGRESS_HOST}" \
+  --set platform.publicBaseUrl="http://${INGRESS_HOST}" \
   --set platform.environment=development \
   --set postgresql.storageClassName=hostpath \
   --set nats.storageClassName=hostpath \

@@ -29,6 +29,15 @@ Agent Team ──ordered agents───────────────┘
     `.opencode/agents/*.md` subagents and the primary delegates to them. This supports
     OpenCode's internal feedback loop and shared workspace. Subagent dispatches are not
     separate ORBIT executions.
+- **Per-agent models**: each step already uses its own agent's model. A team-level
+  `model` override applies to all steps, and a step-level `model` override wins over it:
+  `{ "provider": "...", "model": "...", "management": "platform|harness" }`.
+- **Multi-repository workspace**: `repositories[]` entries
+  (`connectionId`, `repository`, `path`, `primary`, `branch`) are checked out
+  sequentially into the execution workspace. A single repository keeps the current root
+  layout; multiple repositories clone into their declared `path` subdirectories. Paths
+  are validated so nothing can escape the workspace. Git tools accept a `repository`
+  argument (`repo.commit`, `repo.push`, `pulls.create`, `merge_requests.create`).
 
 ## Attaching a connection
 
@@ -90,19 +99,65 @@ Native mode currently requires an OpenCode primary agent. Subagent tool calls ar
 visible as one ORBIT execution; connector policy is enforced against the primary agent's
 binding for the whole native team.
 
-Pi does **not** have an equivalent primary/subagent configuration in the tested 1.5.x
+Pi does **not** have an equivalent primary/subagent configuration in the tested 1.5.2
 release, so native Agent Teams are rejected for Pi. Pi can still use **pipeline** mode:
 each agent is a separate ORBIT execution, with explicit output handoff but without a
 shared workspace or an internal feedback loop.
 
+## Work source and queue
+
+A team can discover its own work. Set `workSource` on the team definition:
+
+```json
+{
+  "provider": "github",
+  "enabled": true,
+  "connectionId": "…",
+  "repository": "owner/repo",
+  "labels": ["agent-ready"],
+  "claimLabel": "agent-in-progress",
+  "doneLabel": "agent-done",
+  "failedLabel": "agent-failed",
+  "maxItems": 5,
+  "maxAttempts": 1,
+  "pollSeconds": 60,
+  "autoRun": true
+}
+```
+
+GitLab uses the same shape with `project`/`groupId` (and optional `boardId`) instead of
+`repository`.
+
+The API dispatcher (`dispatcher.rs`) runs every 15s:
+
+1. Takes a per-team Postgres advisory lock (replicas never double-dispatch).
+2. Lists matching open issues, skipping keys already in the queue.
+3. Claims each issue by swapping the ready label for the claim label.
+4. Inserts a `team_queue_item` (unique per `team_id, external_key`).
+5. If `autoRun`, starts pending items via the same queue-item runner the UI uses.
+
+Claim failures skip the item without enqueueing. `lastPollAt` / `lastPollError` are
+visible in the UI.
+
+## Closing the loop
+
+When a team run terminates (`teams::advance`), the outcome is mirrored to the source
+issue through the connector:
+
+| Outcome | Labels | Comment |
+|---|---|---|
+| succeeded | claim label removed, `doneLabel` added | Posted, including any PR/MR URLs found in the output |
+| failed (attempts left) | claim label removed, ready labels restored | — |
+| failed (exhausted) | claim label removed, `failedLabel` added | — |
+| cancelled | claim label removed | — |
+
+The queue item records `succeeded`, `failed` or `cancelled` accordingly, and failures
+respect `maxAttempts`. Operators can retry, requeue or cancel an item from the UI or
+`POST …/queue/{item_id}/{retry|requeue|cancel}`.
+
 ## Current limitations
 
-- Connections are **not** attached to an Agent Team. Attach them to each agent.
-- A pipeline team run executes each agent **once**. Native mode supports an internal
-  coordinator/subagent loop within one execution. A queue of many issues still requires
-  multiple runs or a future dispatcher.
-- A run can override the team repository; if neither is set, the connection's
-  `defaultRepository` is used.
-- GitLab invocation, automatic per-execution worker launch and parallel subagents are
-  still pending.
-- GitHub writes require a PAT and may require approvals depending on autonomy.
+- Connections are attached per **agent**, not per team.
+- Parallel subagents are not supported; pipeline steps are sequential.
+- Inbound webhook verification and X posting are still pending.
+- GitHub/GitLab writes require a token and may require approvals depending on autonomy.

@@ -7,8 +7,8 @@
 | Store | `cargo test` with `ORBIT_TEST_DATABASE_URL` | CRUD, org scoping, optimistic version conflict, execution claim compare-and-set, idempotency |
 | API | `axum` router + `tower::ServiceExt::oneshot` | auth extractor, error envelope, pagination, agent lifecycle, execution creation, SSE replay |
 | Helm | `helm lint`, `helm template` | chart validity, required env wiring, probes, external PG/NATS |
-| Frontend | `tsc --noEmit`, `next build`, `vitest` | type-safe API usage, component rendering, form validation |
-| End-to-end smoke | `scripts/smoke-k8s.sh` | compose/k8s stack: create agent → execute → stream events → terminal status |
+| Frontend | `tsc --noEmit`, `next build` | type-safe API usage across every page and build-time correctness |
+| End-to-end smoke | `scripts/smoke-k8s.sh` | Kubernetes stack: create agent → execute → stream events → terminal status |
 | UI acceptance | `docs/development/ui-test-plan.md` | dashboard, Studio, executions/SSE, credentials, OpenCode, connectors, approvals |
 
 DB-backed tests are skipped unless `ORBIT_TEST_DATABASE_URL` is set, so `cargo test`

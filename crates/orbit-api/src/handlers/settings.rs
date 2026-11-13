@@ -75,3 +75,76 @@ pub async fn update_oidc(
     let settings: OidcSettings = serde_json::from_value(stored).unwrap_or(body.settings);
     Ok(Json(settings))
 }
+
+/// Merge OIDC settings stored via the Settings UI into the environment-derived auth
+/// config. Only applies in OIDC mode; environment values remain the fallback for any
+/// field left empty in the UI.
+pub async fn apply_stored_oidc(
+    store: &orbit_store::Store,
+    mut auth: orbit_security::AuthConfig,
+) -> orbit_security::AuthConfig {
+    if !matches!(auth.mode, orbit_security::AuthMode::Oidc) {
+        return auth;
+    }
+    let Ok(Some(value)) = store.get_platform_setting("oidc").await else {
+        return auth;
+    };
+    let Ok(stored) = serde_json::from_value::<OidcSettings>(value) else {
+        return auth;
+    };
+    if stored.issuer.trim().is_empty() {
+        return auth;
+    }
+    let mut oidc = auth.oidc.clone().unwrap_or(orbit_security::OidcConfig {
+        issuer: String::new(),
+        audience: String::new(),
+        jwks_url: String::new(),
+        client_id: String::new(),
+        client_secret: None,
+        redirect_uri: String::new(),
+        scopes: vec!["openid".into(), "profile".into(), "email".into()],
+        auto_provision: true,
+        default_role: orbit_domain::UserRole::Viewer,
+        clock_skew_seconds: 60,
+    });
+    oidc.issuer = stored.issuer.trim().to_string();
+    if !stored.audience.trim().is_empty() {
+        oidc.audience = stored.audience.trim().to_string();
+    }
+    if oidc.audience.is_empty() {
+        oidc.audience = oidc.issuer.clone();
+    }
+    if !stored.client_id.trim().is_empty() {
+        oidc.client_id = stored.client_id.trim().to_string();
+    }
+    if oidc.client_id.is_empty() {
+        oidc.client_id = oidc.audience.clone();
+    }
+    if !stored.redirect_uri.trim().is_empty() {
+        oidc.redirect_uri = stored.redirect_uri.trim().to_string();
+    }
+    if !stored.scopes.trim().is_empty() {
+        oidc.scopes = stored
+            .scopes
+            .split_whitespace()
+            .map(str::to_string)
+            .collect();
+    }
+    if !stored.jwks_url.trim().is_empty() {
+        oidc.jwks_url = stored.jwks_url.trim().to_string();
+    }
+    if oidc.jwks_url.is_empty() {
+        oidc.jwks_url = format!(
+            "{}/.well-known/jwks.json",
+            oidc.issuer.trim_end_matches('/')
+        );
+    }
+    oidc.auto_provision = stored.auto_provision;
+    oidc.default_role = stored
+        .default_role
+        .parse::<orbit_domain::UserRole>()
+        .unwrap_or(orbit_domain::UserRole::Viewer);
+    tracing::info!(issuer = %oidc.issuer, "applied OIDC settings from the database");
+    auth.oidc = Some(oidc);
+    auth
+}

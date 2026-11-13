@@ -16,8 +16,8 @@ A PNG export is available at [`orbit-overview.png`](orbit-overview.png) (may lag
 | Status | Components |
 |---|---|
 | **Implemented** | API, PostgreSQL schema, NATS/memory bus, mock harness, OpenCode v2.3.0, Pi v1.5.2, X read hydration, SSE, audit, encrypted secrets, tool broker, GitHub capabilities, approval UI, Agent Teams (queue, dispatcher, multi-repo, close-the-loop), memory, K8s Jobs, OIDC, custom CA, dark/light mode, env var mappings, scripts in skills, per-agent models, Work wizard |
-| **In progress** | GitLab actions, webhook verification, long-running service mode |
-| **Planned** | X posting, swarm simulations, per-execution container isolation (Docker), Claude Code adapter |
+| **In progress** | Inbound webhook verification, long-running instance mode |
+| **Planned** | X posting, large-scale simulation runs, Claude Code adapter |
 
 ## System context
 
@@ -45,7 +45,7 @@ flowchart LR
   subgraph External["External systems"]
     GitHub["GitHub API"]
     X["X API"]
-    More["GitLab · webhooks ·<br/>model providers"]
+    More["GitLab · Telegram · webhooks ·<br/>model providers"]
   end
 
   Web -->|"REST /api/v1 + SSE"| API
@@ -153,6 +153,17 @@ erDiagram
   EXECUTION ||--o{ EXECUTION_EVENT : emits
   EXECUTION ||--o{ APPROVAL : may_require
 
+  ORGANIZATION ||--o{ AGENT_TEAM : owns
+  AGENT_TEAM ||--o{ TEAM_RUN : runs
+  TEAM_RUN ||--o{ TEAM_STEP : has
+  AGENT_TEAM ||--o{ TEAM_QUEUE_ITEM : queues
+  TEAM_RUN ||--o{ TEAM_QUEUE_ITEM : fulfills
+  TEAM_STEP }o--|| EXECUTION : materializes
+  ORGANIZATION ||--o{ SKILL : owns
+  ORGANIZATION ||--o{ WORKER_PROFILE : defines
+  WORKER_PROFILE ||--o{ WORKER_LAUNCH : launches
+  AGENT ||--o{ AGENT_MEMORY : remembers
+
   ORGANIZATION {
     uuid id
     text slug
@@ -175,10 +186,12 @@ erDiagram
     uuid id
     text status
     text trigger_source
+    text placement
     jsonb input
     jsonb output
     jsonb error
     jsonb usage
+    timestamptz archived_at
   }
   APPROVAL {
     uuid id
@@ -191,6 +204,42 @@ erDiagram
     text status
     text credential_ref
     text scopes
+  }
+  AGENT_TEAM {
+    uuid id
+    jsonb definition
+    timestamptz last_poll_at
+  }
+  TEAM_RUN {
+    uuid id
+    uuid team_id
+    text status
+    timestamptz archived_at
+  }
+  TEAM_STEP {
+    uuid id
+    int step_index
+    text status
+    uuid execution_id
+  }
+  TEAM_QUEUE_ITEM {
+    uuid id
+    text external_key
+    text status
+    int attempts
+  }
+  SKILL {
+    uuid id
+    text slug
+    text content
+    jsonb files
+    int version
+  }
+  WORKER_PROFILE {
+    uuid id
+    text harness_kind
+    text target
+    jsonb env_mappings
   }
 ```
 

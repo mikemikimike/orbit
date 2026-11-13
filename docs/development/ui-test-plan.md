@@ -9,7 +9,7 @@ fastest environment available:
 Use a fresh database for the full flow (`docker compose ... down -v` locally). Dev auth is
 enabled, so the browser needs no login; the web container injects the dev token server-side.
 
-Time: 15–20 minutes for flows 1–5, plus 10 minutes for connector/harness checks.
+Time: ~25 minutes for flows 1–5, plus ~25 minutes for flows 6–14.
 
 ---
 
@@ -141,7 +141,7 @@ worker, plus a GitHub connection for a public repo (no credential needed for rea
 
 ---
 
-## Flow 9 — Approvals / GitHub writes (when approvals UI is available)
+## Flow 9 — Approvals / GitHub writes
 
 These are the acceptance steps for the broker milestone; the backend/API exists, the
 approvals UI is still being finished.
@@ -159,6 +159,62 @@ approvals UI is still being finished.
 9. Switch to L4 with the write allowlisted → write executes without approval.
 
 ---
+
+## Flow 10 — Work wizard (4 min)
+
+| Step | Expected |
+|---|---|
+| Open `/work` | Six steps: When, Where, Who, What, Then, Summary |
+| When → Schedule | Cron field appears; a valid expression is accepted |
+| When → Connector | Implemented connectors are listed as selectable cards |
+| Where | Placement cards (auto/local/docker/kubernetes) and harness cards |
+| Where → pick a harness | Matching worker profiles are shown, or a create link |
+| Who → Agent or Agent Team | Agents are filtered by the chosen harness; teams are listed |
+| What | Optional name, task, repository |
+| Then | Auto-approve and 24/7 toggles |
+| Summary | Read-back of all five answers; **Create work** enabled only when Who + What are set |
+| Create work | Execution starts, a matching worker profile is created/launched, redirect to the execution |
+
+**Watch for:** agents from another harness appearing, and the Summary button staying disabled.
+
+## Flow 11 — Agent Teams and queue (5 min)
+
+| Step | Expected |
+|---|---|
+| Open `/agent-teams` → New | Primary + subagents; native mode disabled for non-OpenCode primaries |
+| Save a team | Card shows mode, agents (primary/subagent), skills, optional work source |
+| Run | Primary executes, then each subagent in order; steps visible in the run dialog |
+| Queue | Enqueue `owner/repo#123`, run pending, retry/requeue/cancel per item |
+| Runs list | Active/Archived/All filter works |
+
+## Flow 12 — Skills with scripts (3 min)
+
+| Step | Expected |
+|---|---|
+| `/skills` → New | SKILL.md content + bundled files JSON + **Upload files** |
+| Upload `scripts/check.sh` | File appears in the JSON map |
+| Save | No validation error for an allowed extension |
+| Upload `scripts/check.exe` | Validation error: script extension not allowed |
+| Run an agent with the skill | Script is materialized and executable in the workspace |
+
+## Flow 13 — Workers, launches, and env mappings (4 min)
+
+| Step | Expected |
+|---|---|
+| `/workers` → New profile | Harness, target, driver, image/tag (defaults to `latest`), provider/model |
+| Agents / Shared skills | **Select all** and **Clear** work |
+| Env variable mappings | Add row, choose connection, set the env var name; saved and reloaded |
+| Enable + Launch | Launch appears in Launches; Pod/Job created when a launcher is configured |
+| Without a launcher | Clear error: no worker launcher configured |
+| Launches filter | Active/Archived/All |
+
+## Flow 14 — OIDC, theme, and execution detail (4 min)
+
+| Step | Expected |
+|---|---|
+| `/settings` → OIDC / SSO | Save issuer/client/scopes; reload shows stored values; restart applies them |
+| Theme toggle (sidebar) | Switches dark/light instantly; persists across reloads; no flash on load |
+| Execution detail | Harness timeline with event-kind badges; Input shows the task; Output renders text; **Show raw JSON** toggles both; boxes are equal height |
 
 ## Negative and security checks
 

@@ -7,7 +7,8 @@ The TypeScript client in `packages/api-client` is generated from this document.
 
 - JSON only (`application/json`), UTC RFC 3339 timestamps, UUIDv7 identifiers.
 - Authentication: `Authorization: Bearer <access_token | api_key>`. Native clients use
-  short-lived access tokens + refresh tokens; automation uses `orbit_…` API keys.
+  OIDC access tokens; automation uses `orbit_sk_…` API tokens, workers use `orbit_wk_…`
+  worker tokens.
 - Every response carries `X-Request-Id`; errors include it.
 - Idempotent POSTs accept `Idempotency-Key` (executions).
 - Keyset pagination: `?limit=25&cursor=<opaque>` → `{ "items": [...], "next_cursor": null }`.
@@ -28,7 +29,9 @@ The TypeScript client in `packages/api-client` is generated from this document.
 ```
 
 Codes: `bad_request`, `validation_error`, `unauthorized`, `forbidden`, `not_found`,
-`conflict`, `rate_limited`, `payload_too_large`, `unsupported`, `internal`.
+`conflict`, `rate_limited`, `unsupported`, `unavailable`, `internal`. Worker launch
+endpoints additionally return `launcher_unavailable`, `launcher_error` and
+`launch_failed`.
 
 ## Resources
 
@@ -52,23 +55,58 @@ Codes: `bad_request`, `validation_error`, `unauthorized`, `forbidden`, `not_foun
 | `GET /api/v1/executions/{id}/events/stream` | SSE stream (replay + tail) |
 | `POST /api/v1/executions/{id}/cancel` | request cancellation |
 | `GET /api/v1/harnesses` | harness registry + capabilities + health |
-| `GET /api/v1/harnesses/{kind}` | harness detail, adapter status |
+| `GET /api/v1/workers` | live worker heartbeats |
 | `GET/POST /api/v1/providers` | list / create model provider |
 | `PATCH/DELETE /api/v1/providers/{id}` | update / delete (redacted secrets) |
 | `POST /api/v1/providers/{id}/test` | connectivity probe (OpenAI-compatible) |
 | `GET /api/v1/connectors` | connector registry/manifests |
 | `GET/POST /api/v1/connections` | list / create connection |
-| `DELETE /api/v1/connections/{id}` | revoke connection |
+| `PATCH/DELETE /api/v1/connections/{id}` | update / delete connection |
 | `GET/POST /api/v1/triggers` | list / create trigger |
-| `PATCH/DELETE /api/v1/triggers/{id}` | update / delete |
-| `POST /api/v1/webhooks/{trigger_id}` | inbound webhook (HMAC verified) |
+| `PATCH/DELETE /api/v1/triggers/{id}` | update / delete trigger |
+| `GET/POST /api/v1/skills` | list / create skill |
+| `GET/PATCH/DELETE /api/v1/skills/{id}` | read / update / delete skill |
+| `GET/POST /api/v1/agent-teams` | list / create Agent Team |
+| `GET/PATCH/DELETE /api/v1/agent-teams/{id}` | read / update / delete team |
+| `POST /api/v1/agent-teams/{id}/runs` | start a team run |
+| `GET/POST /api/v1/agent-teams/{id}/queue` | list / enqueue work items |
+| `POST /api/v1/agent-teams/{id}/queue/{item_id}/{run,retry,requeue,cancel}` | queue item actions |
+| `GET /api/v1/team-runs` | list team runs (`?archived=`) |
+| `GET /api/v1/team-runs/{id}` | team run with steps |
+| `GET/POST /api/v1/worker-profiles` | list / create worker profile |
+| `GET/PATCH/DELETE /api/v1/worker-profiles/{id}` | read / update / delete profile |
+| `POST /api/v1/worker-profiles/{id}/{enable,disable,token,launch}` | profile lifecycle |
+| `GET /api/v1/worker-profiles/{id}/bootstrap` | generated Docker/Compose/Kubernetes |
+| `GET /api/v1/worker-launches` | launcher-managed instances (`?archived=`) |
+| `GET/DELETE /api/v1/worker-launches/{id}` | read / delete launch |
+| `POST /api/v1/worker-launches/{id}/{stop,archive}` | stop / archive launch |
+| `GET /api/v1/worker-launches/{id}/logs` | launcher logs |
+| `GET/POST /api/v1/worker-tokens` | list / issue scoped worker tokens |
+| `DELETE /api/v1/worker-tokens/{id}` | revoke worker token |
+| `GET/POST /api/v1/api-tokens` | list / create user API tokens |
+| `DELETE /api/v1/api-tokens/{id}` | revoke API token |
+| `GET /api/v1/agent-instances` | long-running agent instances |
+| `GET/PUT /api/v1/settings/oidc` | read / update OIDC configuration |
 | `GET /api/v1/organizations/current` | current organization |
 | `GET /api/v1/users` | organization members |
+| `PATCH /api/v1/users/{id}` | update a member role |
 | `GET /api/v1/dashboard/summary` | dashboard counters + recent activity |
-| `GET /api/v1/audit-logs` | audit trail (admin) |
+| `GET /api/v1/audit-logs` | audit trail |
 
-Phase 0 implements the resources marked above except webhooks, audit listing filters
-and provider probing beyond a basic `/models` check (documented limits).
+Every execution and team-run list accepts `?archived=true|false|all`; the default view
+hides archived terminal records.
+
+### Worker API (token-authenticated, `/api/v1/worker/*`)
+
+Used only by workers and the launcher-managed execution plane:
+`session`, `heartbeat`, `claim`, `executions/{id}/{context,running,events,complete,cancel}`,
+`approvals` + `approvals/{id}/wait`, `connections/{id}`, `audit`, `env`, and
+`memory/{list,store}`.
+
+### Not implemented yet
+
+- Inbound webhooks (`POST /api/v1/webhooks/{trigger_id}`) — planned with HMAC verification.
+- `GET /api/v1/harnesses/{kind}`.
 
 ## SSE stream
 
@@ -84,10 +122,15 @@ Terminal executions close the stream after a final `done` event.
 
 ## Auth model
 
-- Dev mode (`ORBIT_AUTH_MODE=dev`): a seeded developer user/organization; any
-  authenticated-ish token is accepted only when `ORBIT_DEV_AUTH_ALLOW_ANONYMOUS=true`.
-- Production (`ORBIT_AUTH_MODE=oidc`): Authorization Code + PKCE handled by the web app
-  against the configured OIDC provider; ORBIT validates bearer JWTs against JWKS and
-  maps `(iss, sub)` to a user. API keys (`orbit_…`) are hashed (SHA-256) in
-  `api_tokens` and scoped.
-- All authorization checks live in `orbit-security`/handlers, never in prompts.
+- Dev mode (`ORBIT_AUTH_MODE=dev`): a seeded developer user/organization. Requests with
+  no token are accepted only when `ORBIT_DEV_AUTH_ALLOW_ANONYMOUS=true`; the web
+  container injects the dev token server-side. Dev mode is rejected outright when
+  `ORBIT_ENV=production`.
+- OIDC mode (`ORBIT_AUTH_MODE=oidc`): the web app runs Authorization Code + PKCE against
+  the configured provider (`GET /api/v1/auth/oidc/config`, `POST /api/v1/auth/oidc/token`);
+  ORBIT validates bearer JWTs against the provider JWKS and maps `(iss, sub)` to a user,
+  optionally auto-provisioning.
+- API tokens (`orbit_sk_…`): hashed with SHA-256 in `api_tokens`, scoped and revocable.
+  Worker tokens (`orbit_wk_…`) are separate: scoped to harnesses/agents and never grant
+  control-plane permissions.
+- All authorization checks live in `orbit-security` and the handlers, never in prompts.
