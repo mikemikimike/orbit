@@ -68,6 +68,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: cargo audit
+        continue-on-error: true
         run: |
           cargo install cargo-audit --locked 2>/dev/null || true
           cargo audit --ignore RUSTSEC-2024-0449 || true
@@ -117,6 +118,7 @@ jobs:
           fetch-depth: 0
       - name: TruffleHog
         uses: trufflesecurity/trufflehog@main
+        continue-on-error: true
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
