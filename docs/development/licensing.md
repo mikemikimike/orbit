@@ -69,10 +69,19 @@ cargo build -p orbit-license-cli
 ./target/debug/orbit-license-cli public-key --key key.json
 ```
 
-Embed the public key by `kid` in a vendor build, or set `ORBIT_LICENSE_PUBLIC_KEYS` to the
-printed JSON for testing/custom builds. Never commit `key.json`.
+Add the printed public key to `crates/orbit-security/license-public-keys.json` as
+`{"kid":"base64url"}` and rebuild. This file is public by design and is compiled into
+release images. Release builds ignore `ORBIT_LICENSE_PUBLIC_KEYS`; the env var is only read
+by debug builds for local testing. Never commit `key.json`.
 
 ## Verification keys
+
+```json
+// crates/orbit-security/license-public-keys.json
+{ "orbit-2026-01": "base64url-raw-ed25519-public-key" }
+```
+
+The object may contain multiple keys during rotation. An unknown `kid` is rejected.
 
 Public keys are embedded in the API by `kid`. Development builds include a documented dev
 key; production builds must add the vendor public key. `ORBIT_LICENSE_PUBLIC_KEYS` accepts

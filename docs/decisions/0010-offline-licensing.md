@@ -106,7 +106,7 @@ a separate, optional workflow.
 
 ## Key management
 
-- Ed25519 public keys embedded by `kid`; support overlapping keys for rotation.
+- Ed25519 public keys compiled in by `kid`; support overlapping keys for rotation.
 - Reject unknown `kid`, unknown `alg`, malformed payloads and invalid signatures.
 - Vendor signing tool is an offline CLI, not part of the runtime image.
 - Offline revocation is not practical; use annual/quarterly expiry. A signed revocation

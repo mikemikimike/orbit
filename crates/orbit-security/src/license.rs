@@ -1,8 +1,10 @@
 //! Offline license verification and entitlements.
 //!
 //! Licenses are Ed25519-signed JWS compact tokens. Verification is fully local:
-//! public keys are embedded (or supplied by `ORBIT_LICENSE_PUBLIC_KEYS`) and the private
-//! signing key never ships. See `docs/decisions/0010-offline-licensing.md`.
+//! public keys are compiled in from `license-public-keys.json` and the private signing key
+//! never ships. Debug builds additionally accept a local dev key and
+//! `ORBIT_LICENSE_PUBLIC_KEYS` for development; release builds ignore runtime keys.
+//! See `docs/decisions/0010-offline-licensing.md`.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -19,9 +21,14 @@ pub const FEATURE_SHARED_CONNECTIONS: &str = "shared_connections";
 pub const FEATURE_QUOTAS: &str = "quotas";
 pub const FEATURE_MARKETPLACE: &str = "marketplace";
 
-/// Development key for local/testing builds. Production builds should add the vendor
-/// public key (same `kid` namespace) and keep the private key offline.
-const EMBEDDED_KEYS: &[(&str, &str)] = &[(
+/// Public verification keys shipped in the official build. Replace the `{}` with a JSON
+/// object of `kid -> base64url raw public key` before issuing licenses. Public keys are
+/// not secret; never add a private key here.
+const BUILD_KEYS_JSON: &str = include_str!("../license-public-keys.json");
+
+/// Development-only key. Release builds must contain the vendor key above.
+#[cfg(debug_assertions)]
+const DEV_KEYS: &[(&str, &str)] = &[(
     "orbit-dev-2026-01",
     "TcdJnlUQOeZVx2zcz1cGTBKdvC1MI9jWKKd7s0AqX8A",
 )];
@@ -156,24 +163,45 @@ impl Default for LicenseVerifier {
 impl LicenseVerifier {
     pub fn new() -> Self {
         let mut keys = BTreeMap::new();
-        for (kid, encoded) in EMBEDDED_KEYS {
-            if let Some(key) = decode_key(encoded) {
-                keys.insert((*kid).to_string(), key);
-            }
-        }
-        if let Ok(value) = std::env::var("ORBIT_LICENSE_PUBLIC_KEYS") {
-            if let Ok(custom) = serde_json::from_str::<BTreeMap<String, String>>(&value) {
-                for (kid, encoded) in custom {
-                    if let Some(key) = decode_key(&encoded) {
-                        keys.insert(kid, key);
-                    } else {
-                        tracing::warn!(%kid, "ignoring invalid ORBIT_LICENSE_PUBLIC_KEYS entry");
+        match serde_json::from_str::<BTreeMap<String, String>>(BUILD_KEYS_JSON) {
+            Ok(embedded) => {
+                for (kid, encoded) in embedded {
+                    match decode_key(&encoded) {
+                        Some(key) => {
+                            keys.insert(kid, key);
+                        }
+                        None => tracing::warn!(%kid, "ignoring invalid embedded license key"),
                     }
                 }
-            } else {
-                tracing::warn!(
-                    "ORBIT_LICENSE_PUBLIC_KEYS is not a JSON object of kid -> base64 key"
-                );
+            }
+            Err(error) => {
+                tracing::error!(%error, "license-public-keys.json is not a JSON object");
+            }
+        }
+
+        // Development convenience only. Release builds deliberately ignore runtime keys:
+        // otherwise anyone could self-sign a license.
+        #[cfg(debug_assertions)]
+        {
+            for (kid, encoded) in DEV_KEYS {
+                if let Some(key) = decode_key(encoded) {
+                    keys.insert((*kid).to_string(), key);
+                }
+            }
+            if let Ok(value) = std::env::var("ORBIT_LICENSE_PUBLIC_KEYS") {
+                if let Ok(custom) = serde_json::from_str::<BTreeMap<String, String>>(&value) {
+                    for (kid, encoded) in custom {
+                        if let Some(key) = decode_key(&encoded) {
+                            keys.insert(kid, key);
+                        } else {
+                            tracing::warn!(%kid, "ignoring invalid ORBIT_LICENSE_PUBLIC_KEYS entry");
+                        }
+                    }
+                } else {
+                    tracing::warn!(
+                        "ORBIT_LICENSE_PUBLIC_KEYS is not a JSON object of kid -> base64 key"
+                    );
+                }
             }
         }
         Self { keys }
