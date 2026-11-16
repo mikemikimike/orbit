@@ -8,29 +8,33 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
-### Docs
-
-- Added a task-oriented `docs/guide` (agents, teams, worker profiles, skills, RBAC, licensing,
-  tool policies, providers) and removed planning documents whose work shipped.
+## [0.10.0] — 2026-11-16
 
 ### Added
 
-- Offline license verification (`orbit-security::license`): Ed25519 JWS, embedded public
-  keys with `kid`, expiry + grace, limits/features, no installation ID. The API loads
-  `ORBIT_LICENSE` / `ORBIT_LICENSE_FILE` (default `/etc/orbit-license.jwt`), hot-reloads
-  the mounted file every 60s, exposes status in `/api/v1/meta`, and gates custom roles
-  behind `custom_roles`.
-- Helm `license.existingSecret` / `license.key` / `license.value` and a
-  `docs/development/licensing.md` operator guide.
-- `services/license-cli` vendor signing tool (keygen/sign/public-key), offline only.
-- `GET /api/v1/license` usage overview and warnings at 80%; seats, agents, enabled worker
-  profiles and executions/24h are enforced at create/provision time.
-- Settings → License panel showing tier, customer, expiry/grace, features and usage.
+- **Offline enterprise licensing**: Ed25519-signed JWS license, compiled-in public keys,
+  expiry + 30-day grace, feature flags and limits. No installation ID, activation call or
+  network access; `ORBIT_LICENSE` / `ORBIT_LICENSE_FILE` (default
+  `/etc/orbit-license.jwt`) with 60s hot reload.
+- **License enforcement**: `custom_roles` feature gate plus seats, agents, enabled worker
+  profiles and executions/24h limits (80% warnings, hard cap at 100%). Status, usage and
+  warnings in `GET /api/v1/license`, `/api/v1/meta` and **Settings → License**.
+- **Vendor signing tool**: `services/license-cli` (`keygen`, `sign`, `public-key`), offline
+  only. Vendor public key `orbit-2026-01` is embedded; the private key lives outside the
+  repository.
+- **Documentation**: task-oriented `docs/guide` (agents, teams, worker profiles, skills,
+  RBAC, licensing, tool policies, providers), owner and vendor licensing guides, ADR 0010
+  and a trademark/branding policy.
+- Helm `license.existingSecret` / `license.key` / `license.value`.
 
-### Docs
+### Fixed
 
-- ADR 0010: installation-wide offline license (Ed25519 JWS, no installation ID by
-  default, airgapped renewal, grace behaviour, feature/limit enforcement in the API).
+- Release builds ignore `ORBIT_LICENSE_PUBLIC_KEYS`; only compiled public keys are trusted,
+  closing the self-signing bypass. Debug builds retain the dev key for local testing.
+- Helm upgrades from pre-0.9 values with `--reuse-values`: the new `license` block is
+  optional and PostgreSQL/NATS security values fall back to safe defaults (no nil and no
+  accidental root execution).
+- Licensing CLI added to the Docker dependency-cache layers.
 
 ## [0.9.1] — 2026-11-16
 
