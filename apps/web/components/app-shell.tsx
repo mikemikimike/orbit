@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { getAccessToken } from "@/lib/api";
-import { useDashboard, useMeta } from "@/lib/queries";
+import { useDashboard, useMe, useMeta } from "@/lib/queries";
 
 interface NavItem {
   href: string;
@@ -94,6 +94,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const meta = useMeta();
   const dashboard = useDashboard();
+  const me = useMe();
+  const currentUser = me.data?.user as
+    | { displayName?: string; email?: string; role?: string }
+    | undefined;
+  const displayName =
+    currentUser?.displayName?.trim() ||
+    currentUser?.email?.split("@")[0] ||
+    "Account";
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
   const pendingApprovals = dashboard.data?.summary.pendingApprovals ?? 0;
   const hideNewAgent = pathname.startsWith("/agents/new");
   const current = NAV_GROUPS.flatMap((g) => g.items).filter((item) => isActive(pathname, item.href)).at(-1);
@@ -172,7 +186,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="border-t p-3">
-          <div className="mb-2 flex justify-end">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <Link
+              href="/settings"
+              className="flex min-w-0 items-center gap-2 rounded-lg px-1 py-1 text-left hover:bg-muted"
+              title={currentUser?.email ?? displayName}
+            >
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold">
+                {initials || "?"}
+              </span>
+              <span className="min-w-0 leading-tight">
+                <span className="block truncate text-xs font-medium">{displayName}</span>
+                <span className="block truncate text-[10px] text-muted-foreground">
+                  {currentUser?.role ?? "View account"}
+                </span>
+              </span>
+            </Link>
             <ThemeToggle />
           </div>
           <div className="rounded-lg bg-muted/60 p-3">
@@ -192,6 +221,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="text-xs text-muted-foreground">/ {current?.label ?? "Dashboard"}</span>
         </Link>
         <div className="flex items-center gap-1">
+          <Link
+            href="/settings"
+            className="flex max-w-[8.5rem] items-center gap-1.5 rounded-lg px-1 py-1 text-xs hover:bg-muted"
+            title={currentUser?.email ?? displayName}
+          >
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold">
+              {initials || "?"}
+            </span>
+            <span className="truncate">{displayName}</span>
+          </Link>
           {!hideNewAgent ? (
             <Button asChild size="icon" variant="default" aria-label="New agent">
               <Link href="/agents/new">

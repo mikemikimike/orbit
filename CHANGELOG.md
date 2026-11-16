@@ -8,6 +8,25 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-11-16
+
+### Changed
+
+- Long-lived worker launches now create a **Deployment** instead of a bare Pod, so
+  Kubernetes recreates workers after node drains, evictions and maintenance. Single
+  execution launches stay Jobs. The worker id remains stable across restarts.
+- Launcher status/stop/logs are workload-aware (Deployment, Job and legacy Pods) and logs
+  are read by the `orbit.launch-id` label.
+- The shell shows the signed-in user (avatar, display name, role) next to the theme
+  toggle on desktop and mobile, linking to Settings (#23).
+
+### Fixed
+
+- Worker OOM kills are detected for Kubernetes and Docker (`OOMKilled`/exit 137) and
+  surfaced as a failed launch with the memory limit and a remediation hint. Running
+  executions on that worker are failed with a `worker_oom` event instead of hanging until
+  timeout (#24).
+
 ## [0.9.0] — 2026-11-16
 
 ### Added

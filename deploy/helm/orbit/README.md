@@ -156,7 +156,8 @@ via `hostKey`, `portKey`, `databaseKey`, `userKey` and `passwordKey`. The chart 
 
 ### Workers
 
-Platform workers are normally launched from profiles (Pods for live profiles, Jobs for
+Platform workers are normally launched from profiles (Deployments for live profiles,
+Jobs for
 single executions). The settings below only apply to fixed Deployments.
 
 | Key | Default | Notes |

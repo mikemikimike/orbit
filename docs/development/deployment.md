@@ -65,8 +65,8 @@ helm upgrade orbit deploy/helm/orbit -n orbit -f values.yaml \
 ```
 
 Launch images must be pullable by the cluster. Each launch sets `ORBIT_API_URL` and the
-profile's worker token: long-lived profiles run as a Pod, single-execution launches run
-as a Job with a TTL for cleanup. Harness auth is mounted from a Secret when configured.
+profile's worker token: long-lived profiles run as a Deployment (Kubernetes recreates them after node
+maintenance/eviction), single-execution launches run as a Job with a TTL for cleanup. Harness auth is mounted from a Secret when configured.
 
 Ingress routes: `/docs`, `/healthz`, `/readyz` → `orbit-api`; `/api` → `orbit-web`
 (the web container proxies `/api/*` to the API at harness, injecting the dev token

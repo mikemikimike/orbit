@@ -349,7 +349,7 @@ async fn docker_status(state: &AppState, name: &str) -> LaunchStatus {
         .args([
             "inspect",
             "-f",
-            "{{.State.Status}}|{{if .State.Error}}{{.State.Error}}{{end}}",
+            "{{.State.Status}}|{{.State.OOMKilled}}|{{if .State.Error}}{{.State.Error}}{{end}}",
             name,
         ])
         .output()
@@ -374,7 +374,21 @@ async fn docker_status(state: &AppState, name: &str) -> LaunchStatus {
         };
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let (state_value, error) = stdout.trim().split_once('|').unwrap_or((stdout.trim(), ""));
+    let mut parts = stdout.trim().splitn(3, '|');
+    let state_value = parts.next().unwrap_or_default();
+    let oom_killed = parts.next().unwrap_or_default() == "true";
+    let error = parts.next().unwrap_or_default();
+    if oom_killed {
+        return LaunchStatus {
+            status: "failed".into(),
+            runtime_id: Some(name.into()),
+            worker_id: None,
+            error: Some(
+                "worker container was OOMKilled (Docker memory limit); increase the worker profile memory limit"
+                    .into(),
+            ),
+        };
+    }
     let status = match state_value {
         "running" => "running",
         "created" | "restarting" => "starting",
@@ -526,9 +540,11 @@ async fn launch_kubernetes(
     if let Some(resources) = kubernetes_resources(&resources) {
         container["resources"] = resources;
     }
-    let mut spec = json!({
-        "restartPolicy": "Never",
-        // Restricted Pod Security: unprivileged, RuntimeDefault seccomp, no caps.
+    let labels = json!({
+        "app.kubernetes.io/name": "orbit-worker",
+        "orbit.launch-id": request.launch_id.to_string()
+    });
+    let mut pod_spec = json!({
         "securityContext": {
             "runAsNonRoot": true,
             "seccompProfile": { "type": "RuntimeDefault" }
@@ -537,55 +553,58 @@ async fn launch_kubernetes(
         "volumes": pod_volumes
     });
     if let Some(secret) = &state.image_pull_secret {
-        spec["imagePullSecrets"] = json!([{ "name": secret }]);
+        pod_spec["imagePullSecrets"] = json!([{ "name": secret }]);
     }
-    let (api_version, kind) = if request.single_execution_id.is_some() {
-        ("batch/v1", "Job")
-    } else {
-        ("v1", "Pod")
-    };
-    let mut manifest = json!({
-        "apiVersion": api_version,
-        "kind": kind,
-        "metadata": {
-            "name": name,
-            "namespace": state.namespace,
-            "labels": { "app.kubernetes.io/name": "orbit-worker", "orbit.launch-id": request.launch_id.to_string() }
-        },
-        "spec": spec
-    });
-    // Jobs require a template wrapping the pod spec.
-    if request.single_execution_id.is_some() {
-        let pod_spec = manifest["spec"].clone();
-        manifest["spec"] = json!({
-            "ttlSecondsAfterFinished": 300,
-            "backoffLimit": 0,
-            "template": {
-                "metadata": {
-                    "labels": { "app.kubernetes.io/name": "orbit-worker", "orbit.launch-id": request.launch_id.to_string() }
-                },
-                "spec": pod_spec
+
+    let manifest = if request.single_execution_id.is_some() {
+        pod_spec["restartPolicy"] = json!("Never");
+        json!({
+            "apiVersion": "batch/v1",
+            "kind": "Job",
+            "metadata": { "name": name, "namespace": state.namespace, "labels": labels },
+            "spec": {
+                "ttlSecondsAfterFinished": 300,
+                "backoffLimit": 0,
+                "template": {
+                    "metadata": { "labels": labels },
+                    "spec": pod_spec
+                }
             }
-        });
-    }
-    let resource_type = if request.single_execution_id.is_some() {
-        "job"
+        })
     } else {
-        "pod"
+        // Long-lived workers run as a Deployment so Kubernetes recreates them after node
+        // drains, evictions or maintenance. The worker id is stable across restarts.
+        json!({
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": { "name": name, "namespace": state.namespace, "labels": labels },
+            "spec": {
+                "replicas": 1,
+                "selector": { "matchLabels": labels },
+                "template": {
+                    "metadata": { "labels": labels },
+                    "spec": pod_spec
+                }
+            }
+        })
     };
-    let _ = Command::new(&state.kubectl)
-        .args([
-            "-n",
-            &state.namespace,
-            "delete",
-            resource_type,
-            &name,
-            "--ignore-not-found",
-        ])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .await;
+
+    // Clean up any previous incarnation (including legacy Pods from older launchers).
+    for resource_type in ["deployment", "job", "pod"] {
+        let _ = Command::new(&state.kubectl)
+            .args([
+                "-n",
+                &state.namespace,
+                "delete",
+                resource_type,
+                &name,
+                "--ignore-not-found",
+            ])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await;
+    }
     let mut child = Command::new(&state.kubectl)
         .args(["-n", &state.namespace, "create", "-f", "-"])
         .stdin(Stdio::piped())
@@ -603,7 +622,7 @@ async fn launch_kubernetes(
             String::from_utf8_lossy(&output.stderr).trim()
         );
     }
-    tracing::info!(launch_id = %request.launch_id, pod = %name, "worker pod created");
+    tracing::info!(launch_id = %request.launch_id, workload = %name, "worker workload created");
     Ok(LaunchStatus {
         status: "starting".into(),
         runtime_id: Some(name),
@@ -612,9 +631,107 @@ async fn launch_kubernetes(
     })
 }
 
-async fn kubernetes_status(state: &AppState, name: &str) -> LaunchStatus {
-    // Try job first, then pod.
+async fn kubernetes_oom(state: &AppState, launch_id: Uuid) -> Option<String> {
     let output = Command::new(&state.kubectl)
+        .args([
+            "-n",
+            &state.namespace,
+            "get",
+            "pods",
+            "-l",
+            &format!("orbit.launch-id={launch_id}"),
+            "-o",
+            "json",
+        ])
+        .output()
+        .await
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let pods: Value = serde_json::from_slice(&output.stdout).ok()?;
+    for pod in pods
+        .get("items")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let memory_limit = pod
+            .pointer("/spec/containers/0/resources/limits/memory")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        let statuses = ["/status/containerStatuses", "/status/initContainerStatuses"]
+            .into_iter()
+            .flat_map(|pointer| {
+                pod.pointer(pointer)
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+            });
+        for status in statuses {
+            for pointer in ["/state/terminated", "/lastState/terminated"] {
+                let Some(terminated) = status.pointer(pointer) else {
+                    continue;
+                };
+                let reason = terminated
+                    .get("reason")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let exit_code = terminated.get("exitCode").and_then(Value::as_i64);
+                if reason == "OOMKilled" || exit_code == Some(137) {
+                    return Some(format!(
+                        "worker container was OOMKilled (memory limit {memory_limit}); increase the worker profile memory limit"
+                    ));
+                }
+            }
+        }
+    }
+    None
+}
+
+async fn kubernetes_status(state: &AppState, name: &str, launch_id: Uuid) -> LaunchStatus {
+    if let Some(error) = kubernetes_oom(state, launch_id).await {
+        return LaunchStatus {
+            status: "failed".into(),
+            runtime_id: Some(name.into()),
+            worker_id: None,
+            error: Some(error),
+        };
+    }
+
+    // Long-lived workers run as Deployments (0.9.1+); older launches used Pods.
+    let deployment = Command::new(&state.kubectl)
+        .args([
+            "-n",
+            &state.namespace,
+            "get",
+            "deployment",
+            name,
+            "-o",
+            "jsonpath={.status.readyReplicas}|{.status.replicas}|{.status.unavailableReplicas}",
+        ])
+        .output()
+        .await;
+    if let Ok(output) = deployment {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let parts: Vec<&str> = stdout.trim().split('|').collect();
+            let ready = parts
+                .first()
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(0);
+            let status = if ready > 0 { "running" } else { "starting" };
+            return LaunchStatus {
+                status: status.into(),
+                runtime_id: Some(name.into()),
+                worker_id: None,
+                error: None,
+            };
+        }
+    }
+
+    // Single-execution launches are Jobs.
+    let job = Command::new(&state.kubectl)
         .args([
             "-n",
             &state.namespace,
@@ -626,9 +743,9 @@ async fn kubernetes_status(state: &AppState, name: &str) -> LaunchStatus {
         ])
         .output()
         .await;
-    let output = match output {
-        Ok(o) if o.status.success() => {
-            let stdout = String::from_utf8_lossy(&o.stdout);
+    if let Ok(output) = job {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
             let parts: Vec<&str> = stdout.trim().split('|').collect();
             let succeeded = parts
                 .first()
@@ -658,29 +775,29 @@ async fn kubernetes_status(state: &AppState, name: &str) -> LaunchStatus {
                 error: None,
             };
         }
-        _ => {
-            match Command::new(&state.kubectl)
-                .args([
-                    "-n",
-                    &state.namespace,
-                    "get",
-                    "pod",
-                    name,
-                    "-o",
-                    "jsonpath={.status.phase}",
-                ])
-                .output()
-                .await
-            {
-                Ok(output) => output,
-                Err(error) => {
-                    return LaunchStatus {
-                        status: "failed".into(),
-                        runtime_id: Some(name.into()),
-                        worker_id: None,
-                        error: Some(error.to_string()),
-                    }
-                }
+    }
+
+    // Legacy Pod launches.
+    let output = match Command::new(&state.kubectl)
+        .args([
+            "-n",
+            &state.namespace,
+            "get",
+            "pod",
+            name,
+            "-o",
+            "jsonpath={.status.phase}",
+        ])
+        .output()
+        .await
+    {
+        Ok(output) => output,
+        Err(error) => {
+            return LaunchStatus {
+                status: "failed".into(),
+                runtime_id: Some(name.into()),
+                worker_id: None,
+                error: Some(error.to_string()),
             }
         }
     };
@@ -724,11 +841,11 @@ async fn status(
     let status = if docker_target(query.target.as_deref()) {
         docker_status(&state, &name).await
     } else if query.target.as_deref() == Some("kubernetes") {
-        kubernetes_status(&state, &name).await
+        kubernetes_status(&state, &name, launch_id).await
     } else if docker_exists(&state, &name).await {
         docker_status(&state, &name).await
     } else {
-        kubernetes_status(&state, &name).await
+        kubernetes_status(&state, &name, launch_id).await
     };
     Ok(Json(status))
 }
@@ -747,17 +864,19 @@ async fn stop(
     }
     let name = pod_name(launch_id);
     if query.target.as_deref() == Some("kubernetes") {
-        let _ = Command::new(&state.kubectl)
-            .args([
-                "-n",
-                &state.namespace,
-                "delete",
-                "pod",
-                &name,
-                "--ignore-not-found",
-            ])
-            .status()
-            .await;
+        for resource_type in ["deployment", "job", "pod"] {
+            let _ = Command::new(&state.kubectl)
+                .args([
+                    "-n",
+                    &state.namespace,
+                    "delete",
+                    resource_type,
+                    &name,
+                    "--ignore-not-found",
+                ])
+                .status()
+                .await;
+        }
     } else {
         let _ = Command::new(&state.docker)
             .args(["rm", "-f", &name])
@@ -788,10 +907,26 @@ async fn logs(
     }
     let name = pod_name(launch_id);
     let output = if query.target.as_deref() == Some("kubernetes") {
-        Command::new(&state.kubectl)
-            .args(["-n", &state.namespace, "logs", &name, "--tail=200"])
+        let by_label = Command::new(&state.kubectl)
+            .args([
+                "-n",
+                &state.namespace,
+                "logs",
+                "-l",
+                &format!("orbit.launch-id={launch_id}"),
+                "--tail=200",
+            ])
             .output()
-            .await
+            .await;
+        match by_label {
+            Ok(output) if output.status.success() => Ok(output),
+            _ => {
+                Command::new(&state.kubectl)
+                    .args(["-n", &state.namespace, "logs", &name, "--tail=200"])
+                    .output()
+                    .await
+            }
+        }
     } else {
         Command::new(&state.docker)
             .args(["logs", "--tail", "200", &name])

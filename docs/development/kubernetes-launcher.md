@@ -77,8 +77,8 @@ The launcher adds `imagePullSecrets` to every pod it creates.
 
 - The API stores launch intent and calls `POST /launches` on the launcher with a
   bearer token (`ORBIT_LAUNCHER_TOKEN`).
-- The launcher validates the token, then runs `kubectl create -f -` with the pod
-  manifest.
+- The launcher validates the token, then runs `kubectl create -f -` with the workload
+  manifest (Deployment for long-lived profiles, Job for single executions).
 - Worker pods receive `ORBIT_WORKER_TOKEN` (a scoped worker token minted for that
   launch) via env var. The token is revoked when the launch stops or fails.
 - The launcher never exposes kubectl or the Docker socket to the API or web app.

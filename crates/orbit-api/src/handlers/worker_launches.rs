@@ -137,7 +137,7 @@ async fn refresh(state: &AppState, launch: WorkerLaunch) -> WorkerLaunch {
         return launch;
     };
     let stopped = matches!(status.status.as_str(), "stopped" | "failed");
-    state
+    let updated = state
         .store
         .update_worker_launch(
             launch.org_id,
@@ -150,7 +150,70 @@ async fn refresh(state: &AppState, launch: WorkerLaunch) -> WorkerLaunch {
             stopped,
         )
         .await
-        .unwrap_or(launch)
+        .unwrap_or(launch);
+    if updated.status == "failed"
+        && updated
+            .error
+            .as_deref()
+            .is_some_and(|error| error.to_lowercase().contains("oom"))
+    {
+        fail_worker_executions(state, &updated).await;
+    }
+    updated
+}
+
+/// A worker OOM kill takes the process down before it can report the execution failure.
+/// Fail any running executions on that worker with a clear error so they are not left
+/// running until timeout.
+async fn fail_worker_executions(state: &AppState, launch: &WorkerLaunch) {
+    let Some(worker_id) = launch.worker_id.as_deref() else {
+        return;
+    };
+    let executions = match state
+        .store
+        .running_executions_for_worker(launch.org_id, worker_id)
+        .await
+    {
+        Ok(executions) => executions,
+        Err(error) => {
+            tracing::warn!(%error, launch_id = %launch.id, "could not load executions for OOM launch");
+            return;
+        }
+    };
+    for execution in executions {
+        let message = launch
+            .error
+            .clone()
+            .unwrap_or_else(|| "worker container was OOMKilled".into());
+        let _ = state
+            .store
+            .append_execution_event(
+                launch.org_id,
+                execution.id,
+                "worker_oom",
+                orbit_domain::LogLevel::Error,
+                &message,
+                &serde_json::json!({
+                    "code": "worker_oom",
+                    "workerId": worker_id,
+                    "profileId": launch.profile_id,
+                    "launchId": launch.id,
+                    "error": message,
+                }),
+            )
+            .await;
+        let _ = state
+            .store
+            .finish_execution(
+                execution.id,
+                orbit_domain::ExecutionStatus::Failed,
+                None,
+                Some(&serde_json::json!({ "code": "worker_oom", "message": message })),
+                None,
+                execution.session_ref.as_deref(),
+            )
+            .await;
+    }
 }
 
 #[utoipa::path(get, path = "/api/v1/worker-launches", tag = "workers", responses((status = 200, body = [WorkerLaunch])))]
