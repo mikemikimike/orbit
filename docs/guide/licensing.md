@@ -1,34 +1,129 @@
-# Licensing
+# Licensing for ORBIT owners
 
-ORBIT uses an offline, installation-wide signed license. No installation ID, activation
-call or network access is required.
+ORBIT runs as **community** by default. An enterprise license unlocks premium features and
+raises usage limits. Licensing is **offline**: no activation call, no installation ID and
+no outbound request. The license is a signed file that ORBIT verifies locally.
 
-## Install
+> Availability: licensing is on `main` and ships in **0.10.0**. It is not in the 0.9.1
+> images.
+
+## Community vs enterprise
+
+| | Community | Enterprise |
+|---|---|---|
+| Agents, executions, workers | Yes | Yes |
+| OIDC / SSO and group mapping | Yes | Yes |
+| Audit log, exports, backups | Yes | Yes |
+| Custom roles | — | `custom_roles` |
+| Resource-level permissions | — | planned |
+| Shared connections | — | planned |
+| Quotas | — | planned |
+| Marketplace | — | planned |
+
+Only features that actually exist are gated. Planned features are not sold as available.
+
+Enterprise licenses also carry limits: **seats, agents, workers, executions per day**.
+
+## What a license looks like
+
+A small signed token (Ed25519 JWS) containing:
+
+```json
+{
+  "customer": "Acme",
+  "plan": "enterprise",
+  "features": ["custom_roles"],
+  "limits": { "seats": 50, "agents": 500, "workers": 25, "executions_per_day": 10000 },
+  "issued_at": "2026-11-01T00:00:00Z",
+  "expires_at": "2027-11-01T00:00:00Z",
+  "grace_days": 30
+}
+```
+
+It contains no secrets and no hardware/installation binding. Keeping a copy is fine; it is
+not a credential.
+
+## Install a license
+
+Create a Kubernetes Secret and point Helm at it:
 
 ```bash
 kubectl -n orbit create secret generic orbit-license \
   --from-file=license.jwt=/path/to/orbit-license.jwt
 
 helm upgrade orbit deploy/helm/orbit -n orbit --reuse-values \
-  --set license.existingSecret=orbit-license
+  --set license.existingSecret=orbit-license \
+  --set license.key=license.jwt
 ```
 
-The chart mounts it at `/etc/orbit-license.jwt`; `ORBIT_LICENSE` / `ORBIT_LICENSE_FILE`
-work for Docker/Compose. The API hot-reloads mounted files (~60s).
+The chart mounts the file at `/etc/orbit-license.jwt`. For Docker/Compose, mount the file
+and set `ORBIT_LICENSE_FILE`, or set `ORBIT_LICENSE` to the token.
 
-## Tiers and limits
+No restart is needed when the license is delivered as a mounted file: ORBIT re-reads it
+about every 60 seconds. If you use `license.value` / `ORBIT_LICENSE`, restart the API or
+run a Helm upgrade.
 
-- Community: core agents, executions, workers, OIDC/SSO, audit, exports
-- Enterprise: custom roles, resource permissions (planned), shared connections (planned),
-  quotas (planned), marketplace (planned)
-- Limits: seats, agents, workers, executions/day. Warn at 80%, hard cap at 100%
-- 30-day grace after expiry; then premium writes are blocked while reads, exports,
-  backups, logins and running executions continue
+## Renew a license
 
-Status is shown under **Settings → License** and in `GET /api/v1/license`.
+1. Receive the new signed file from the vendor.
+2. Replace the Secret key:
 
-## Signing
+```bash
+kubectl -n orbit create secret generic orbit-license \
+  --from-file=license.jwt=/path/to/new-license.jwt \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
 
-The vendor tool is offline: `services/license-cli keygen|sign|public-key`. Public keys are
-embedded by `kid` or supplied through `ORBIT_LICENSE_PUBLIC_KEYS`; the private key stays
-vendor-side. Full workflow: [docs/development/licensing.md](../development/licensing.md).
+3. Wait ~1 minute. The API picks it up automatically.
+
+## Expiry and grace
+
+- Before `expires_at`: everything works.
+- During the **grace period** (`grace_days`, default 30): premium features still work; the
+  UI shows a renewal warning.
+- After grace: premium **writes and configuration changes** are blocked, but reads,
+  exports, backups, logins and **running executions continue**. Existing premium data is
+  never deleted and remains readable.
+
+A license problem never prevents ORBIT from starting.
+
+## Limits
+
+| Limit | Counted as | Checked when |
+|---|---|---|
+| `seats` | active users | a new user is provisioned (e.g. first OIDC login) |
+| `agents` | non-archived agents | creating an agent |
+| `workers` | enabled worker profiles | creating a worker profile |
+| `executions_per_day` | executions in the last 24h | creating an execution or team run |
+
+Warnings appear at 80% in **Settings → License** and `GET /api/v1/license`. At 100% the
+create is rejected with `402 license_limit`.
+
+## Where to see the status
+
+- **Settings → License**: tier, customer, expiry, days/grace left, features, usage and
+  warnings.
+- `GET /api/v1/license` for scripts.
+- `GET /api/v1/meta` also includes a compact license block.
+
+## If something is wrong
+
+| Symptom | Check |
+|---|---|
+| Community despite a license | Is the Secret mounted? Does the pod have `ORBIT_LICENSE_FILE`? Is the key name correct? |
+| “unknown license key” | The license `kid` is not in this build. Use a license issued for this release, or update ORBIT. |
+| “license signature is invalid” | The file was edited or truncated; request a fresh license. |
+| License not applied | Mounted file: wait ~60s. Inline env: restart the API. |
+| Limits not enforced | A license that is fully expired behaves as community; limits only apply while valid. |
+
+## Security model (short)
+
+- The license is signed with the vendor’s **private** key; ORBIT only contains the matching
+  **public** key. The private key is never shipped, committed or available in customer
+  environments.
+- Licensing is a commercial control, not a security boundary. It never replaces RBAC,
+  sandboxing or approvals.
+- Do not edit a license file; edits break the signature. Contact the vendor for changes.
+- The full design is in [`docs/decisions/0010-offline-licensing.md`](../decisions/0010-offline-licensing.md).
+  Vendor-side signing is documented in
+  [`docs/development/licensing.md`](../development/licensing.md).
