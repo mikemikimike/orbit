@@ -74,6 +74,9 @@ pub async fn update_user_role(
     if !builtin && !custom {
         return Err(ApiError::bad_request("invalid role"));
     }
+    if custom {
+        state.require_feature(orbit_security::license::FEATURE_CUSTOM_ROLES)?;
+    }
     if user_id == auth.user_id {
         return Err(ApiError::bad_request("you cannot change your own role"));
     }

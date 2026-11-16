@@ -477,6 +477,7 @@ pub struct MetaResponse {
     pub auth: serde_json::Value,
     pub events_driver: String,
     pub features: MetaFeatures,
+    pub license: orbit_security::LicenseStatus,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]

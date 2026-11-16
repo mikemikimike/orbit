@@ -6,6 +6,7 @@
 pub mod auth;
 pub mod error;
 pub mod http;
+pub mod license;
 pub mod permissions;
 pub mod secrets;
 
@@ -14,3 +15,5 @@ pub use error::*;
 pub use http::*;
 pub use permissions::*;
 pub use secrets::*;
+
+pub use license::{LicenseHandle, LicenseLimits, LicenseSource, LicenseStatus, LicenseVerifier};

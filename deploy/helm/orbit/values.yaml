@@ -153,6 +153,14 @@ launcher:
       cpu: 500m
       memory: 256Mi
 
+# Offline enterprise license (Ed25519-signed JWS). See docs/decisions/0010.
+# No installation ID or online activation is required. Provide either an existing Secret
+# or an inline value (not recommended for production).
+license:
+  existingSecret: ""
+  key: license.jwt
+  value: ""
+
 # ─── Authentication ───────────────────────────────────────────
 auth:
   # dev  = seeded local user (no IdP). Use only for local/test clusters.

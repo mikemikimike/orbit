@@ -92,6 +92,7 @@ pub async fn create(
     crate::extract::ApiJson(body): crate::extract::ApiJson<RoleRequest>,
 ) -> Result<(StatusCode, Json<CustomRole>), ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    state.require_feature(orbit_security::license::FEATURE_CUSTOM_ROLES)?;
     let (name, permissions) = validated(&body)?;
     let role = state
         .store
@@ -117,6 +118,7 @@ pub async fn update(
     crate::extract::ApiJson(body): crate::extract::ApiJson<RoleRequest>,
 ) -> Result<Json<CustomRole>, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    state.require_feature(orbit_security::license::FEATURE_CUSTOM_ROLES)?;
     let (name, permissions) = validated(&body)?;
     let role = state
         .store
@@ -141,6 +143,7 @@ pub async fn delete(
     Path(role_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    state.require_feature(orbit_security::license::FEATURE_CUSTOM_ROLES)?;
     let role = state.store.get_custom_role(auth.org_id, role_id).await?;
     state.store.delete_custom_role(auth.org_id, role_id).await?;
     audit::record(

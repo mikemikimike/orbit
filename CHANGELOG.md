@@ -8,6 +8,16 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- Offline license verification (`orbit-security::license`): Ed25519 JWS, embedded public
+  keys with `kid`, expiry + grace, limits/features, no installation ID. The API loads
+  `ORBIT_LICENSE` / `ORBIT_LICENSE_FILE` (default `/etc/orbit-license.jwt`), hot-reloads
+  the mounted file every 60s, exposes status in `/api/v1/meta`, and gates custom roles
+  behind `custom_roles`.
+- Helm `license.existingSecret` / `license.key` / `license.value` and a
+  `docs/development/licensing.md` operator guide.
+
 ### Docs
 
 - ADR 0010: installation-wide offline license (Ed25519 JWS, no installation ID by

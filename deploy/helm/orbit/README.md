@@ -191,6 +191,17 @@ credentials. Set `launcher.token` explicitly (or provide `launcher-token` in
 `secrets.existingSecret`) when the rendered chart is committed or diffed by GitOps,
 because `helm template` cannot look up the stored token.
 
+### License
+
+| Key | Default | Notes |
+|---|---|---|
+| `license.existingSecret` | `""` | Secret with the signed license file (airgapped) |
+| `license.key` | `license.jwt` | key inside that Secret |
+| `license.value` | `""` | inline token for dev/test (not recommended) |
+
+Mount at `/etc/orbit-license.jwt`; the API hot-reloads it (~60s) and exposes the status via
+`/api/v1/meta`. No installation ID or outbound call is used.
+
 ### Authentication and secrets
 
 | Key | Default | Notes |

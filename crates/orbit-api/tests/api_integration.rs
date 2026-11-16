@@ -96,6 +96,10 @@ async fn test_app(allow_anonymous: bool) -> Option<TestApp> {
         launcher_token: None,
         worker_api_url: "http://localhost:8080".into(),
         archive_after_days: None,
+        license: orbit_security::LicenseHandle::load(orbit_security::LicenseSource {
+            token: None,
+            file: None,
+        }),
     };
     // In this test harness anonymous is controlled by auth_config.dev.allow_anonymous;
     // rebuild the config accordingly for the negative auth test.

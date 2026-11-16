@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use orbit_events::EventBus;
 use orbit_harness::HarnessRegistry;
-use orbit_security::{AuthConfig, JwtValidator};
+use orbit_security::{AuthConfig, JwtValidator, LicenseHandle, LicenseStatus};
 use orbit_store::Store;
 use uuid::Uuid;
 
@@ -37,6 +37,8 @@ pub struct AppState {
     pub worker_api_url: String,
     /// Archive terminal runs older than this many days. `None` disables retention.
     pub archive_after_days: Option<u32>,
+    /// Offline enterprise license (hot reloadable).
+    pub license: LicenseHandle,
 }
 
 impl AppState {
@@ -50,5 +52,20 @@ impl AppState {
 
     pub fn auth_cors_origins(&self) -> &[String] {
         &self.cors_origins
+    }
+
+    pub fn license_status(&self) -> LicenseStatus {
+        self.license.status()
+    }
+
+    /// Reject a premium action when the license does not grant the feature.
+    pub fn require_feature(&self, feature: &str) -> Result<(), crate::error::ApiError> {
+        self.license.require_feature(feature).map_err(|message| {
+            crate::error::ApiError::new(
+                axum::http::StatusCode::PAYMENT_REQUIRED,
+                "license_required",
+                message,
+            )
+        })
     }
 }

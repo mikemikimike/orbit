@@ -104,6 +104,12 @@ web:
       cpu: 500m
       memory: 512Mi
 
+license:
+  # Airgapped: create a Secret with the signed license file.
+  #   kubectl -n orbit create secret generic orbit-license --from-file=license.jwt
+  existingSecret: orbit-license
+  key: license.jwt
+
 auth:
   mode: oidc
   oidc:

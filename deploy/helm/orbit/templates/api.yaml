@@ -137,6 +137,13 @@ spec:
               value: {{ .Values.platform.bodyLimitBytes | quote }}
             - name: ORBIT_ARCHIVE_AFTER_DAYS
               value: {{ .Values.platform.archiveAfterDays | quote }}
+            {{- if .Values.license.value }}
+            - name: ORBIT_LICENSE
+              value: {{ .Values.license.value | quote }}
+            {{- else if .Values.license.existingSecret }}
+            - name: ORBIT_LICENSE_FILE
+              value: "/etc/orbit-license.jwt"
+            {{- end }}
             {{- if eq .Values.auth.mode "dev" }}
             - name: ORBIT_DEV_AUTH_ALLOW_ANONYMOUS
               value: {{ .Values.auth.dev.allowAnonymous | quote }}
@@ -208,6 +215,12 @@ spec:
             {{- end }}
             - name: tmp
               mountPath: /tmp
+            {{- if and .Values.license.existingSecret (not .Values.license.value) }}
+            - name: license
+              mountPath: /etc/orbit-license.jwt
+              subPath: {{ .Values.license.key | default "license.jwt" }}
+              readOnly: true
+            {{- end }}
           startupProbe:
             httpGet:
               path: /healthz
@@ -238,6 +251,14 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
+        {{- if and .Values.license.existingSecret (not .Values.license.value) }}
+        - name: license
+          secret:
+            secretName: {{ .Values.license.existingSecret }}
+            items:
+              - key: {{ .Values.license.key | default "license.jwt" }}
+                path: {{ .Values.license.key | default "license.jwt" }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -14,6 +14,18 @@ use orbit_store::Trigger;
 use crate::state::AppState;
 
 pub fn spawn(state: AppState) {
+    // Offline license: re-read the mounted file so airgapped renewals apply without a
+    // restart (Secret volume updates propagate within ~60s).
+    let license_state = state.clone();
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(60));
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticker.tick().await;
+            license_state.license.reload();
+        }
+    });
+
     let scheduler_state = state.clone();
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(15));

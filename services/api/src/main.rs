@@ -4,7 +4,7 @@ use anyhow::Context;
 use orbit_api::{build_router, initialize, telemetry, ApiConfig, AppState};
 use orbit_events::{connect as connect_bus, EventBusConfig};
 use orbit_harness::HarnessRegistry;
-use orbit_security::{JwtValidator, SecretCipher};
+use orbit_security::{JwtValidator, LicenseHandle, LicenseSource, SecretCipher};
 use orbit_store::Store;
 use tokio::net::TcpListener;
 
@@ -77,6 +77,7 @@ async fn main() -> anyhow::Result<()> {
         launcher_token: config.launcher_token.clone(),
         worker_api_url: config.worker_api_url.clone(),
         archive_after_days: config.archive_after_days,
+        license: LicenseHandle::load(LicenseSource::from_env()),
     };
 
     orbit_api::background::spawn(state.clone());
