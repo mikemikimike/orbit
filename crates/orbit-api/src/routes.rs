@@ -259,6 +259,7 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/settings/oidc",
             get(handlers::settings::get_oidc).put(handlers::settings::update_oidc),
         )
+        .route("/api/v1/license", get(handlers::license::overview))
         .route(
             "/api/v1/roles",
             get(handlers::roles::list).post(handlers::roles::create),

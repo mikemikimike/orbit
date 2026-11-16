@@ -175,3 +175,16 @@ impl Store {
         Ok(())
     }
 }
+
+impl Store {
+    pub async fn count_enabled_worker_profiles(&self, org_id: Uuid) -> StoreResult<i64> {
+        Ok(
+            sqlx::query_scalar(
+                "SELECT COUNT(*) FROM worker_profiles WHERE org_id = $1 AND enabled",
+            )
+            .bind(org_id)
+            .fetch_one(&self.pool)
+            .await?,
+        )
+    }
+}

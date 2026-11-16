@@ -1699,6 +1699,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "orbit-license-cli"
+version = "0.9.1"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "ed25519-dalek",
+ "rand 0.8.8",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "orbit-mcp-broker"
 version = "0.9.1"
 dependencies = [

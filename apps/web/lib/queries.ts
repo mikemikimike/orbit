@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { api } from "./api";
+import { api, API_BASE_URL, getAccessToken } from "./api";
 import type {
   AgentDetail,
   AgentPage,
@@ -76,6 +76,41 @@ export function useMeta() {
     queryKey: queryKeys.meta,
     queryFn: async () => unwrap(await api.GET("/api/v1/meta")),
     staleTime: 5 * 60_000,
+  });
+}
+
+export interface LicenseOverview {
+  license: {
+    tier: string;
+    customer?: string | null;
+    plan?: string | null;
+    features: string[];
+    limits: Record<string, number | null | undefined>;
+    expiresAt?: string | null;
+    daysRemaining?: number | null;
+    grace: boolean;
+    valid: boolean;
+    trial: boolean;
+    error?: string | null;
+  };
+  usage: { seats: number; agents: number; workers: number; executionsToday: number };
+  warnings: string[];
+}
+
+export function useLicense() {
+  return useQuery<LicenseOverview>({
+    queryKey: ["license"],
+    queryFn: async () => {
+      const token = getAccessToken();
+      const response = await fetch(`${API_BASE_URL}/api/v1/license`, {
+        headers: token ? { authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!response.ok) {
+        throw new Error(`license status failed: HTTP ${response.status}`);
+      }
+      return (await response.json()) as LicenseOverview;
+    },
+    staleTime: 60_000,
   });
 }
 

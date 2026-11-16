@@ -123,6 +123,14 @@ pub async fn execute_agent(
     crate::extract::ApiJson(body): crate::extract::ApiJson<CreateExecutionRequest>,
 ) -> Result<(StatusCode, Json<ExecutionRecord>), ApiError> {
     auth.require(Permission::ExecutionsCreate)?;
+    let since = chrono::Utc::now() - chrono::Duration::hours(24);
+    state.enforce_limit(
+        "executions_per_day",
+        state
+            .store
+            .count_all_executions_since(auth.org_id, since)
+            .await?,
+    )?;
 
     let agent = state.store.get_agent(auth.org_id, agent_id).await?;
     if agent.status == "archived" {

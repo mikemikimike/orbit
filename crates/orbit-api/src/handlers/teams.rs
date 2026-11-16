@@ -689,6 +689,14 @@ pub async fn create_run(
     crate::extract::ApiJson(body): crate::extract::ApiJson<CreateTeamRunRequest>,
 ) -> Result<(StatusCode, Json<TeamRunDetail>), ApiError> {
     auth.require(Permission::ExecutionsCreate)?;
+    let since = chrono::Utc::now() - chrono::Duration::hours(24);
+    state.enforce_limit(
+        "executions_per_day",
+        state
+            .store
+            .count_all_executions_since(auth.org_id, since)
+            .await?,
+    )?;
     let team = state.store.get_agent_team(auth.org_id, team_id).await?;
     let definition = parse_definition(&team)?;
     let task = if body.task.trim().is_empty() {

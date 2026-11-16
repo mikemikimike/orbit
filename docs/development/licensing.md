@@ -51,6 +51,27 @@ Without a license the installation runs as `community`. An expired license keeps
 through `graceDays`, then premium writes are rejected while reads, exports, backups and
 running executions continue.
 
+## Vendor signing tool
+
+The offline signer lives in `services/license-cli` and is not part of the runtime images:
+
+```bash
+cargo build -p orbit-license-cli
+
+# 1. Generate a signing key once; keep key.json offline.
+./target/debug/orbit-license-cli keygen --out key.json --kid orbit-2026-01
+
+# 2. Write claims.json (v, customer, plan, features, limits, issued_at, expires_at, ...).
+# 3. Sign.
+./target/debug/orbit-license-cli sign --key key.json --claims claims.json --out license.jwt
+
+# 4. Show the public key entry for the build/runtime.
+./target/debug/orbit-license-cli public-key --key key.json
+```
+
+Embed the public key by `kid` in a vendor build, or set `ORBIT_LICENSE_PUBLIC_KEYS` to the
+printed JSON for testing/custom builds. Never commit `key.json`.
+
 ## Verification keys
 
 Public keys are embedded in the API by `kid`. Development builds include a documented dev

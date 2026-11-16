@@ -12,6 +12,7 @@ members = [
   "services/worker",
   "services/launcher",
   "services/mcp-broker",
+  "services/license-cli",
 ]
 
 [workspace.package]

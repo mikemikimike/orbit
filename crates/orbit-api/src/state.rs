@@ -58,6 +58,24 @@ impl AppState {
         self.license.status()
     }
 
+    /// Reject a create when the license limit for that resource is reached.
+    pub fn enforce_limit(&self, limit: &str, current: i64) -> Result<(), crate::error::ApiError> {
+        let status = self.license_status();
+        let Some(maximum) = status.limit(limit) else {
+            return Ok(());
+        };
+        if current >= maximum as i64 {
+            return Err(crate::error::ApiError::new(
+                axum::http::StatusCode::PAYMENT_REQUIRED,
+                "license_limit",
+                format!(
+                    "license limit reached: {limit} {current}/{maximum}. Renew or upgrade the license."
+                ),
+            ));
+        }
+        Ok(())
+    }
+
     /// Reject a premium action when the license does not grant the feature.
     pub fn require_feature(&self, feature: &str) -> Result<(), crate::error::ApiError> {
         self.license.require_feature(feature).map_err(|message| {

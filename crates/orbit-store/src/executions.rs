@@ -576,3 +576,19 @@ impl Store {
         .await?)
     }
 }
+
+impl Store {
+    pub async fn count_all_executions_since(
+        &self,
+        org_id: Uuid,
+        since: DateTime<Utc>,
+    ) -> StoreResult<i64> {
+        Ok(sqlx::query_scalar(
+            "SELECT COUNT(*) FROM executions WHERE org_id = $1 AND created_at >= $2",
+        )
+        .bind(org_id)
+        .bind(since)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+}

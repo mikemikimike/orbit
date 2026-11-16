@@ -124,6 +124,9 @@ impl LicenseStatus {
     }
 
     pub fn limit(&self, limit: &str) -> Option<u64> {
+        if !self.valid {
+            return None;
+        }
         match limit {
             "seats" => self.limits.seats,
             "agents" => self.limits.agents,

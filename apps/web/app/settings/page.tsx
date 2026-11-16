@@ -40,6 +40,7 @@ import {
   unwrap,
   useApiTokens,
   useAuditLogs,
+  useLicense,
   useMe,
   useMeta,
 } from "@/lib/queries";
@@ -49,6 +50,7 @@ import { formatDateTime, relativeTime, titleCase } from "@/lib/utils";
 export default function SettingsPage() {
   const me = useMe();
   const meta = useMeta();
+  const license = useLicense();
   const tokens = useApiTokens();
   const audit = useAuditLogs();
   const queryClient = useQueryClient();
@@ -229,6 +231,72 @@ export default function SettingsPage() {
             (restart the API after saving). Leave blank to keep environment defaults.
           </p>
           <OidcSettingsForm />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-primary" /> License
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          {license.isLoading ? (
+            <Skeleton className="h-20" />
+          ) : license.data ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={license.data.license.valid ? "success" : "outline"}>
+                  {license.data.license.tier}
+                </Badge>
+                {license.data.license.customer ? (
+                  <span className="text-xs text-muted-foreground">
+                    {license.data.license.customer}
+                  </span>
+                ) : null}
+                {license.data.license.grace ? (
+                  <Badge variant="outline">grace period</Badge>
+                ) : null}
+              </div>
+              {license.data.license.valid ? (
+                <>
+                  <p className="text-[11px] text-muted-foreground">
+                    Expires {license.data.license.expiresAt ?? "never"}
+                    {typeof license.data.license.daysRemaining === "number"
+                      ? ` · ${license.data.license.daysRemaining} day(s) remaining`
+                      : ""}
+                  </p>
+                  <div className="grid gap-1 text-[11px] text-muted-foreground sm:grid-cols-2">
+                    {Object.entries(license.data.usage).map(([key, value]) => {
+                      const limitKey = key === "executionsToday" ? "executions_per_day" : key;
+                      const limit = license.data?.license.limits[limitKey];
+                      return (
+                        <span key={key}>
+                          {key}: {String(value)}
+                          {limit ? ` / ${String(limit)}` : ""}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  {license.data.warnings.length ? (
+                    <p className="text-[11px] text-[hsl(var(--warning))]">
+                      {license.data.warnings.join(" · ")}
+                    </p>
+                  ) : null}
+                  <p className="text-[11px] text-muted-foreground">
+                    Features: {license.data.license.features.join(", ") || "none"}
+                  </p>
+                </>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  Community edition. Install an offline license Secret to unlock enterprise
+                  features (see docs/development/licensing.md).
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">License status unavailable.</p>
+          )}
         </CardContent>
       </Card>
 

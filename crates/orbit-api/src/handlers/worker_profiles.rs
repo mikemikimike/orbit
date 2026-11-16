@@ -305,6 +305,13 @@ pub async fn create_profile(
     crate::extract::ApiJson(body): crate::extract::ApiJson<CreateWorkerProfileRequest>,
 ) -> Result<(StatusCode, Json<WorkerProfile>), ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    state.enforce_limit(
+        "workers",
+        state
+            .store
+            .count_enabled_worker_profiles(auth.org_id)
+            .await?,
+    )?;
     let harness = HarnessKind::from_str_compat(&body.harness_kind)?;
     if !matches!(body.target.as_str(), "local" | "docker" | "kubernetes") {
         return Err(ApiError::validation(vec![ValidationIssue::new(
@@ -395,6 +402,13 @@ pub async fn update_profile(
     crate::extract::ApiJson(body): crate::extract::ApiJson<CreateWorkerProfileRequest>,
 ) -> Result<Json<WorkerProfile>, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    state.enforce_limit(
+        "workers",
+        state
+            .store
+            .count_enabled_worker_profiles(auth.org_id)
+            .await?,
+    )?;
     let harness = HarnessKind::from_str_compat(&body.harness_kind)?;
     if !matches!(body.target.as_str(), "local" | "docker" | "kubernetes") {
         return Err(ApiError::validation(vec![ValidationIssue::new(

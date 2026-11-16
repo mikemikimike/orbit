@@ -17,6 +17,10 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
   behind `custom_roles`.
 - Helm `license.existingSecret` / `license.key` / `license.value` and a
   `docs/development/licensing.md` operator guide.
+- `services/license-cli` vendor signing tool (keygen/sign/public-key), offline only.
+- `GET /api/v1/license` usage overview and warnings at 80%; seats, agents, enabled worker
+  profiles and executions/24h are enforced at create/provision time.
+- Settings → License panel showing tier, customer, expiry/grace, features and usage.
 
 ### Docs
 

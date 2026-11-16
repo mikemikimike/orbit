@@ -339,3 +339,16 @@ fn is_unique(err: &sqlx::Error) -> bool {
         .map(|db| db.is_unique_violation())
         .unwrap_or(false)
 }
+
+impl Store {
+    pub async fn count_active_users(&self, org_id: Uuid) -> StoreResult<i64> {
+        Ok(
+            sqlx::query_scalar(
+                "SELECT COUNT(*) FROM users WHERE org_id = $1 AND status = 'active'",
+            )
+            .bind(org_id)
+            .fetch_one(&self.pool)
+            .await?,
+        )
+    }
+}

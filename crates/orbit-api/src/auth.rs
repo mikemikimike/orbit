@@ -152,6 +152,8 @@ async fn resolve_oidc(state: &AppState, token: Option<&str>) -> Result<AuthConte
                     "your identity is not provisioned in this ORBIT instance",
                 ));
             }
+            let seats = state.store.count_active_users(state.default_org_id).await?;
+            state.enforce_limit("seats", seats)?;
             state
                 .store
                 .upsert_oidc_user(
