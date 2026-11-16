@@ -57,6 +57,8 @@ Checklist:
   `master-key`, `launcher-token` (when the launcher is enabled), the OIDC client secret,
   and any fixed-worker tokens.
 - `externalDatabase.enabled=true` / `externalNats.enabled=true` for managed services.
+  The database Secret can be an operator-managed one (see below), so the password does
+  not have to appear in values.
 - `ingress.tls.enabled=true` with a certificate Secret.
 - `nodeSelector` / `tolerations` / `affinity` for your node pools.
 
@@ -119,11 +121,38 @@ append-only.
 | `postgresql.enabled` | `true` | bundled single-replica PostgreSQL (test clusters) |
 | `postgresql.database` / `.user` / `.password` | `orbit` / `orbit` / `orbit` | |
 | `postgresql.storage` / `.storageClassName` | `5Gi` / `""` | |
-| `externalDatabase.enabled` / `.url` | `false` / `""` | required when enabled |
+| `externalDatabase.enabled` | `false` | use a managed PostgreSQL instead of the bundled one |
+| `externalDatabase.url` | `""` | complete connection URL (ignored when `existingSecret` is set) |
+| `externalDatabase.existingSecret` | `""` | operator-managed Secret with the connection fields |
+| `externalDatabase.urlKey` | `""` | optional key holding a full URL (CNPG app Secrets include `uri`) |
+| `externalDatabase.hostKey` / `.portKey` / `.databaseKey` / `.userKey` / `.passwordKey` | `host` / `port` / `dbname` / `user` / `password` | key mapping for the connection Secret |
+| `externalDatabase.sslMode` | `require` | `sslmode` for the composed URL |
 | `nats.enabled` | `true` | bundled NATS JetStream |
 | `nats.storage` / `.storageClassName` | `2Gi` / `""` | |
 | `externalNats.enabled` / `.url` | `false` / `""` | required when enabled |
 | `secrets.databaseUrl` | `""` | overrides the computed database URL |
+
+### External PostgreSQL (CNPG and other operators)
+
+With `externalDatabase.enabled=true` you can either pass a full URL or point the chart at
+a Secret that already holds the connection fields. CloudNativePG application Secrets work
+directly:
+
+```yaml
+externalDatabase:
+  enabled: true
+  existingSecret: orbit-pg-app     # CNPG application Secret in the release namespace
+  # Use the pre-composed URL if you prefer:
+  # urlKey: uri
+
+# If this Secret only holds the database fields, keep secrets.create=true or provide
+# `master-key` (+ `launcher-token`) via secrets.existingSecret.
+```
+
+When `urlKey` is empty the API composes the URL from `host`, `port`, `dbname`, `user` and
+`password` (percent-encoded), with `externalDatabase.sslMode`. Key names are configurable
+via `hostKey`, `portKey`, `databaseKey`, `userKey` and `passwordKey`. The chart then omits
+`database-url` from its own Secret.
 
 ### Workers
 

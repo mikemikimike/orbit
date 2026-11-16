@@ -50,11 +50,49 @@ spec:
               value: "0.0.0.0:{{ .Values.api.port }}"
             - name: ORBIT_AUTH_MODE
               value: {{ .Values.auth.mode | quote }}
+            {{- if and .Values.externalDatabase.enabled .Values.externalDatabase.existingSecret }}
+            {{- if .Values.externalDatabase.urlKey }}
+            - name: ORBIT_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalDatabase.existingSecret }}
+                  key: {{ .Values.externalDatabase.urlKey }}
+            {{- else }}
+            - name: ORBIT_DATABASE_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalDatabase.existingSecret }}
+                  key: {{ .Values.externalDatabase.hostKey }}
+            - name: ORBIT_DATABASE_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalDatabase.existingSecret }}
+                  key: {{ .Values.externalDatabase.portKey }}
+            - name: ORBIT_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalDatabase.existingSecret }}
+                  key: {{ .Values.externalDatabase.databaseKey }}
+            - name: ORBIT_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalDatabase.existingSecret }}
+                  key: {{ .Values.externalDatabase.userKey }}
+            - name: ORBIT_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalDatabase.existingSecret }}
+                  key: {{ .Values.externalDatabase.passwordKey }}
+            - name: ORBIT_DATABASE_SSLMODE
+              value: {{ .Values.externalDatabase.sslMode | quote }}
+            {{- end }}
+            {{- else }}
             - name: ORBIT_DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: {{ include "orbit.secretName" . }}
                   key: database-url
+            {{- end }}
             - name: ORBIT_MASTER_KEY
               valueFrom:
                 secretKeyRef:

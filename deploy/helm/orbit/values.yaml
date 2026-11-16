@@ -211,8 +211,23 @@ postgresql:
 
 externalDatabase:
   enabled: false
+  # Complete connection URL. Ignored when `existingSecret` is set.
   # postgres://user:password@host:5432/orbit?sslmode=require
   url: ""
+  # Operator-managed Secret with the connection parameters, e.g. a CloudNativePG
+  # application Secret. The API composes the URL from these fields (values are
+  # percent-encoded), so the password never has to be duplicated in values.yaml.
+  existingSecret: ""
+  # Optional key holding a complete URL (CNPG application Secrets include `uri`).
+  # When set, ORBIT_DATABASE_URL is read from that key and the fields below are unused.
+  urlKey: ""
+  hostKey: host
+  portKey: port
+  databaseKey: dbname
+  userKey: user
+  passwordKey: password
+  # libpq sslmode for the composed URL (CNPG usually requires TLS).
+  sslMode: require
 
 # ─── NATS JetStream ──────────────────────────────────────────
 nats:

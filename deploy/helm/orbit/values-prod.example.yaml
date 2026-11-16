@@ -129,7 +129,11 @@ postgresql:
 
 externalDatabase:
   enabled: true
-  url: postgres://orbit:CHANGE_ME@postgres.example.internal:5432/orbit?sslmode=require
+  # Either a full URL...
+  # url: postgres://orbit:CHANGE_ME@postgres.example.internal:5432/orbit?sslmode=require
+  # ...or an operator-managed Secret (e.g. CNPG) with host/port/dbname/user/password.
+  existingSecret: orbit-pg-app
+  # urlKey: uri   # use this when the Secret already contains a complete URL
 
 nats:
   enabled: false

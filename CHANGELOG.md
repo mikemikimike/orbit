@@ -8,6 +8,18 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-11-16
+
+### Added
+
+- `externalDatabase.existingSecret` accepts an operator-managed PostgreSQL Secret (for
+  example a CloudNativePG application Secret). With `urlKey` empty the API composes the
+  URL from `host`, `port`, `dbname`, `user` and `password` (`ORBIT_DATABASE_*`), with
+  percent-encoding and configurable `sslMode`. Set `urlKey: uri` to use a pre-composed
+  URL instead. The chart omits `database-url` from its own Secret in that case.
+- `CHANGELOG`/chart version aligned so a release tag publishes every image the default
+  chart needs (launcher and harness workers included).
+
 ### Changed
 
 - **Workers are launched from profiles by default.** The chart enables `launcher`

@@ -57,8 +57,8 @@ app.kubernetes.io/component: {{ .component }}
 {{- define "orbit.databaseUrl" -}}
 {{- if .Values.secrets.databaseUrl -}}
 {{- .Values.secrets.databaseUrl -}}
-{{- else if .Values.externalDatabase.enabled -}}
-{{- required "externalDatabase.url is required when externalDatabase.enabled=true" .Values.externalDatabase.url -}}
+{{- else if and .Values.externalDatabase.enabled (not .Values.externalDatabase.existingSecret) -}}
+{{- required "externalDatabase.url is required when externalDatabase.enabled=true and externalDatabase.existingSecret is empty" .Values.externalDatabase.url -}}
 {{- else -}}
 {{- printf "postgres://%s:%s@%s-postgresql:5432/%s?sslmode=disable" .Values.postgresql.user .Values.postgresql.password (include "orbit.fullname" .) .Values.postgresql.database -}}
 {{- end -}}

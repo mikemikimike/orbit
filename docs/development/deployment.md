@@ -93,6 +93,10 @@ kubeconfig whose server is `https://127.0.0.1:16444`; kubectl then only needs lo
 Key values:
 - `externalDatabase.enabled` / `postgresql.enabled` — the chart can bundle a
   single-replica PostgreSQL for test clusters; production should use a managed database.
+  `externalDatabase.existingSecret` accepts an operator-managed Secret (for example a
+  CNPG application Secret with `host`, `port`, `dbname`, `user`, `password`); the API
+  composes the connection URL from those fields, so the password never has to be copied
+  into values. Set `externalDatabase.urlKey=uri` to use a pre-composed URL instead.
 - `externalNats.enabled` / `nats.enabled`.
 - `auth.mode` / `auth.oidc.*` — `dev` or `oidc`; issuer, client id, scopes and JWKS URL.
   OIDC can also be configured at runtime under Settings.

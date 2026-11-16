@@ -44,10 +44,7 @@ impl ApiConfig {
         Ok(Self {
             environment,
             http_addr: env_or("ORBIT_HTTP_ADDR", "0.0.0.0:8080"),
-            database_url: env_or(
-                "ORBIT_DATABASE_URL",
-                "postgres://orbit:orbit@localhost:5432/orbit",
-            ),
+            database_url: resolve_database_url(),
             db_max_connections: env_or("ORBIT_DB_MAX_CONNECTIONS", "10")
                 .parse()
                 .unwrap_or(10),
@@ -111,6 +108,88 @@ fn resolve_master_key(environment: &str) -> anyhow::Result<String> {
     Ok(base64::engine::general_purpose::STANDARD.encode(hasher.finalize()))
 }
 
+/// Resolve the PostgreSQL connection string.
+///
+/// `ORBIT_DATABASE_URL` wins when set (Helm/production standard). Otherwise we compose
+/// one from component variables, which lets Kubernetes operators map the fields of an
+/// operator-managed Secret (for example a CNPG application Secret with `host`, `port`,
+/// `dbname`, `user` and `password`) without concatenating a URL themselves.
+fn resolve_database_url() -> String {
+    if let Ok(url) = std::env::var("ORBIT_DATABASE_URL") {
+        let url = url.trim();
+        if !url.is_empty() {
+            return url.to_string();
+        }
+    }
+    let host = env_opt("ORBIT_DATABASE_HOST");
+    let database = env_opt("ORBIT_DATABASE_NAME");
+    let user = env_opt("ORBIT_DATABASE_USER");
+    let password = env_opt("ORBIT_DATABASE_PASSWORD");
+    let port = env_opt("ORBIT_DATABASE_PORT")
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(5432);
+    let ssl_mode = env_opt("ORBIT_DATABASE_SSLMODE").unwrap_or_else(|| "require".into());
+
+    compose_database_url(
+        host.as_deref(),
+        port,
+        database.as_deref(),
+        user.as_deref(),
+        password.as_deref(),
+        &ssl_mode,
+    )
+    .unwrap_or_else(|| "postgres://orbit:orbit@localhost:5432/orbit".into())
+}
+
+fn compose_database_url(
+    host: Option<&str>,
+    port: u16,
+    database: Option<&str>,
+    user: Option<&str>,
+    password: Option<&str>,
+    ssl_mode: &str,
+) -> Option<String> {
+    let host = host?.trim();
+    let database = database?.trim();
+    let user = user?.trim();
+    if host.is_empty() || database.is_empty() || user.is_empty() {
+        return None;
+    }
+    let credentials = match password.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(password) => format!("{}:{}", percent_encode(user), percent_encode(password)),
+        None => percent_encode(user),
+    };
+    Some(format!(
+        "postgres://{credentials}@{host}:{port}/{}?sslmode={}",
+        percent_encode(database),
+        percent_encode(ssl_mode)
+    ))
+}
+
+/// Percent-encode a URL user-info/path component (RFC 3986 unreserved set kept as-is).
+fn percent_encode(value: &str) -> String {
+    use std::fmt::Write;
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                encoded.push(byte as char);
+            }
+            _ => {
+                let _ = write!(encoded, "%{byte:02X}");
+            }
+        }
+    }
+    encoded
+}
+
+fn env_opt(key: &str) -> Option<String> {
+    std::env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
 fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
 }
@@ -119,4 +198,68 @@ fn env_bool(key: &str, default: bool) -> bool {
     std::env::var(key)
         .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes"))
         .unwrap_or(default)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn composes_url_from_components() {
+        let url = compose_database_url(
+            Some("pg.example.internal"),
+            5432,
+            Some("orbit"),
+            Some("orbit"),
+            Some("secret"),
+            "require",
+        )
+        .expect("composed");
+        assert_eq!(
+            url,
+            "postgres://orbit:secret@pg.example.internal:5432/orbit?sslmode=require"
+        );
+    }
+
+    #[test]
+    fn percent_encodes_credentials_and_database() {
+        let url = compose_database_url(
+            Some("db"),
+            5433,
+            Some("orbit/db"),
+            Some("orbit@ops"),
+            Some("p@ss:w/rd?#"),
+            "verify-full",
+        )
+        .expect("composed");
+        assert_eq!(
+            url,
+            "postgres://orbit%40ops:p%40ss%3Aw%2Frd%3F%23@db:5433/orbit%2Fdb?sslmode=verify-full"
+        );
+    }
+
+    #[test]
+    fn omits_password_when_absent() {
+        let url = compose_database_url(
+            Some("db"),
+            5432,
+            Some("orbit"),
+            Some("orbit"),
+            None,
+            "disable",
+        )
+        .expect("composed");
+        assert_eq!(url, "postgres://orbit@db:5432/orbit?sslmode=disable");
+    }
+
+    #[test]
+    fn requires_host_database_and_user() {
+        assert!(
+            compose_database_url(Some("db"), 5432, None, Some("orbit"), None, "require").is_none()
+        );
+        assert!(
+            compose_database_url(None, 5432, Some("orbit"), Some("orbit"), None, "require")
+                .is_none()
+        );
+    }
 }
