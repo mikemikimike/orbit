@@ -10,6 +10,14 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- **OIDC group → role mapping** (issue #18): `roleClaim`, `groupRoles` and `syncRoles`
+  via env, Helm values and Settings. The most privileged mapped role wins; a token
+  without the claim never downgrades an existing user.
+- **Custom roles** (issue #15 foundation): org-scoped named permission sets with
+  `/api/v1/roles` CRUD, user assignment by role name, and permission resolution at
+  authentication time. Built-in roles remain virtual. Resource-level permissions,
+  shared connections, quotas and license gating are still open.
+
 - **Tool policy layer** (issue #19): org and per-agent rules with tool/capability/effect/
   connection/path/command matchers, deterministic `allow | require_approval | deny`
   evaluation, and argument-level restrictions that cannot weaken autonomy or grants.

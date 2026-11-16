@@ -501,3 +501,14 @@ pub struct ToolPolicy {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomRole {
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub name: String,
+    pub permissions: Vec<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}

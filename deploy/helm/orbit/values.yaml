@@ -176,6 +176,13 @@ auth:
     scopes: "openid profile email"
     autoProvision: true
     defaultRole: viewer
+    # Optional IdP group -> role mapping. Requires the IdP to return the claim (add
+    # `groups` to auth.oidc.scopes and configure the mapper in Dex/Keycloak).
+    roleClaim: groups
+    groupRoles: {}
+    # Re-evaluate the stored role on every login when the claim maps to a role.
+    # A token without the claim never downgrades an existing user.
+    syncRoles: false
 
 # ─── Secrets ─────────────────────────────────────────────────
 # For production set secrets.create=false and secrets.existingSecret to a Secret you

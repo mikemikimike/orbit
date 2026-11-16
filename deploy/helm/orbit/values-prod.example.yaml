@@ -113,6 +113,10 @@ auth:
     scopes: "openid profile email"
     autoProvision: true
     defaultRole: viewer
+    # Optional group → role mapping (Dex/Keycloak must return the claim).
+    roleClaim: groups
+    groupRoles: {}
+    syncRoles: false
 
 # Manage secrets externally (Vault, External Secrets, sealed-secrets, …).
 # Required keys: database-url, master-key, launcher-token when the launcher is enabled,

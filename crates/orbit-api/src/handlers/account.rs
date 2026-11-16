@@ -23,10 +23,7 @@ pub async fn me(
     let user = state.store.get_user(auth.org_id, auth.user_id).await?;
     let organization = state.store.get_organization(auth.org_id).await?;
     Ok(Json(MeResponse {
-        permissions: Permission::all_for(auth.role)
-            .into_iter()
-            .map(str::to_string)
-            .collect(),
+        permissions: auth.permissions(),
         auth_method: format!("{:?}", auth.method).to_lowercase(),
         scopes: auth.scopes.clone(),
         user,
@@ -66,16 +63,23 @@ pub async fn update_user_role(
     crate::extract::ApiJson(body): crate::extract::ApiJson<UpdateUserRoleRequest>,
 ) -> Result<Json<User>, ApiError> {
     auth.require(Permission::SettingsWrite)?;
-    let role: UserRole = body
-        .role
-        .parse()
-        .map_err(|_| ApiError::bad_request("invalid role"))?;
+    let role_name = body.role.trim();
+    let builtin = role_name.parse::<UserRole>().is_ok();
+    let custom = !builtin
+        && state
+            .store
+            .custom_role_permissions(auth.org_id, role_name)
+            .await?
+            .is_some();
+    if !builtin && !custom {
+        return Err(ApiError::bad_request("invalid role"));
+    }
     if user_id == auth.user_id {
         return Err(ApiError::bad_request("you cannot change your own role"));
     }
     let user = state
         .store
-        .set_user_role(auth.org_id, user_id, role)
+        .set_user_role_name(auth.org_id, user_id, role_name)
         .await?;
     audit::record(
         &state,
@@ -111,10 +115,7 @@ pub async fn create_api_token(
         ]));
     }
     let scopes = if body.scopes.is_empty() {
-        Permission::all_for(auth.role)
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>()
+        auth.permissions()
     } else {
         body.scopes.clone()
     };

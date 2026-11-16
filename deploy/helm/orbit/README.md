@@ -203,6 +203,9 @@ because `helm template` cannot look up the stored token.
 | `auth.oidc.redirectUri` | `<publicBaseUrl>/auth/callback` | |
 | `auth.oidc.scopes` | `openid profile email` | |
 | `auth.oidc.autoProvision` / `.defaultRole` | `true` / `viewer` | |
+| `auth.oidc.roleClaim` | `groups` | IdP claim with group/role values |
+| `auth.oidc.groupRoles` | `{}` | group → role mapping, e.g. `orbit-admins: admin` |
+| `auth.oidc.syncRoles` | `false` | re-evaluate the stored role on every login |
 | `secrets.create` / `secrets.existingSecret` | `true` / `""` | bring your own Secret in production |
 | `secrets.masterKey` | dev key | base64 32-byte AES key; replace for real deployments |
 | `secrets.oidcClientSecret` | `""` | confidential clients only |

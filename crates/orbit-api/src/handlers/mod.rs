@@ -6,6 +6,7 @@ pub mod catalog;
 pub mod dashboard;
 pub mod executions;
 pub mod health;
+pub mod roles;
 pub mod settings;
 pub mod skills;
 pub mod team_queue;

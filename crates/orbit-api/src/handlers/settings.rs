@@ -29,6 +29,15 @@ pub struct OidcSettings {
     pub auto_provision: bool,
     #[serde(default)]
     pub default_role: String,
+    /// Claim carrying IdP groups/roles (default `groups`).
+    #[serde(default)]
+    pub role_claim: String,
+    /// IdP group/claim value -> ORBIT role name.
+    #[serde(default)]
+    pub group_roles: std::collections::BTreeMap<String, String>,
+    /// Re-evaluate the stored role on every login when a mapping matches.
+    #[serde(default)]
+    pub sync_roles: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
@@ -57,6 +66,9 @@ pub async fn get_oidc(
         jwks_url: String::new(),
         auto_provision: true,
         default_role: "viewer".into(),
+        role_claim: "groups".into(),
+        group_roles: Default::default(),
+        sync_roles: false,
     });
     Ok(Json(settings))
 }
@@ -107,6 +119,9 @@ pub async fn apply_stored_oidc(
         scopes: vec!["openid".into(), "profile".into(), "email".into()],
         auto_provision: true,
         default_role: orbit_domain::UserRole::Viewer,
+        role_claim: "groups".into(),
+        group_roles: Vec::new(),
+        sync_roles: false,
         clock_skew_seconds: 60,
     });
     oidc.issuer = stored.issuer.trim().to_string();
@@ -146,6 +161,26 @@ pub async fn apply_stored_oidc(
         .default_role
         .parse::<orbit_domain::UserRole>()
         .unwrap_or(orbit_domain::UserRole::Viewer);
+    if !stored.role_claim.trim().is_empty() {
+        oidc.role_claim = stored.role_claim.trim().to_string();
+    }
+    if !stored.group_roles.is_empty() {
+        let mut mappings = Vec::new();
+        for (group, role) in &stored.group_roles {
+            match role.parse::<orbit_domain::UserRole>() {
+                Ok(role) => mappings.push((group.clone(), role)),
+                Err(_) => tracing::warn!(
+                    group = %group,
+                    role = %role,
+                    "ignoring OIDC group mapping with an unknown role"
+                ),
+            }
+        }
+        oidc.group_roles = mappings;
+    }
+    if stored.sync_roles {
+        oidc.sync_roles = true;
+    }
     tracing::info!(issuer = %oidc.issuer, "applied OIDC settings from the database");
     auth.oidc = Some(oidc);
     auth

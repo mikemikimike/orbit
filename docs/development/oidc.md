@@ -13,8 +13,11 @@ provider-specific code is required beyond the issuer URL and client registration
 | Client ID | `ORBIT_OIDC_CLIENT_ID` | `orbit` |
 | Client secret | `ORBIT_OIDC_CLIENT_SECRET` | optional for public PKCE clients |
 | Redirect URI | `ORBIT_OIDC_REDIRECT_URI` | `http://orbit.example.com/auth/callback` |
-| Scopes | `ORBIT_OIDC_SCOPES` | `openid profile email` |
+| Scopes | `ORBIT_OIDC_SCOPES` | `openid profile email groups` |
 | JWKS | `ORBIT_OIDC_JWKS_URL` | issuer keys URL |
+| Role claim | `ORBIT_OIDC_ROLE_CLAIM` | `groups` |
+| Group mappings | `ORBIT_OIDC_GROUP_ROLES` | `orbit-admins=admin,orbit-operators=operator` (or JSON) |
+| Sync roles | `ORBIT_OIDC_SYNC_ROLES` | `false` |
 
 `ORBIT_OIDC_CLIENT_ID` defaults to the audience. The redirect URI must be registered
 exactly at the provider.
@@ -73,6 +76,38 @@ https://keycloak.example.com/realms/<realm>
 Set the same five variables plus `ORBIT_OIDC_JWKS_URL` if your deployment does not expose
 discovery at the issuer. ORBIT’s API validates the JWT audience against
 `ORBIT_OIDC_AUDIENCE` and auto-provisions users when enabled.
+
+## Group-based roles
+
+ORBIT can map IdP groups to built-in roles. Add the claim and mappings:
+
+```yaml
+auth:
+  oidc:
+    scopes: "openid profile email groups"
+    defaultRole: viewer
+    roleClaim: groups
+    groupRoles:
+      orbit-admins: admin
+      orbit-operators: operator
+    syncRoles: true
+```
+
+- The IdP must include the claim in the ID token (Dex connector group support or a
+  Keycloak group-membership mapper).
+- The most privileged matching role wins (`owner > admin > operator > viewer`).
+- `syncRoles=false` applies the mapped role only when a user is first auto-provisioned.
+- `syncRoles=true` updates the stored role on every login when the claim is present. A
+  token without the claim never downgrades an existing user. This overrides manual role
+  changes in ORBIT.
+- Only groups listed in `groupRoles` grant anything; unmatched groups fall back to
+  `defaultRole`.
+
+Equivalent environment variables: `ORBIT_OIDC_ROLE_CLAIM`,
+`ORBIT_OIDC_GROUP_ROLES` (`group=role,group=role` or JSON), `ORBIT_OIDC_SYNC_ROLES`.
+
+Group mappings target built-in roles. Custom roles (`docs/development/rbac.md`) are
+assigned manually for now; group-to-custom-role mapping is a follow-up.
 
 ## Configure from the UI
 

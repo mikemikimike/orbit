@@ -67,6 +67,14 @@ pub struct OidcConfig {
     pub scopes: Vec<String>,
     pub auto_provision: bool,
     pub default_role: UserRole,
+    /// Claim that carries IdP groups/roles (default `groups`).
+    pub role_claim: String,
+    /// Claim values mapped to ORBIT roles. Order is irrelevant; the most privileged
+    /// matching role wins.
+    pub group_roles: Vec<(String, UserRole)>,
+    /// Re-evaluate the stored role on every login when a mapping matches. Without this,
+    /// the mapped role is only used at auto-provisioning.
+    pub sync_roles: bool,
     pub clock_skew_seconds: u64,
 }
 
@@ -138,6 +146,9 @@ impl AuthConfig {
                     auto_provision: env_bool("ORBIT_OIDC_AUTO_PROVISION", true),
                     default_role: UserRole::from_str(&env_or("ORBIT_OIDC_DEFAULT_ROLE", "viewer"))
                         .map_err(SecurityError::Config)?,
+                    role_claim: env_or("ORBIT_OIDC_ROLE_CLAIM", "groups"),
+                    group_roles: parse_group_roles(&env_or("ORBIT_OIDC_GROUP_ROLES", ""))?,
+                    sync_roles: env_bool("ORBIT_OIDC_SYNC_ROLES", false),
                     clock_skew_seconds: env_or("ORBIT_OIDC_CLOCK_SKEW_SECONDS", "60")
                         .parse()
                         .unwrap_or(60),
@@ -152,6 +163,77 @@ impl AuthConfig {
             allow_api_tokens: env_bool("ORBIT_ALLOW_API_TOKENS", true),
         })
     }
+}
+
+/// Extract claim values from a string or array claim.
+fn claim_values(value: Option<&serde_json::Value>) -> Vec<String> {
+    match value {
+        Some(serde_json::Value::String(value)) => vec![value.clone()],
+        Some(serde_json::Value::Array(values)) => values
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .map(str::to_string)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Pick the most privileged role whose mapped group is present.
+pub fn highest_mapped_role(groups: &[String], mapping: &[(String, UserRole)]) -> Option<UserRole> {
+    fn rank(role: UserRole) -> u8 {
+        match role {
+            UserRole::Owner => 4,
+            UserRole::Admin => 3,
+            UserRole::Operator => 2,
+            UserRole::Viewer => 1,
+        }
+    }
+    mapping
+        .iter()
+        .filter(|(group, _)| groups.iter().any(|value| value == group))
+        .map(|(_, role)| *role)
+        .max_by_key(|role| rank(*role))
+}
+
+/// Parse `group=role,group2=admin` (or a JSON object) into role mappings.
+fn parse_group_roles(value: &str) -> Result<Vec<(String, UserRole)>, SecurityError> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(Vec::new());
+    }
+    if value.starts_with('{') {
+        let map: std::collections::BTreeMap<String, String> = serde_json::from_str(value)
+            .map_err(|error| SecurityError::Config(format!("ORBIT_OIDC_GROUP_ROLES: {error}")))?;
+        return map
+            .into_iter()
+            .map(|(group, role)| {
+                let parsed = UserRole::from_str(&role).map_err(|error| {
+                    SecurityError::Config(format!(
+                        "ORBIT_OIDC_GROUP_ROLES: invalid role for '{group}': {error}"
+                    ))
+                })?;
+                Ok((group, parsed))
+            })
+            .collect();
+    }
+    value
+        .split(',')
+        .filter(|pair| !pair.trim().is_empty())
+        .map(|pair| {
+            let (group, role) = pair.split_once('=').ok_or_else(|| {
+                SecurityError::Config(
+                    "ORBIT_OIDC_GROUP_ROLES must be 'group=role,group=role'".into(),
+                )
+            })?;
+            let role = UserRole::from_str(role.trim()).map_err(|error| {
+                SecurityError::Config(format!(
+                    "ORBIT_OIDC_GROUP_ROLES: invalid role for '{}': {error}",
+                    group.trim()
+                ))
+            })?;
+            Ok((group.trim().to_string(), role))
+        })
+        .collect()
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -197,6 +279,19 @@ impl AuthContext {
         scopes.contains(permission.as_str()) || scopes.contains("*")
     }
 
+    /// Effective permissions: explicit token/role scopes when present, otherwise the
+    /// built-in role's permission set.
+    pub fn permissions(&self) -> Vec<String> {
+        if self.scopes.is_empty() {
+            Permission::all_for(self.role)
+                .into_iter()
+                .map(str::to_string)
+                .collect()
+        } else {
+            self.scopes.clone()
+        }
+    }
+
     pub fn require(&self, permission: Permission) -> Result<(), SecurityError> {
         if self.can(permission) {
             Ok(())
@@ -222,6 +317,9 @@ pub struct OidcIdentity {
     pub email: Option<String>,
     #[serde(default)]
     pub name: Option<String>,
+    /// Values of the configured role claim (groups/roles).
+    #[serde(default)]
+    pub groups: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -234,6 +332,8 @@ struct RawClaims {
     name: Option<String>,
     #[serde(default)]
     preferred_username: Option<String>,
+    #[serde(flatten)]
+    extra: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
 enum KeySource {
@@ -250,6 +350,7 @@ enum KeySource {
 pub struct JwtValidator {
     issuer: String,
     audience: String,
+    role_claim: String,
     clock_skew: u64,
     keys: KeySource,
 }
@@ -269,6 +370,7 @@ impl JwtValidator {
         Ok(Self {
             issuer: config.issuer.clone(),
             audience: config.audience.clone(),
+            role_claim: config.role_claim.clone(),
             clock_skew: config.clock_skew_seconds,
             keys: KeySource::Jwks {
                 url: config.jwks_url.clone(),
@@ -284,6 +386,7 @@ impl JwtValidator {
         Self {
             issuer: issuer.to_string(),
             audience: audience.to_string(),
+            role_claim: "groups".into(),
             clock_skew: 5,
             keys: KeySource::Hmac(secret.to_vec()),
         }
@@ -305,11 +408,13 @@ impl JwtValidator {
         let data = decode::<RawClaims>(token, &key, &validation)
             .map_err(|_| SecurityError::Unauthorized)?;
         let claims = data.claims;
+        let groups = claim_values(claims.extra.get(&self.role_claim));
         Ok(OidcIdentity {
             subject: claims.sub,
             issuer: claims.iss,
             email: claims.email,
             name: claims.name.or(claims.preferred_username),
+            groups,
         })
     }
 
@@ -469,5 +574,51 @@ mod tests {
         assert_eq!(bearer_token(Some("bearer abc")), Some("abc"));
         assert_eq!(bearer_token(Some("Basic abc")), None);
         assert_eq!(bearer_token(None), None);
+    }
+
+    #[test]
+    fn parses_group_role_mappings() {
+        let mappings = parse_group_roles("orbit-admins=admin, orbit-operators=operator").unwrap();
+        assert_eq!(
+            mappings,
+            vec![
+                ("orbit-admins".to_string(), UserRole::Admin),
+                ("orbit-operators".to_string(), UserRole::Operator),
+            ]
+        );
+        let json = parse_group_roles(r#"{"orbit-owners":"owner"}"#).unwrap();
+        assert_eq!(json, vec![("orbit-owners".to_string(), UserRole::Owner)]);
+        assert!(parse_group_roles("missing-role").is_err());
+        assert!(parse_group_roles("group=superuser").is_err());
+        assert!(parse_group_roles("").unwrap().is_empty());
+    }
+
+    #[test]
+    fn picks_the_highest_mapped_role() {
+        let mapping = vec![
+            ("viewers".to_string(), UserRole::Viewer),
+            ("operators".to_string(), UserRole::Operator),
+            ("admins".to_string(), UserRole::Admin),
+        ];
+        assert_eq!(
+            highest_mapped_role(&["viewers".into(), "admins".into()], &mapping),
+            Some(UserRole::Admin)
+        );
+        assert_eq!(highest_mapped_role(&["unknown".into()], &mapping), None);
+        assert_eq!(highest_mapped_role(&[], &mapping), None);
+    }
+
+    #[test]
+    fn extracts_claim_values() {
+        assert_eq!(
+            claim_values(Some(&serde_json::json!("orbit-admins"))),
+            vec!["orbit-admins".to_string()]
+        );
+        assert_eq!(
+            claim_values(Some(&serde_json::json!(["a", "b"]))),
+            vec!["a".to_string(), "b".to_string()]
+        );
+        assert!(claim_values(Some(&serde_json::json!({"a": 1}))).is_empty());
+        assert!(claim_values(None).is_empty());
     }
 }

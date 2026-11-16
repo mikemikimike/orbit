@@ -816,3 +816,55 @@ async fn tool_policies_are_scoped_and_ordered() {
         .unwrap()
         .is_empty());
 }
+
+#[tokio::test]
+async fn custom_roles_round_trip() {
+    let Some(store) = test_store().await else {
+        return;
+    };
+    let (org, user) = seed_org(&store).await;
+    let role = store
+        .create_custom_role(
+            org,
+            "Release manager",
+            &["agents:read".to_string(), "executions:create".to_string()],
+        )
+        .await
+        .expect("role");
+    assert_eq!(
+        store
+            .custom_role_permissions(org, "Release manager")
+            .await
+            .unwrap(),
+        Some(vec![
+            "agents:read".to_string(),
+            "executions:create".to_string()
+        ])
+    );
+    assert!(store
+        .custom_role_permissions(org, "missing")
+        .await
+        .unwrap()
+        .is_none());
+
+    // Users can be assigned the custom role by name.
+    let updated = store
+        .set_user_role_name(org, user, "Release manager")
+        .await
+        .unwrap();
+    assert_eq!(updated.role, "Release manager");
+
+    let updated = store
+        .update_custom_role(
+            org,
+            role.id,
+            "Release manager",
+            &["agents:read".to_string(), "audit:read".to_string()],
+        )
+        .await
+        .unwrap();
+    assert_eq!(updated.permissions.len(), 2);
+
+    store.delete_custom_role(org, role.id).await.unwrap();
+    assert!(store.list_custom_roles(org).await.unwrap().is_empty());
+}

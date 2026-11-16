@@ -256,6 +256,14 @@ pub fn build_router(state: AppState) -> Router {
             get(handlers::settings::get_oidc).put(handlers::settings::update_oidc),
         )
         .route(
+            "/api/v1/roles",
+            get(handlers::roles::list).post(handlers::roles::create),
+        )
+        .route(
+            "/api/v1/roles/{role_id}",
+            patch(handlers::roles::update).delete(handlers::roles::delete),
+        )
+        .route(
             "/api/v1/tool-policies",
             get(handlers::tool_policies::list).post(handlers::tool_policies::create),
         )

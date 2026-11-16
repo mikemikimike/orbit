@@ -177,6 +177,12 @@ spec:
               value: {{ .Values.auth.oidc.autoProvision | quote }}
             - name: ORBIT_OIDC_DEFAULT_ROLE
               value: {{ .Values.auth.oidc.defaultRole | quote }}
+            - name: ORBIT_OIDC_ROLE_CLAIM
+              value: {{ .Values.auth.oidc.roleClaim | quote }}
+            - name: ORBIT_OIDC_GROUP_ROLES
+              value: {{ .Values.auth.oidc.groupRoles | toJson | quote }}
+            - name: ORBIT_OIDC_SYNC_ROLES
+              value: {{ .Values.auth.oidc.syncRoles | quote }}
             {{- end }}
             {{- if .Values.vault.enabled }}
             - name: VAULT_ADDR

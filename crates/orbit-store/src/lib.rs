@@ -18,6 +18,7 @@ pub mod agents;
 pub mod approvals;
 pub mod audit;
 pub mod catalog;
+pub mod custom_roles;
 pub mod dashboard;
 pub mod executions;
 pub mod identity;

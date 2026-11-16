@@ -4,7 +4,7 @@ use axum::middleware::Next;
 use axum::response::Response;
 
 use orbit_domain::UserRole;
-use orbit_security::{bearer_token, hash_api_token, AuthContext, AuthMethod};
+use orbit_security::{bearer_token, hash_api_token, highest_mapped_role, AuthContext, AuthMethod};
 
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -83,7 +83,12 @@ async fn resolve_api_token(state: &AppState, token: &str) -> Result<AuthContext,
     if user.status != "active" {
         return Err(ApiError::forbidden("user is disabled"));
     }
-    let role = user.role.parse::<UserRole>().unwrap_or(UserRole::Viewer);
+    let (role, role_scopes) = resolve_role(state, user.org_id, &user.role).await?;
+    let scopes = if record.scopes.is_empty() {
+        role_scopes
+    } else {
+        record.scopes
+    };
     let store = state.store.clone();
     let token_id = record.id;
     tokio::spawn(async move {
@@ -96,7 +101,7 @@ async fn resolve_api_token(state: &AppState, token: &str) -> Result<AuthContext,
         display_name: user.display_name,
         role,
         method: AuthMethod::ApiToken,
-        scopes: record.scopes,
+        scopes,
         token_id: Some(record.id),
     })
 }
@@ -108,19 +113,40 @@ async fn resolve_oidc(state: &AppState, token: Option<&str>) -> Result<AuthConte
         .ok_or_else(|| ApiError::internal("OIDC validator is not configured"))?;
     let token = token.ok_or_else(|| ApiError::unauthorized("bearer token required"))?;
     let identity = validator.validate(token).await?;
+    let oidc = state
+        .auth
+        .oidc
+        .as_ref()
+        .ok_or_else(|| ApiError::internal("OIDC config missing"))?;
+    // Only mappings that are explicitly configured can grant a role. With no match we
+    // fall back to the configured default role.
+    let mapped_role = highest_mapped_role(&identity.groups, &oidc.group_roles);
+    let target_role = mapped_role.unwrap_or(oidc.default_role);
 
     let user = match state
         .store
         .get_user_by_oidc(&identity.issuer, &identity.subject)
         .await?
     {
-        Some(user) => user,
+        Some(user) => {
+            // Sync only when the IdP actually returned role values; a token without the
+            // claim must not silently downgrade an existing user.
+            if oidc.sync_roles && !identity.groups.is_empty() && user.role != target_role.as_str() {
+                tracing::info!(
+                    user_id = %user.id,
+                    from = %user.role,
+                    to = %target_role.as_str(),
+                    "syncing OIDC role from group mapping"
+                );
+                state
+                    .store
+                    .set_user_role(user.org_id, user.id, target_role)
+                    .await?
+            } else {
+                user
+            }
+        }
         None => {
-            let oidc = state
-                .auth
-                .oidc
-                .as_ref()
-                .ok_or_else(|| ApiError::internal("OIDC config missing"))?;
             if !oidc.auto_provision {
                 return Err(ApiError::forbidden(
                     "your identity is not provisioned in this ORBIT instance",
@@ -134,7 +160,7 @@ async fn resolve_oidc(state: &AppState, token: Option<&str>) -> Result<AuthConte
                     &identity.subject,
                     identity.email.as_deref(),
                     identity.name.as_deref(),
-                    oidc.default_role,
+                    target_role,
                 )
                 .await?
         }
@@ -142,7 +168,7 @@ async fn resolve_oidc(state: &AppState, token: Option<&str>) -> Result<AuthConte
     if user.status != "active" {
         return Err(ApiError::forbidden("user is disabled"));
     }
-    let role = user.role.parse::<UserRole>().unwrap_or(UserRole::Viewer);
+    let (role, scopes) = resolve_role(state, user.org_id, &user.role).await?;
     Ok(AuthContext {
         user_id: user.id,
         org_id: user.org_id,
@@ -150,9 +176,30 @@ async fn resolve_oidc(state: &AppState, token: Option<&str>) -> Result<AuthConte
         display_name: user.display_name,
         role,
         method: AuthMethod::Oidc,
-        scopes: vec![],
+        scopes,
         token_id: None,
     })
+}
+
+/// Resolve a stored role name to a built-in role or a custom permission set.
+async fn resolve_role(
+    state: &AppState,
+    org_id: uuid::Uuid,
+    role_name: &str,
+) -> Result<(UserRole, Vec<String>), ApiError> {
+    if let Ok(role) = role_name.parse::<UserRole>() {
+        return Ok((role, Vec::new()));
+    }
+    match state
+        .store
+        .custom_role_permissions(org_id, role_name)
+        .await?
+    {
+        Some(permissions) => Ok((UserRole::Viewer, permissions)),
+        None => Err(ApiError::forbidden(format!(
+            "user role '{role_name}' no longer exists"
+        ))),
+    }
 }
 
 /// Helper for tests and for building the dev identity during bootstrap.
