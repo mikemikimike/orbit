@@ -55,6 +55,13 @@ spec:
               value: "1"
             - name: ORBIT_API_INTERNAL_URL
               value: "http://{{ include "orbit.apiHost" . }}:{{ .Values.api.port }}"
+            {{- if .Values.caCertificates.enabled }}
+            # Node.js trust for OIDC discovery/token exchange against a private CA.
+            - name: SSL_CERT_FILE
+              value: "/etc/ssl/certs/ca-bundle.crt"
+            - name: NODE_EXTRA_CA_CERTS
+              value: "/etc/ssl/certs/ca-bundle.crt"
+            {{- end }}
             {{- if eq .Values.auth.mode "dev" }}
             - name: ORBIT_WEB_DEV_TOKEN
               valueFrom:

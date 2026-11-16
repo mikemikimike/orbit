@@ -8,6 +8,20 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+## [0.8.3] — 2026-11-16
+
+### Fixed
+
+- Rust HTTP clients now load **every** certificate in the configured CA bundle
+  (`SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE` / `NODE_EXTRA_CA_CERTS`). `reqwest` with
+  `rustls-tls` ignores the system store and previously only the first PEM block was
+  added, so an OIDC provider signed by a later certificate in the bundle failed TLS
+  while `curl` worked. Mixed bundles fall back to per-block parsing and failed reads are
+  logged.
+- The web container now exports `NODE_EXTRA_CA_CERTS` (and `SSL_CERT_FILE`) when
+  `caCertificates` is enabled, so Node-side OIDC discovery/token exchange also trusts
+  the custom CA.
+
 ## [0.8.2] — 2026-11-16
 
 ### Fixed
