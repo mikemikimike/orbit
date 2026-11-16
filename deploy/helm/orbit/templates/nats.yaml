@@ -38,10 +38,10 @@ spec:
         app.kubernetes.io/component: nats
     spec:
       securityContext:
-        runAsNonRoot: {{ .Values.nats.runAsNonRoot }}
-        runAsUser: {{ .Values.nats.runAsUser }}
-        runAsGroup: {{ .Values.nats.runAsGroup }}
-        fsGroup: {{ .Values.nats.fsGroup }}
+        runAsNonRoot: {{ .Values.nats.runAsNonRoot | default true }}
+        runAsUser: {{ .Values.nats.runAsUser | default 1000 }}
+        runAsGroup: {{ .Values.nats.runAsGroup | default 1000 }}
+        fsGroup: {{ .Values.nats.fsGroup | default 1000 }}
         seccompProfile:
           type: RuntimeDefault
       containers:

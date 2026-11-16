@@ -137,12 +137,14 @@ spec:
               value: {{ .Values.platform.bodyLimitBytes | quote }}
             - name: ORBIT_ARCHIVE_AFTER_DAYS
               value: {{ .Values.platform.archiveAfterDays | quote }}
-            {{- if .Values.license.value }}
+            {{- with .Values.license }}
+            {{- if .value }}
             - name: ORBIT_LICENSE
-              value: {{ .Values.license.value | quote }}
-            {{- else if .Values.license.existingSecret }}
+              value: {{ .value | quote }}
+            {{- else if .existingSecret }}
             - name: ORBIT_LICENSE_FILE
               value: "/etc/orbit-license.jwt"
+            {{- end }}
             {{- end }}
             {{- if eq .Values.auth.mode "dev" }}
             - name: ORBIT_DEV_AUTH_ALLOW_ANONYMOUS
@@ -215,11 +217,13 @@ spec:
             {{- end }}
             - name: tmp
               mountPath: /tmp
-            {{- if and .Values.license.existingSecret (not .Values.license.value) }}
+            {{- with .Values.license }}
+            {{- if and .existingSecret (not .value) }}
             - name: license
               mountPath: /etc/orbit-license.jwt
-              subPath: {{ .Values.license.key | default "license.jwt" }}
+              subPath: {{ .key | default "license.jwt" }}
               readOnly: true
+            {{- end }}
             {{- end }}
           startupProbe:
             httpGet:
@@ -251,13 +255,15 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
-        {{- if and .Values.license.existingSecret (not .Values.license.value) }}
+        {{- with .Values.license }}
+        {{- if and .existingSecret (not .value) }}
         - name: license
           secret:
-            secretName: {{ .Values.license.existingSecret }}
+            secretName: {{ .existingSecret }}
             items:
-              - key: {{ .Values.license.key | default "license.jwt" }}
-                path: {{ .Values.license.key | default "license.jwt" }}
+              - key: {{ .key | default "license.jwt" }}
+                path: {{ .key | default "license.jwt" }}
+        {{- end }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

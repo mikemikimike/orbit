@@ -43,9 +43,9 @@ spec:
       {{- end }}
       securityContext:
         runAsNonRoot: true
-        runAsUser: {{ .Values.postgresql.runAsUser }}
-        runAsGroup: {{ .Values.postgresql.runAsGroup }}
-        fsGroup: {{ .Values.postgresql.fsGroup }}
+        runAsUser: {{ .Values.postgresql.runAsUser | default 999 }}
+        runAsGroup: {{ .Values.postgresql.runAsGroup | default 999 }}
+        fsGroup: {{ .Values.postgresql.fsGroup | default 999 }}
         seccompProfile:
           type: RuntimeDefault
       containers:
