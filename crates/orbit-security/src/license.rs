@@ -481,6 +481,24 @@ mod tests {
         assert!(!status.has_feature(FEATURE_CUSTOM_ROLES));
     }
 
+    #[cfg(not(debug_assertions))]
+    #[test]
+    fn release_build_ignores_runtime_public_keys() {
+        let signing = SigningKey::generate(&mut OsRng);
+        let token = token_for(&signing, "evil-key", claims(30, 30));
+        std::env::set_var(
+            "ORBIT_LICENSE_PUBLIC_KEYS",
+            serde_json::json!({
+                "evil-key": base64::engine::general_purpose::URL_SAFE_NO_PAD
+                    .encode(signing.verifying_key().to_bytes())
+            })
+            .to_string(),
+        );
+        let status = LicenseVerifier::new().verify(&token);
+        std::env::remove_var("ORBIT_LICENSE_PUBLIC_KEYS");
+        assert!(!status.valid, "release builds must not trust runtime keys");
+    }
+
     #[test]
     fn rejects_tampering_and_unknown_keys() {
         let signing = SigningKey::generate(&mut OsRng);
