@@ -8,6 +8,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Docs
+
+- ADR 0010: installation-wide offline license (Ed25519 JWS, no installation ID by
+  default, airgapped renewal, grace behaviour, feature/limit enforcement in the API).
+
 ## [0.9.1] — 2026-11-16
 
 ### Changed
