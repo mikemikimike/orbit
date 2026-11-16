@@ -140,3 +140,43 @@ files, and forced teardown on timeout/cancel.
   - writes the execution-scoped `.pi/mcp.json` broker bridge and accepts `--skill` paths
   - ships as its own worker image (`deploy/docker/worker-pi.Dockerfile`)
 - `claude_code` — registered as a capability descriptor only, fails closed (planned).
+
+## Tool policy layer
+
+Native harness tools and brokered connector tools share one per-call policy:
+
+```text
+harness tool call ──► worker broker /policy or /tools/call
+                        │
+                        ├─ platform decision (autonomy × approval mode × grant)
+                        └─ tool policy rules (org defaults + agent rules)
+                              → allow | require_approval | deny
+```
+
+- Rules live in `tool_policies` (migration `0019`), scoped to an org and optionally an
+  agent. Agents inherit org rules; agent rules are added, not replaced.
+- `evaluate_tool_call` (`crates/orbit-domain/src/tool_policy.rs`) combines the platform
+  decision with matching rules. Platform denial always wins; rules can only make the
+  decision stricter, except that an explicit `allow` rule may resolve the stricter
+  **default** used for native tools.
+- Matchers are AND-combined: tool glob, capability glob, effect, connection, path glob
+  (lexically normalized, component-suffix aware) and command regex. Empty matchers match
+  every call and are useful for a default `require_approval`.
+- Precedence: platform `deny` → rule `deny` → `require_approval` → `allow`.
+- Native tools default to `require_approval` when no rule matches. Brokered connector
+  tools keep their platform decision as both floor and default.
+- The worker receives the effective rules in `WorkerExecutionContext.tool_policies` and
+  starts the broker when rules exist even if the agent has no connector binding.
+- `POST /policy` on the loopback broker (bearer: execution-scoped broker token) is the
+  adapter hook for native tools: request `{ tool, capability?, effect?, connection?,
+  arguments }`, response is the decision with `ruleId`, `ruleName`, `reason`, `impact`.
+  `require_approval` creates a durable approval and blocks until decided or the execution
+  timeout expires; timeout and rejection deny the call.
+- Management API: `GET/POST /api/v1/tool-policies`, `PATCH/DELETE
+  /api/v1/tool-policies/{id}` (`settings:read` / `settings:write`).
+- Approvals record the rule, reason, impact and arguments for the reviewer. Every deny
+  and approval is audited and emitted as a `tool_call` execution event.
+
+Adapters that run native tools (Claude Code `PreToolUse`, OpenCode hooks) must call the
+policy endpoint before executing the tool. Until that integration lands, native tools are
+constrained only by harness configuration and sandboxing.

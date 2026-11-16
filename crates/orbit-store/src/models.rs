@@ -482,3 +482,22 @@ pub struct WorkerProfile {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
+
+/// Stored tool policy rule. `matcher` is JSON so the domain type is the single source of
+/// truth for matching fields; invalid rows are skipped when building execution context.
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolPolicy {
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub agent_id: Option<Uuid>,
+    pub name: String,
+    pub priority: i32,
+    pub enabled: bool,
+    pub action: String,
+    pub matcher: serde_json::Value,
+    pub reason: Option<String>,
+    pub impact: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}

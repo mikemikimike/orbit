@@ -122,3 +122,15 @@ for AI agents. It identifies assets, threat actors, attack vectors, and mitigati
 8. Set `ORBIT_MASTER_KEY` to a strong, unique value
 EOF
 echo done
+
+## Tool policy layer
+
+- Rules are additive restrictions. A compromised or prompt-injected agent cannot grant
+  itself a capability: platform autonomy/grants are evaluated first and rule `allow`
+  cannot weaken a platform `require_approval`/`deny`.
+- Argument matchers normalize paths and parse shell commands. Paths are lexically
+  normalized before matching so `../` cannot bypass a `secrets/**` rule; command rules
+  use regexes validated at write time.
+- Native tools with no matching rule default to `require_approval`, not allow. Approval
+  decisions are bound to the execution, expire with it, and default-deny on timeout.
+- Rule management requires `settings:write` (owner) and is audited.

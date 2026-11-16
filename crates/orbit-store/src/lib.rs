@@ -26,6 +26,7 @@ pub mod platform_settings;
 pub mod secrets;
 pub mod skills;
 pub mod team_queue;
+pub mod tool_policies;
 pub mod triggers;
 pub mod worker_launches;
 pub mod worker_profiles;

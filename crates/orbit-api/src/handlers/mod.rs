@@ -10,6 +10,7 @@ pub mod settings;
 pub mod skills;
 pub mod team_queue;
 pub mod teams;
+pub mod tool_policies;
 pub mod triggers;
 pub mod worker_api;
 pub mod worker_launches;

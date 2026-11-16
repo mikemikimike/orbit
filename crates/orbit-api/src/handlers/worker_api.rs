@@ -18,7 +18,7 @@ use orbit_contracts::{
 };
 use orbit_domain::{
     AgentSpec, CapabilityEffect, ExecutionEventKind, ExecutionStatus, GrantedCapability, LogLevel,
-    ModelManagement,
+    ModelManagement, ToolPolicyRule,
 };
 use orbit_store::{
     Approval, Connection, ConnectorRecord, ExecutionRecord, Skill, Store, WorkerProfile,
@@ -65,6 +65,9 @@ pub struct WorkerExecutionContext {
     pub model: Option<WorkerModel>,
     pub grants: Vec<GrantedCapability>,
     pub skills: Vec<Skill>,
+    /// Effective tool policy rules (org defaults + agent rules), enforced by the worker
+    /// broker and exposed to native harness hooks.
+    pub tool_policies: Vec<ToolPolicyRule>,
 }
 
 #[derive(Debug, Serialize)]
@@ -377,12 +380,21 @@ async fn build_context(
     slugs.sort();
     slugs.dedup();
     let skills = state.store.skills_by_slugs(org_id, &slugs).await?;
+    let tool_policies = state
+        .store
+        .effective_tool_policy_rules(org_id, execution.agent_id)
+        .await
+        .unwrap_or_else(|error| {
+            tracing::warn!(error = %error, "failed to load tool policies; using platform decisions only");
+            Vec::new()
+        });
     Ok(WorkerExecutionContext {
         execution: execution.clone(),
         spec,
         model,
         grants,
         skills,
+        tool_policies,
     })
 }
 

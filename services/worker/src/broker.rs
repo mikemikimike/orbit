@@ -19,8 +19,9 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use orbit_domain::{
-    evaluate_capability, AgentSpec, ApprovalMode, AutonomyLevel, CapabilityEffect,
-    GrantedCapability, LogLevel, PolicyDecision,
+    evaluate_capability, evaluate_tool_call, AgentSpec, ApprovalMode, AutonomyLevel,
+    CapabilityEffect, GrantedCapability, LogLevel, PolicyDecision, ToolCall, ToolPolicyOutcome,
+    ToolPolicyRule,
 };
 use orbit_store::{Approval, Connection, ExecutionRecord};
 
@@ -43,10 +44,11 @@ struct BrokerState {
     workspace: std::path::PathBuf,
     autonomy: AutonomyLevel,
     approval_mode: ApprovalMode,
-    connection: Connection,
+    connection: Option<Connection>,
     connector_slug: String,
-    connector_client: ConnectorClient,
+    connector_client: Option<ConnectorClient>,
     tools: Vec<ToolSpec>,
+    tool_policies: Vec<ToolPolicyRule>,
     token: String,
     http: reqwest::Client,
     repo_specs: Vec<crate::git::RepoSpec>,
@@ -58,12 +60,19 @@ enum ConnectorClient {
 }
 
 impl BrokerState {
+    fn connection_id(&self) -> Result<uuid::Uuid, String> {
+        self.connection
+            .as_ref()
+            .map(|connection| connection.id)
+            .ok_or_else(|| "execution has no connector connection".to_string())
+    }
+
     fn repo_target(
         &self,
         repository: Option<&str>,
     ) -> Result<(std::path::PathBuf, uuid::Uuid), String> {
         if self.repo_specs.is_empty() {
-            return Ok((self.workspace.clone(), self.connection.id));
+            return Ok((self.workspace.clone(), self.connection_id()?));
         }
         if self.repo_specs.len() == 1 {
             let spec = &self.repo_specs[0];
@@ -72,7 +81,7 @@ impl BrokerState {
             } else {
                 self.workspace.join(&spec.path)
             };
-            return Ok((path, spec.connection_id.unwrap_or(self.connection.id)));
+            return Ok((path, spec.connection_id.unwrap_or(self.connection_id()?)));
         }
         let repository = repository
             .ok_or_else(|| {
@@ -95,7 +104,7 @@ impl BrokerState {
         } else {
             self.workspace.join(&spec.path)
         };
-        Ok((path, spec.connection_id.unwrap_or(self.connection.id)))
+        Ok((path, spec.connection_id.unwrap_or(self.connection_id()?)))
     }
 }
 
@@ -460,76 +469,88 @@ fn gitlab_tool_specs(
         .collect()
 }
 
-/// Start the broker for one execution. Returns `None` when the agent has no GitHub binding.
+/// Start the broker for one execution. Starts when the agent has connector tools or
+/// tool-policy rules (native harness tools use the `/policy` endpoint).
 pub async fn start(
     client: WorkerClient,
     spec: &AgentSpec,
     execution: &ExecutionRecord,
     workspace: &std::path::Path,
+    tool_policies: &[ToolPolicyRule],
 ) -> anyhow::Result<Option<BrokerHandle>> {
-    let Some(binding) = spec.connectors.iter().find(|b| {
+    let binding = spec.connectors.iter().find(|b| {
         matches!(b.connector.as_str(), "github" | "gitlab") && !b.capabilities.is_empty()
-    }) else {
-        return Ok(None);
-    };
-    let connector_slug = binding.connector.clone();
-    let Some(connection_id) = binding.connection_id else {
-        anyhow::bail!(
-            "Connector '{connector_slug}' is bound without a connection; select a connection in Agent Studio"
-        );
-    };
-    let worker_connection = client.connection(execution.id, connection_id).await?;
-    let connection = worker_connection.connection;
-    let connector = worker_connection.connector;
-    if connection.status != "active" {
-        anyhow::bail!("{connector_slug} connection is not active");
-    }
+    });
 
-    let mut effects = std::collections::BTreeMap::new();
-    if let Some(items) = connector.capabilities.as_array() {
-        for item in items {
-            if let (Some(id), Some(effect)) = (
-                item.get("id").and_then(Value::as_str),
-                item.get("effect").and_then(Value::as_str),
-            ) {
-                if let Some(effect) = CapabilityEffect::parse(effect) {
-                    effects.insert(id.to_string(), effect);
+    let mut connection = None;
+    let mut connector_slug = String::new();
+    let mut connector_client = None;
+    let mut tools = Vec::new();
+
+    if let Some(binding) = binding {
+        connector_slug = binding.connector.clone();
+        let Some(connection_id) = binding.connection_id else {
+            anyhow::bail!(
+                "Connector '{connector_slug}' is bound without a connection; select a connection in Agent Studio"
+            );
+        };
+        let worker_connection = client.connection(execution.id, connection_id).await?;
+        let connector = worker_connection.connector;
+        let conn = worker_connection.connection;
+        if conn.status != "active" {
+            anyhow::bail!("{connector_slug} connection is not active");
+        }
+
+        let mut effects = std::collections::BTreeMap::new();
+        if let Some(items) = connector.capabilities.as_array() {
+            for item in items {
+                if let (Some(id), Some(effect)) = (
+                    item.get("id").and_then(Value::as_str),
+                    item.get("effect").and_then(Value::as_str),
+                ) {
+                    if let Some(effect) = CapabilityEffect::parse(effect) {
+                        effects.insert(id.to_string(), effect);
+                    }
                 }
             }
         }
+        // Only expose capabilities that exist in the connector manifest.
+        let allowed: Vec<String> = binding
+            .capabilities
+            .iter()
+            .filter(|capability| {
+                effects.contains_key(*capability) && *capability != "repo.checkout"
+            })
+            .cloned()
+            .collect();
+        if !allowed.is_empty() {
+            tools = if connector_slug == "gitlab" {
+                gitlab_tool_specs(&allowed, &effects)
+            } else {
+                github_tool_specs(&allowed, &effects)
+            };
+            let credential = worker_connection
+                .credential
+                .as_ref()
+                .map(|credential| credential.value.clone());
+            connector_client = Some(if connector_slug == "gitlab" {
+                ConnectorClient::Gitlab(GitLabClientConfig::from_connection(
+                    &conn.config,
+                    credential,
+                ))
+            } else {
+                ConnectorClient::Github(GitHubClientConfig::from_connection(
+                    &conn.config,
+                    credential,
+                ))
+            });
+        }
+        connection = Some(conn);
     }
-    // Only expose capabilities that exist in the connector manifest.
-    let allowed: Vec<String> = binding
-        .capabilities
-        .iter()
-        .filter(|capability| effects.contains_key(*capability) && *capability != "repo.checkout")
-        .cloned()
-        .collect();
-    if allowed.is_empty() {
-        // A binding may only request pre-execution capabilities such as repo.checkout.
+
+    if tools.is_empty() && tool_policies.is_empty() {
         return Ok(None);
     }
-    let tools = if connector_slug == "gitlab" {
-        gitlab_tool_specs(&allowed, &effects)
-    } else {
-        github_tool_specs(&allowed, &effects)
-    };
-
-    let token = worker_connection
-        .credential
-        .as_ref()
-        .map(|credential| credential.value.clone());
-    let connector_client = if connector_slug == "gitlab" {
-        ConnectorClient::Gitlab(GitLabClientConfig::from_connection(
-            &connection.config,
-            token,
-        ))
-    } else {
-        ConnectorClient::Github(GitHubClientConfig::from_connection(
-            &connection.config,
-            token,
-        ))
-    };
 
     let autonomy = AutonomyLevel::from_level(spec.autonomy.level).unwrap_or(AutonomyLevel::OBSERVE);
     let state = Arc::new(BrokerState {
@@ -542,6 +563,7 @@ pub async fn start(
         connector_slug,
         connector_client,
         tools,
+        tool_policies: tool_policies.to_vec(),
         token: format!("{}{}", Uuid::now_v7().simple(), Uuid::now_v7().simple()),
         http: orbit_security::client_with_custom_ca(Duration::from_secs(30)),
         repo_specs: crate::git::repo_specs(&execution.input),
@@ -552,6 +574,7 @@ pub async fn start(
     let app = Router::new()
         .route("/tools", get(list_tools))
         .route("/tools/call", post(call_tool))
+        .route("/policy", post(policy_check))
         .with_state(state.clone());
     let task = tokio::spawn(async move {
         if let Err(error) = axum::serve(listener, app).await {
@@ -597,7 +620,7 @@ async fn list_tools(
 }
 
 #[derive(Debug, Deserialize)]
-struct ToolCall {
+struct BrokerToolCall {
     name: String,
     #[serde(default)]
     arguments: Value,
@@ -606,7 +629,7 @@ struct ToolCall {
 async fn call_tool(
     State(state): State<Arc<BrokerState>>,
     headers: HeaderMap,
-    Json(call): Json<ToolCall>,
+    Json(call): Json<BrokerToolCall>,
 ) -> impl IntoResponse {
     if !authorized(&headers, &state.token) {
         return (
@@ -624,30 +647,49 @@ async fn call_tool(
             .into_response();
     };
 
+    let Some(connection) = state.connection.as_ref() else {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "execution has no connector connection" })),
+        )
+            .into_response();
+    };
     let grants: Vec<GrantedCapability> = state
         .tools
         .iter()
         .map(|tool| GrantedCapability {
-            connection_id: state.connection.id,
+            connection_id: connection.id,
             connector: state.connector_slug.clone(),
             capability: tool.capability.clone(),
             effect: tool.effect,
         })
         .collect();
-    let decision = evaluate_capability(
+    let platform = evaluate_capability(
         state.autonomy,
         state.approval_mode,
         &tool.capability,
         tool.effect,
         &grants,
     );
+    let tool_call = ToolCall {
+        tool: call.name.clone(),
+        capability: Some(tool.capability.clone()),
+        effect: Some(tool.effect),
+        connection: Some(connection.name.clone()),
+        arguments: call.arguments.clone(),
+    };
+    let policy = evaluate_tool_call(platform, platform, &state.tool_policies, &tool_call);
+    let decision = policy.decision;
 
     let mut approval_id: Option<Uuid> = None;
     if decision == PolicyDecision::Deny {
         record_denied(
             &state,
             &tool.capability,
-            "denied by autonomy/capability policy",
+            policy
+                .reason
+                .as_deref()
+                .unwrap_or("denied by autonomy/capability policy"),
         )
         .await;
         return (
@@ -657,7 +699,7 @@ async fn call_tool(
             .into_response();
     }
     if decision == PolicyDecision::RequireApproval {
-        match request_approval(&state, tool, &call.arguments).await {
+        match request_approval(&state, tool, &call.arguments, Some(&policy)).await {
             Ok(approval) => approval_id = Some(approval.id),
             Err(error) => {
                 return tool_error(&state, tool, &call.arguments, &error.to_string()).await;
@@ -710,14 +752,15 @@ async fn call_tool(
         };
         outcome.map_err(|error| error.to_string())
     } else {
-        match &state.connector_client {
-            ConnectorClient::Github(config) => {
+        match state.connector_client.as_ref() {
+            Some(ConnectorClient::Github(config)) => {
                 let args = normalize_github_args(&call.arguments);
                 github::invoke(&state.http, config, &tool.capability, &args).await
             }
-            ConnectorClient::Gitlab(config) => {
+            Some(ConnectorClient::Gitlab(config)) => {
                 gitlab::invoke(&state.http, config, &tool.capability, &call.arguments).await
             }
+            None => Err("execution has no connector client".to_string()),
         }
     };
 
@@ -763,6 +806,86 @@ async fn call_tool(
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PolicyCheck {
+    tool: String,
+    #[serde(default)]
+    capability: Option<String>,
+    #[serde(default)]
+    effect: Option<CapabilityEffect>,
+    #[serde(default)]
+    connection: Option<String>,
+    #[serde(default)]
+    arguments: Value,
+}
+
+/// Policy decision for native harness tools (Claude Code `PreToolUse`, OpenCode hooks).
+/// Native tools have no connector capability, so they default to `require_approval` and
+/// only explicit `allow` rules can make them run unattended. Platform denial still wins.
+async fn policy_check(
+    State(state): State<Arc<BrokerState>>,
+    headers: HeaderMap,
+    Json(request): Json<PolicyCheck>,
+) -> impl IntoResponse {
+    if !authorized(&headers, &state.token) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "unauthorized" })),
+        )
+            .into_response();
+    }
+    let call = ToolCall {
+        tool: request.tool.clone(),
+        capability: request.capability.clone(),
+        effect: request.effect,
+        connection: request.connection.clone(),
+        arguments: request.arguments.clone(),
+    };
+    let outcome = evaluate_tool_call(
+        PolicyDecision::Allow,
+        PolicyDecision::RequireApproval,
+        &state.tool_policies,
+        &call,
+    );
+
+    match outcome.decision {
+        PolicyDecision::Deny => {
+            record_denied(
+                &state,
+                &call.tool,
+                outcome.reason.as_deref().unwrap_or("denied by tool policy"),
+            )
+            .await;
+            (StatusCode::FORBIDDEN, Json(outcome)).into_response()
+        }
+        PolicyDecision::RequireApproval => {
+            let action = json!({
+                "capability": call.tool,
+                "connector": "harness",
+                "connectionId": state.connection.as_ref().map(|connection| connection.id),
+                "connectionName": state.connection.as_ref().map(|connection| connection.name.clone()),
+                "effect": call.effect.map(|effect| effect.as_str()).unwrap_or("write"),
+                "agentName": state.execution.agent_name,
+                "arguments": truncate_json(&call.arguments, 4000),
+                "reason": outcome.reason,
+                "impact": outcome.impact,
+                "rule": outcome.rule_name,
+                "source": "tool_policy",
+            });
+            match request_approval_action(&state, &call.tool, action, &call.arguments).await {
+                Ok(_) => (StatusCode::OK, Json(outcome)).into_response(),
+                Err(error) => (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({ "decision": "deny", "reason": error.to_string() })),
+                )
+                    .into_response(),
+            }
+        }
+        PolicyDecision::Allow => (StatusCode::OK, Json(outcome)).into_response(),
+    }
+}
+
 async fn tool_error(
     state: &BrokerState,
     tool: &ToolSpec,
@@ -794,35 +917,49 @@ async fn request_approval(
     state: &BrokerState,
     tool: &ToolSpec,
     arguments: &Value,
+    policy: Option<&ToolPolicyOutcome>,
+) -> anyhow::Result<Approval> {
+    let connection_id = state.connection.as_ref().map(|connection| connection.id);
+    let connection_name = state
+        .connection
+        .as_ref()
+        .map(|connection| connection.name.clone());
+    let action = json!({
+        "capability": tool.capability,
+        "connector": state.connector_slug,
+        "connectionId": connection_id,
+        "connectionName": connection_name,
+        "effect": tool.effect.as_str(),
+        "agentName": state.execution.agent_name,
+        "arguments": truncate_json(arguments, 4000),
+        "reason": policy.and_then(|policy| policy.reason.clone()),
+        "impact": policy.and_then(|policy| policy.impact.clone()),
+        "rule": policy.and_then(|policy| policy.rule_name.clone()),
+    });
+    request_approval_action(state, &tool.capability, action, arguments).await
+}
+
+async fn request_approval_action(
+    state: &BrokerState,
+    capability: &str,
+    action: Value,
+    arguments: &Value,
 ) -> anyhow::Result<Approval> {
     let wait_seconds = approval_wait_seconds(&state.execution);
     let approval = state
         .client
-        .create_approval(
-            state.execution.id,
-            json!({
-                "capability": tool.capability,
-                "connector": state.connector_slug,
-                "connectionId": state.connection.id,
-                "connectionName": state.connection.name,
-                "effect": tool.effect.as_str(),
-                "agentName": state.execution.agent_name,
-                "arguments": truncate_json(arguments, 4000),
-            }),
-            wait_seconds,
-        )
+        .create_approval(state.execution.id, action, wait_seconds)
         .await?;
     record_event(
         state,
         "tool_call",
         LogLevel::Warn,
         &format!(
-            "approval requested for {} (approval {})",
-            tool.capability, approval.id
+            "approval requested for {capability} (approval {})",
+            approval.id
         ),
         json!({
-            "capability": tool.capability,
-            "effect": tool.effect.as_str(),
+            "capability": capability,
             "approvalId": approval.id,
             "status": "pending",
             "arguments": truncate_json(arguments, 4000),
@@ -832,7 +969,7 @@ async fn request_approval(
     record_audit(
         state,
         "tool.call.approval_requested",
-        json!({ "capability": tool.capability, "approvalId": approval.id }),
+        json!({ "capability": capability, "approvalId": approval.id }),
     )
     .await;
 
@@ -848,21 +985,20 @@ async fn request_approval(
         } else {
             LogLevel::Warn
         },
-        &format!("approval {} for {}", decided.status, tool.capability),
+        &format!("approval {} for {capability}", decided.status),
         json!({ "approvalId": decided.id, "status": decided.status }),
     )
     .await;
     if decided.status != "approved" {
         anyhow::bail!(
-            "capability '{}' requires approval; request {}",
-            tool.capability,
+            "capability '{capability}' requires approval; request {}",
             decided.status
         );
     }
     record_audit(
         state,
         "tool.call.approved",
-        json!({ "capability": tool.capability, "approvalId": decided.id }),
+        json!({ "capability": capability, "approvalId": decided.id }),
     )
     .await;
     Ok(decided)
@@ -914,14 +1050,10 @@ async fn record_event(
 }
 
 async fn record_audit(state: &BrokerState, action: &str, metadata: Value) {
+    let connection_id = state.connection.as_ref().map(|connection| connection.id);
     if let Err(error) = state
         .client
-        .audit(
-            state.execution.id,
-            action,
-            Some(state.connection.id),
-            metadata,
-        )
+        .audit(state.execution.id, action, connection_id, metadata)
         .await
     {
         tracing::warn!(%error, "failed to write tool audit log");

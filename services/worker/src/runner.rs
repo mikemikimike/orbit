@@ -262,7 +262,15 @@ pub async fn run_execution(
     // Policy-enforcing tool broker: only for harnesses that can consume MCP today
     // (OpenCode). It is execution-scoped and dropped at the end of this function.
     let broker = if matches!(harness_kind, HarnessKind::OpenCode | HarnessKind::Pi) {
-        match crate::broker::start(state.client.clone(), &spec, &execution, &workspace).await {
+        match crate::broker::start(
+            state.client.clone(),
+            &spec,
+            &execution,
+            &workspace,
+            &context.tool_policies,
+        )
+        .await
+        {
             Ok(broker) => broker,
             Err(error) => {
                 return fail_execution(

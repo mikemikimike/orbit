@@ -64,6 +64,8 @@ pub struct WorkerExecutionContext {
     pub model: Option<WorkerModel>,
     pub grants: Vec<GrantedCapability>,
     pub skills: Vec<Skill>,
+    #[serde(default)]
+    pub tool_policies: Vec<orbit_domain::ToolPolicyRule>,
 }
 
 #[derive(Debug, Deserialize)]

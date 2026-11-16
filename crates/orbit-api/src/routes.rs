@@ -255,6 +255,14 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/settings/oidc",
             get(handlers::settings::get_oidc).put(handlers::settings::update_oidc),
         )
+        .route(
+            "/api/v1/tool-policies",
+            get(handlers::tool_policies::list).post(handlers::tool_policies::create),
+        )
+        .route(
+            "/api/v1/tool-policies/{policy_id}",
+            patch(handlers::tool_policies::update).delete(handlers::tool_policies::delete),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_auth,

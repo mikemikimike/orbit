@@ -8,6 +8,17 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- **Tool policy layer** (issue #19): org and per-agent rules with tool/capability/effect/
+  connection/path/command matchers, deterministic `allow | require_approval | deny`
+  evaluation, and argument-level restrictions that cannot weaken autonomy or grants.
+- Effective rules are delivered in the worker execution context; the worker broker
+  enforces them for connector tools and exposes `POST /policy` for native harness hooks
+  (Claude Code `PreToolUse`, OpenCode hooks). Native tools default to `require_approval`.
+- `GET/POST /api/v1/tool-policies` and `PATCH/DELETE /api/v1/tool-policies/{id}` plus
+  migration `0019_tool_policies.sql`, audit events and approval reason/impact fields.
+
 ## [0.8.4] — 2026-11-16
 
 ### Fixed

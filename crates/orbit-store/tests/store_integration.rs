@@ -738,3 +738,81 @@ async fn skills_profiles_and_agent_scoped_claims() {
     );
     store.delete_worker_profile(org, profile.id).await.unwrap();
 }
+
+#[tokio::test]
+async fn tool_policies_are_scoped_and_ordered() {
+    let Some(store) = test_store().await else {
+        return;
+    };
+    let (org, _user) = seed_org(&store).await;
+    let (agent, _version) = store
+        .create_agent(org, None, &definition("Tool policy target"))
+        .await
+        .expect("agent");
+
+    let matcher = serde_json::json!({ "tool": "Bash", "commandRegex": "^rm " });
+    let org_rule = store
+        .create_tool_policy(
+            org,
+            None,
+            "deny destructive shell",
+            10,
+            true,
+            "deny",
+            &matcher,
+            Some("destructive command"),
+            Some("deletes files"),
+        )
+        .await
+        .expect("org rule");
+    let agent_rule = store
+        .create_tool_policy(
+            org,
+            Some(agent.id),
+            "ask for writes",
+            20,
+            true,
+            "require_approval",
+            &serde_json::json!({ "effect": "write" }),
+            None,
+            None,
+        )
+        .await
+        .expect("agent rule");
+
+    // Org-level listing does not include agent rules.
+    let org_rules = store.list_tool_policies(org, None).await.unwrap();
+    assert_eq!(org_rules.len(), 1);
+    assert_eq!(org_rules[0].id, org_rule.id);
+
+    // Effective rules for the agent are ordered by priority.
+    let rules = store
+        .effective_tool_policy_rules(org, agent.id)
+        .await
+        .unwrap();
+    assert_eq!(rules.len(), 2);
+    assert_eq!(rules[0].name, "deny destructive shell");
+    assert_eq!(rules[1].id, agent_rule.id);
+
+    // A rule for a different agent is not visible.
+    let (other, _) = store
+        .create_agent(org, None, &definition("Other agent"))
+        .await
+        .expect("other agent");
+    assert_eq!(
+        store
+            .effective_tool_policy_rules(org, other.id)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+
+    store.delete_tool_policy(org, org_rule.id).await.unwrap();
+    store.delete_tool_policy(org, agent_rule.id).await.unwrap();
+    assert!(store
+        .effective_tool_policy_rules(org, agent.id)
+        .await
+        .unwrap()
+        .is_empty());
+}
