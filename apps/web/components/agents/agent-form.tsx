@@ -887,9 +887,13 @@ export function AgentForm({
 
           <Card>
             <CardHeader>
-              <CardTitle>Resource limits</CardTitle>
+              <CardTitle>Execution limits</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              <p className="text-[11px] text-muted-foreground">
+                Timeout and token budget for a single run. Worker CPU and memory are
+                configured on the worker profile under Workers.
+              </p>
               <div className={fieldClass}>
                 <Label>Timeout (seconds)</Label>
                 <Input
@@ -923,40 +927,6 @@ export function AgentForm({
                     })
                   }
                 />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className={fieldClass}>
-                  <Label>Memory (MB)</Label>
-                  <Input
-                    type="number"
-                    min={64}
-                    value={definition.spec.resources.memoryMb ?? 1024}
-                    onChange={(event) =>
-                      updateSpec({
-                        resources: {
-                          ...definition.spec.resources,
-                          memoryMb: Number(event.target.value),
-                        },
-                      })
-                    }
-                  />
-                </div>
-                <div className={fieldClass}>
-                  <Label>CPU (millis)</Label>
-                  <Input
-                    type="number"
-                    min={100}
-                    value={definition.spec.resources.cpuMillis ?? 500}
-                    onChange={(event) =>
-                      updateSpec({
-                        resources: {
-                          ...definition.spec.resources,
-                          cpuMillis: Number(event.target.value),
-                        },
-                      })
-                    }
-                  />
-                </div>
               </div>
               <div className={fieldClass}>
                 <Label>Max output tokens</Label>

@@ -716,6 +716,7 @@ async fn skills_profiles_and_agent_scoped_claims() {
             "process",
             "orbit-worker-pi",
             "0.3.0",
+            "selected",
             &[agent_a.id],
             &["issue-triage".into()],
             Some("opencode-go"),
@@ -728,6 +729,7 @@ async fn skills_profiles_and_agent_scoped_claims() {
         .await
         .unwrap();
     assert_eq!(profile.agent_ids, vec![agent_a.id]);
+    assert_eq!(profile.agent_scope, "selected");
     assert_eq!(profile.skill_slugs, vec!["issue-triage"]);
     assert!(
         !store

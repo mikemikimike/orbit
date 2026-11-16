@@ -469,6 +469,8 @@ pub struct WorkerProfile {
     pub execution_driver: String,
     pub image: String,
     pub image_tag: String,
+    #[sqlx(default)]
+    pub agent_scope: String,
     pub agent_ids: Vec<Uuid>,
     pub skill_slugs: Vec<String>,
     pub provider: Option<String>,

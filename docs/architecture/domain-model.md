@@ -146,8 +146,10 @@ Reusable SKILL.md package: `slug`, `content`, JSONB `files` (path → text, incl
 
 ### WorkerProfile / WorkerToken / WorkerLaunch / WorkerHeartbeat
 - **WorkerProfile**: pins harness kind, target, execution driver, image + tag, agent
-  allowlist, skill allowlist, optional provider/model, optional auth secret name, static
-  `env`, `env_mappings` (connection/secret → env var), resources and `enabled`.
+  scope (`all` dynamic or `selected` with an explicit allowlist), skill allowlist, optional
+  provider/model, optional auth secret name, static `env`, `env_mappings`
+  (connection/secret → env var), typed CPU/memory requests/limits + workspace size
+  (`WorkerResources`) and `enabled`. Worker sizing lives here, not on the agent.
 - **WorkerToken**: scoped, revocable, hashed worker credential (optionally bound to a
   profile and a single execution).
 - **WorkerLaunch**: a launcher-managed instance (`pending | starting | running |

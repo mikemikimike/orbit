@@ -65,6 +65,7 @@ use crate::handlers;
         handlers::catalog::update_provider,
         handlers::catalog::delete_provider,
         handlers::catalog::probe_provider,
+        handlers::catalog::probe_unsaved,
         handlers::catalog::list_connectors,
         handlers::catalog::list_connections,
         handlers::catalog::create_connection,

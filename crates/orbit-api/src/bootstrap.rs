@@ -128,6 +128,7 @@ async fn seed_worker_profile(
             "process",
             &image,
             &config.image_tag,
+            "all",
             &[],
             &[],
             None,

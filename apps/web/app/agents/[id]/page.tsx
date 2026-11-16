@@ -277,10 +277,6 @@ export default function AgentDetailPage() {
                     }
                   />
                   <Row label="Concurrency" value={String(spec.resources.maxConcurrentExecutions)} />
-                  <Row
-                    label="Resources"
-                    value={`${spec.resources.memoryMb ?? 1024} MB · ${spec.resources.cpuMillis ?? 500}m CPU`}
-                  />
                 </CardContent>
               </Card>
             </div>

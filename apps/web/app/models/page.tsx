@@ -21,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { api } from "@/lib/api";
+import { api, API_BASE_URL, getAccessToken } from "@/lib/api";
 import { queryKeys, unwrap, useProviders } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 import type { ProviderView } from "@/lib/types";
@@ -70,6 +70,7 @@ export default function ModelsPage() {
   const [editing, setEditing] = useState<ProviderView | null>(null);
   const [form, setForm] = useState<ProviderForm>(EMPTY_FORM);
   const [probing, setProbing] = useState<string | null>(null);
+  const [probingDraft, setProbingDraft] = useState(false);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -91,6 +92,19 @@ export default function ModelsPage() {
                 vision: form.vision,
                 embeddings: false,
                 modelsEndpoint: form.modelsEndpoint,
+              },
+              settings: {
+                ...(form.models
+                  .split(",")
+                  .map((value) => value.trim())
+                  .filter(Boolean).length
+                  ? {
+                      models: form.models
+                        .split(",")
+                        .map((value) => value.trim())
+                        .filter(Boolean),
+                    }
+                  : {}),
               },
             }
           : {
@@ -171,6 +185,7 @@ export default function ModelsPage() {
         toast.success(
           `Reachable in ${result.latencyMs}ms · ${result.models.length} model(s) discovered`,
         );
+        void queryClient.invalidateQueries({ queryKey: queryKeys.providers });
       } else {
         toast.error(result.error ?? "Probe failed");
       }
@@ -178,6 +193,69 @@ export default function ModelsPage() {
       toast.error(errorMessage(error));
     } finally {
       setProbing(null);
+    }
+  }
+
+  async function probeDraft() {
+    if (!form.baseUrl.trim()) {
+      toast.error("Base URL is required to test the connection");
+      return;
+    }
+    setProbingDraft(true);
+    try {
+      const token = getAccessToken();
+      const response = await fetch(`${API_BASE_URL}/api/v1/providers/probe`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          kind: form.kind,
+          config: {
+            baseUrl: form.baseUrl.trim().replace(/\/$/, ""),
+            headers: {},
+            compat: {
+              chatCompletions: true,
+              responsesApi: false,
+              tools: form.tools,
+              streaming: form.streaming,
+              jsonMode: form.jsonMode,
+              vision: form.vision,
+              embeddings: false,
+              modelsEndpoint: form.modelsEndpoint,
+            },
+          },
+          credential: form.credential.trim() || undefined,
+        }),
+      });
+      const result = (await response.json()) as {
+        ok?: boolean;
+        latencyMs?: number;
+        models?: string[];
+        error?: string;
+        message?: string;
+      };
+      if (!response.ok) {
+        throw new Error(result.error ?? result.message ?? `HTTP ${response.status}`);
+      }
+      if (result.ok) {
+        const models = result.models ?? [];
+        setForm((current) => ({
+          ...current,
+          models: current.models || models.join(", "),
+          model: current.model || models[0] || "",
+        }));
+        toast.success(
+          `Reachable in ${result.latencyMs ?? 0}ms · ${models.length} model(s) discovered`,
+        );
+      } else {
+        toast.error(result.error ?? "Probe failed");
+      }
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setProbingDraft(false);
     }
   }
 
@@ -398,11 +476,30 @@ export default function ModelsPage() {
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5 sm:col-span-1">
                     <Label>Default model</Label>
-                    <Input
-                      value={form.model}
-                      placeholder="qwen3-coder"
-                      onChange={(event) => setForm({ ...form, model: event.target.value })}
-                    />
+                    {form.models.split(",").map((value) => value.trim()).filter(Boolean).length ? (
+                      <select
+                        className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+                        value={form.model}
+                        onChange={(event) => setForm({ ...form, model: event.target.value })}
+                      >
+                        <option value="">Select a model</option>
+                        {form.models
+                          .split(",")
+                          .map((value) => value.trim())
+                          .filter(Boolean)
+                          .map((candidate) => (
+                            <option key={candidate} value={candidate}>
+                              {candidate}
+                            </option>
+                          ))}
+                      </select>
+                    ) : (
+                      <Input
+                        value={form.model}
+                        placeholder="qwen3-coder"
+                        onChange={(event) => setForm({ ...form, model: event.target.value })}
+                      />
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     <Label>Context window</Label>
@@ -422,6 +519,18 @@ export default function ModelsPage() {
                       onChange={(event) => setForm({ ...form, maxOutputTokens: event.target.value })}
                     />
                   </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Model catalog (optional)</Label>
+                  <Input
+                    value={form.models}
+                    placeholder="qwen3-coder, llama-3.3-70b"
+                    onChange={(event) => setForm({ ...form, models: event.target.value })}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Populated by Test connection. Comma-separated models drive the agent and
+                    worker model selectors.
+                  </p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 rounded-lg border p-3 text-sm sm:grid-cols-3">
                   {[
@@ -519,13 +628,28 @@ export default function ModelsPage() {
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!form.name.trim()}>
-              {editing ? "Save changes" : "Create provider"}
-            </Button>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <div>
+              {form.kind === "openai_compatible" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={probeDraft}
+                  loading={probingDraft}
+                  disabled={!form.baseUrl.trim()}
+                >
+                  Test connection
+                </Button>
+              ) : null}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!form.name.trim()}>
+                {editing ? "Save changes" : "Create provider"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

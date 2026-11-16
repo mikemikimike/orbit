@@ -217,6 +217,16 @@ fn intersect_harnesses(token: &WorkerAuth, requested: &[String]) -> Vec<String> 
     requested
 }
 
+/// Agent IDs a worker profile may claim. `all` stays dynamic (empty filter), so agents
+/// created after the profile are included automatically.
+fn profile_agent_ids(profile: &WorkerProfile) -> Vec<Uuid> {
+    if profile.agent_scope == "selected" {
+        profile.agent_ids.clone()
+    } else {
+        Vec::new()
+    }
+}
+
 pub async fn session(
     State(state): State<AppState>,
     auth: WorkerAuth,
@@ -228,7 +238,7 @@ pub async fn session(
             vec![profile.harness_kind.clone()],
             Some(profile.target.clone()),
             Some(profile.execution_driver.clone()),
-            profile.agent_ids.clone(),
+            profile_agent_ids(profile),
             profile.skill_slugs.clone(),
             Some(profile.name.clone()),
         ),
@@ -302,7 +312,7 @@ pub async fn claim(
     }
     let agent_ids = profile
         .as_ref()
-        .map(|profile| profile.agent_ids.clone())
+        .map(profile_agent_ids)
         .unwrap_or(body.agent_ids);
     let execution = match state
         .store
@@ -335,7 +345,10 @@ pub async fn context(
         return Err(ApiError::not_found("execution"));
     }
     if let Some(profile) = &profile {
-        if !profile.agent_ids.is_empty() && !profile.agent_ids.contains(&execution.agent_id) {
+        if profile.agent_scope == "selected"
+            && !profile.agent_ids.is_empty()
+            && !profile.agent_ids.contains(&execution.agent_id)
+        {
             return Err(ApiError::forbidden(
                 "execution agent is outside this worker profile",
             ));

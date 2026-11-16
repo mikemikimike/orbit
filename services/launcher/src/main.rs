@@ -227,6 +227,27 @@ async fn launch_docker(state: &AppState, request: &LaunchRequest) -> anyhow::Res
         format!("orbit.launch-id={}", request.launch_id),
         "--add-host".into(),
         "host.docker.internal:host-gateway".into(),
+    ];
+    let resources = worker_resources(&request.resources);
+    if let Some(cpu) = resources
+        .limits
+        .cpu
+        .as_deref()
+        .and_then(orbit_domain::parse_cpu_millis)
+    {
+        args.push("--cpus".into());
+        args.push(format!("{}", cpu as f64 / 1000.0));
+    }
+    if let Some(memory) = resources
+        .limits
+        .memory
+        .as_deref()
+        .and_then(orbit_domain::parse_memory_bytes)
+    {
+        args.push("--memory".into());
+        args.push(memory.to_string());
+    }
+    args.extend([
         "--env".into(),
         format!("ORBIT_API_URL={api_url}"),
         "--env".into(),
@@ -248,7 +269,7 @@ async fn launch_docker(state: &AppState, request: &LaunchRequest) -> anyhow::Res
             "ORBIT_LOG_FORMAT={}",
             std::env::var("ORBIT_LOG_FORMAT").unwrap_or_else(|_| "text".into())
         ),
-    ];
+    ]);
     if let Ok(env) = serde_json::from_value::<BTreeMap<String, String>>(request.env.clone()) {
         for (key, value) in env {
             args.push("--env".into());
@@ -369,6 +390,35 @@ async fn docker_status(state: &AppState, name: &str) -> LaunchStatus {
     }
 }
 
+fn worker_resources(value: &Value) -> orbit_domain::WorkerResources {
+    serde_json::from_value::<orbit_domain::WorkerResources>(value.clone())
+        .unwrap_or_default()
+        .with_defaults()
+}
+
+fn kubernetes_resources(resources: &orbit_domain::WorkerResources) -> Option<Value> {
+    let mut spec = serde_json::Map::new();
+    if resources.requests.cpu.is_some() || resources.requests.memory.is_some() {
+        spec.insert(
+            "requests".into(),
+            json!({
+                "cpu": resources.requests.cpu,
+                "memory": resources.requests.memory,
+            }),
+        );
+    }
+    if resources.limits.cpu.is_some() || resources.limits.memory.is_some() {
+        spec.insert(
+            "limits".into(),
+            json!({
+                "cpu": resources.limits.cpu,
+                "memory": resources.limits.memory,
+            }),
+        );
+    }
+    (!spec.is_empty()).then_some(Value::Object(spec))
+}
+
 async fn launch_kubernetes(
     state: &AppState,
     request: &LaunchRequest,
@@ -455,12 +505,26 @@ async fn launch_kubernetes(
             }));
         }
     }
-    if let Some(size) = request
-        .resources
-        .get("workspace")
-        .and_then(|value| value.get("sizeLimit"))
-    {
+    let resources = worker_resources(&request.resources);
+    if let Some(size) = resources.workspace.size_limit.as_deref() {
         pod_volumes[0] = json!({ "name": "tmp", "emptyDir": { "sizeLimit": size } });
+    }
+    let mut container = json!({
+        "name": "worker",
+        "image": format!("{}:{}", request.image, request.image_tag),
+        "imagePullPolicy": "IfNotPresent",
+        "env": env,
+        "command": command,
+        "volumeMounts": mounts,
+        "securityContext": {
+            "runAsNonRoot": true,
+            "allowPrivilegeEscalation": false,
+            "readOnlyRootFilesystem": false,
+            "capabilities": { "drop": ["ALL"] }
+        }
+    });
+    if let Some(resources) = kubernetes_resources(&resources) {
+        container["resources"] = resources;
     }
     let mut spec = json!({
         "restartPolicy": "Never",
@@ -469,20 +533,7 @@ async fn launch_kubernetes(
             "runAsNonRoot": true,
             "seccompProfile": { "type": "RuntimeDefault" }
         },
-        "containers": [{
-            "name": "worker",
-            "image": format!("{}:{}", request.image, request.image_tag),
-            "imagePullPolicy": "IfNotPresent",
-            "env": env,
-            "command": command,
-            "volumeMounts": mounts,
-            "securityContext": {
-                "runAsNonRoot": true,
-                "allowPrivilegeEscalation": false,
-                "readOnlyRootFilesystem": false,
-                "capabilities": { "drop": ["ALL"] }
-            }
-        }],
+        "containers": [container],
         "volumes": pod_volumes
     });
     if let Some(secret) = &state.image_pull_secret {

@@ -11,8 +11,8 @@ use orbit_security::{new_secret_ref, AuthContext, Permission, SecretValue};
 use crate::audit;
 use crate::dto::{
     parse_provider_kind, ConnectionView, ConnectorView, CreateConnectionRequest,
-    CreateProviderRequest, HarnessHealthView, HarnessView, ProviderProbeResponse, ProviderView,
-    UpdateConnectionRequest, UpdateProviderRequest,
+    CreateProviderRequest, HarnessHealthView, HarnessView, ProbeProviderRequest,
+    ProviderProbeResponse, ProviderView, UpdateConnectionRequest, UpdateProviderRequest,
 };
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -285,26 +285,6 @@ pub async fn probe_provider(
             "harness-managed providers are authenticated and probed by their harness",
         ));
     }
-
-    let base_url = provider
-        .config
-        .get("baseUrl")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| ApiError::bad_request("provider config is missing baseUrl"))?;
-    let models_endpoint = provider
-        .config
-        .pointer("/compat/modelsEndpoint")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
-    if !models_endpoint {
-        return Ok(Json(ProviderProbeResponse {
-            ok: false,
-            latency_ms: 0,
-            models: vec![],
-            error: Some("provider declares no /models endpoint".into()),
-        }));
-    }
-
     let credential = match &provider.secret_ref {
         Some(reference) => state
             .store
@@ -313,15 +293,91 @@ pub async fn probe_provider(
             .map(|value| value.expose().to_string()),
         None => None,
     };
+    let result = probe_endpoint(&provider.config, credential.as_deref()).await;
 
+    // Persist discovered models so agent/worker selectors can use them without a manual
+    // catalog edit. Keep any existing settings/catalog merge semantics.
+    if result.ok && !result.models.is_empty() {
+        let mut config = provider.config.clone();
+        if !config.is_object() {
+            config = serde_json::json!({});
+        }
+        if !config
+            .get("settings")
+            .is_some_and(|value| value.is_object())
+        {
+            config["settings"] = serde_json::json!({});
+        }
+        config["settings"]["models"] = serde_json::json!(result.models);
+        if let Err(error) = state
+            .store
+            .update_provider(auth.org_id, provider_id, None, Some(&config), None, None)
+            .await
+        {
+            tracing::warn!(%error, "failed to persist probed provider models");
+        }
+    }
+    Ok(Json(result))
+}
+
+/// Probe an unsaved provider config (create dialog).
+#[utoipa::path(post, path = "/api/v1/providers/probe", tag = "providers", request_body = ProbeProviderRequest, responses((status = 200, body = ProviderProbeResponse)))]
+pub async fn probe_unsaved(
+    Extension(auth): Extension<AuthContext>,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<ProbeProviderRequest>,
+) -> Result<Json<ProviderProbeResponse>, ApiError> {
+    auth.require(Permission::ProvidersWrite)?;
+    let kind = ProviderKind::parse(&body.kind)
+        .ok_or_else(|| ApiError::bad_request("unknown provider kind"))?;
+    if kind == ProviderKind::HarnessManaged {
+        return Err(ApiError::unsupported(
+            "harness-managed providers are authenticated and probed by their harness",
+        ));
+    }
+    let mut config = body.config;
+    sanitize_provider_config(&mut config);
+    let report = validate_provider_config(kind, &config);
+    if !report.is_valid() {
+        return Err(ApiError::validation(report.issues));
+    }
+    // Never persist or log the credential used for this probe.
+    Ok(Json(
+        probe_endpoint(&config, body.credential.as_deref()).await,
+    ))
+}
+
+async fn probe_endpoint(
+    config: &serde_json::Value,
+    credential: Option<&str>,
+) -> ProviderProbeResponse {
+    let base_url = config.get("baseUrl").and_then(|v| v.as_str()).unwrap_or("");
+    if base_url.is_empty() {
+        return ProviderProbeResponse {
+            ok: false,
+            latency_ms: 0,
+            models: vec![],
+            error: Some("provider config is missing baseUrl".into()),
+        };
+    }
+    let models_endpoint = config
+        .pointer("/compat/modelsEndpoint")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    if !models_endpoint {
+        return ProviderProbeResponse {
+            ok: false,
+            latency_ms: 0,
+            models: vec![],
+            error: Some("provider declares no /models endpoint".into()),
+        };
+    }
     let client = orbit_security::client_with_custom_ca(std::time::Duration::from_secs(10));
     let url = format!("{}/models", base_url.trim_end_matches('/'));
     let mut request = client.get(&url);
-    if let Some(credential) = &credential {
+    if let Some(credential) = credential {
         request = request.bearer_auth(credential);
     }
-    for (name, value) in provider
-        .config
+    for (name, value) in config
         .get("headers")
         .and_then(|v| v.as_object())
         .into_iter()
@@ -356,32 +412,25 @@ pub async fn probe_provider(
                     })
                 })
                 .unwrap_or_default();
-            state.metrics.inc_probe(true);
-            Ok(Json(ProviderProbeResponse {
+            ProviderProbeResponse {
                 ok: true,
                 latency_ms,
                 models,
                 error: None,
-            }))
+            }
         }
-        Ok(response) => {
-            state.metrics.inc_probe(false);
-            Ok(Json(ProviderProbeResponse {
-                ok: false,
-                latency_ms,
-                models: vec![],
-                error: Some(format!("endpoint returned HTTP {}", response.status())),
-            }))
-        }
-        Err(err) => {
-            state.metrics.inc_probe(false);
-            Ok(Json(ProviderProbeResponse {
-                ok: false,
-                latency_ms,
-                models: vec![],
-                error: Some(err.to_string()),
-            }))
-        }
+        Ok(response) => ProviderProbeResponse {
+            ok: false,
+            latency_ms,
+            models: vec![],
+            error: Some(format!("endpoint returned HTTP {}", response.status())),
+        },
+        Err(err) => ProviderProbeResponse {
+            ok: false,
+            latency_ms,
+            models: vec![],
+            error: Some(err.to_string()),
+        },
     }
 }
 

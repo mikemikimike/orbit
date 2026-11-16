@@ -26,6 +26,9 @@ pub struct CreateWorkerProfileRequest {
     pub image: String,
     #[serde(default = "default_tag")]
     pub image_tag: String,
+    /// `all` (dynamic) or `selected`; omitted derives from agentIds for compatibility.
+    #[serde(default)]
+    pub agent_scope: Option<String>,
     #[serde(default)]
     pub agent_ids: Vec<Uuid>,
     #[serde(default)]
@@ -51,7 +54,47 @@ fn default_driver() -> String {
     "process".into()
 }
 fn default_tag() -> String {
-    "latest".into()
+    String::new()
+}
+
+fn resolve_agent_scope(requested: Option<&str>, agent_ids: &[Uuid]) -> Result<String, ApiError> {
+    match requested.map(str::trim) {
+        Some("all") => Ok("all".into()),
+        Some("selected") => Ok("selected".into()),
+        Some("") | None => Ok(if agent_ids.is_empty() {
+            "all".into()
+        } else {
+            "selected".into()
+        }),
+        Some(other) => Err(ApiError::bad_request(format!(
+            "agentScope must be 'all' or 'selected', got '{other}'"
+        ))),
+    }
+}
+
+fn resolve_worker_resources(value: &serde_json::Value) -> Result<serde_json::Value, ApiError> {
+    let resources: orbit_domain::WorkerResources =
+        if value.is_null() || value.as_object().is_some_and(|object| object.is_empty()) {
+            orbit_domain::WorkerResources::defaults()
+        } else {
+            serde_json::from_value(value.clone()).map_err(|error| {
+                ApiError::validation(vec![orbit_domain::ValidationIssue::new(
+                    "resources",
+                    format!("invalid worker resources: {error}"),
+                )])
+            })?
+        }
+        .with_defaults();
+    let issues = resources.validate();
+    if !issues.is_empty() {
+        return Err(ApiError::validation(
+            issues
+                .into_iter()
+                .map(|issue| orbit_domain::ValidationIssue::new("resources", issue))
+                .collect(),
+        ));
+    }
+    serde_json::to_value(resources).map_err(|error| ApiError::internal(error.to_string()))
 }
 
 #[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
@@ -304,6 +347,13 @@ pub async fn create_profile(
     } else {
         body.image.trim().to_string()
     };
+    let image_tag = if body.image_tag.trim().is_empty() {
+        crate::images::image_tag()
+    } else {
+        body.image_tag.trim().to_string()
+    };
+    let agent_scope = resolve_agent_scope(body.agent_scope.as_deref(), &body.agent_ids)?;
+    let resources = resolve_worker_resources(&body.resources)?;
     let profile = state
         .store
         .create_worker_profile(
@@ -313,7 +363,8 @@ pub async fn create_profile(
             &body.target,
             &body.execution_driver,
             &image,
-            body.image_tag.trim(),
+            &image_tag,
+            &agent_scope,
             &body.agent_ids,
             &body.skill_slugs,
             body.provider.as_deref(),
@@ -321,7 +372,7 @@ pub async fn create_profile(
             body.auth_secret_name.as_deref(),
             &body.env,
             &body.env_mappings,
-            &body.resources,
+            &resources,
         )
         .await?;
     audit::record(
@@ -390,6 +441,13 @@ pub async fn update_profile(
     } else {
         body.image.trim().to_string()
     };
+    let image_tag = if body.image_tag.trim().is_empty() {
+        crate::images::image_tag()
+    } else {
+        body.image_tag.trim().to_string()
+    };
+    let agent_scope = resolve_agent_scope(body.agent_scope.as_deref(), &body.agent_ids)?;
+    let resources = resolve_worker_resources(&body.resources)?;
     let profile = state
         .store
         .update_worker_profile(
@@ -400,7 +458,8 @@ pub async fn update_profile(
             &body.target,
             &body.execution_driver,
             &image,
-            body.image_tag.trim(),
+            &image_tag,
+            &agent_scope,
             &body.agent_ids,
             &body.skill_slugs,
             body.provider.as_deref(),
@@ -408,7 +467,7 @@ pub async fn update_profile(
             body.auth_secret_name.as_deref(),
             &body.env,
             &body.env_mappings,
-            &body.resources,
+            &resources,
         )
         .await?;
     audit::record(
@@ -524,6 +583,26 @@ pub async fn bootstrap(
     );
     let image = format!("{}:{}", profile.image, profile.image_tag);
     let has_auth = profile.auth_secret_name.is_some();
+    let resources: orbit_domain::WorkerResources =
+        serde_json::from_value::<orbit_domain::WorkerResources>(profile.resources.clone())
+            .unwrap_or_default()
+            .with_defaults();
+    let cpu_request = resources.requests.cpu.clone().unwrap_or_default();
+    let memory_request = resources.requests.memory.clone().unwrap_or_default();
+    let cpu_limit = resources.limits.cpu.clone().unwrap_or_default();
+    let memory_limit = resources.limits.memory.clone().unwrap_or_default();
+    let docker_cpu = resources
+        .limits
+        .cpu
+        .as_deref()
+        .and_then(orbit_domain::parse_cpu_millis)
+        .map(|millis| format!("{}", millis as f64 / 1000.0));
+    let docker_memory = resources
+        .limits
+        .memory
+        .as_deref()
+        .and_then(orbit_domain::parse_memory_bytes)
+        .map(|bytes| bytes.to_string());
 
     let mut docker_lines = vec![
         format!("docker run --rm --name {name}"),
@@ -534,6 +613,12 @@ pub async fn bootstrap(
         format!("  -e ORBIT_EXECUTION_DRIVER={}", profile.execution_driver),
         "  -e ORBIT_API_URL=http://host.docker.internal:8080".into(),
     ];
+    if let Some(cpu) = &docker_cpu {
+        docker_lines.push(format!("  --cpus {cpu}"));
+    }
+    if let Some(memory) = &docker_memory {
+        docker_lines.push(format!("  --memory {memory}"));
+    }
     let mut compose_volumes = String::new();
     let mut compose_command = String::new();
     match profile.harness_kind.as_str() {
@@ -559,7 +644,7 @@ pub async fn bootstrap(
     let docker = docker_lines.join(" \\\n");
 
     let compose = format!(
-        "services:\n  {name}:\n    image: {image}\n    restart: unless-stopped\n    extra_hosts:\n      - \"host.docker.internal:host-gateway\"\n    environment:\n      ORBIT_WORKER_PROFILE_ID: {id}\n      ORBIT_WORKER_TOKEN: {token}\n      ORBIT_WORKER_HARNESSES: {harness}\n      ORBIT_WORKER_TARGET: {target}\n      ORBIT_EXECUTION_DRIVER: {driver}\n      ORBIT_API_URL: http://host.docker.internal:8080\n{volumes}{command}",
+        "services:\n  {name}:\n    image: {image}\n    restart: unless-stopped\n    cpus: {cpu_limit}\n    mem_limit: {memory_limit}\n    extra_hosts:\n      - \"host.docker.internal:host-gateway\"\n    environment:\n      ORBIT_WORKER_PROFILE_ID: {id}\n      ORBIT_WORKER_TOKEN: {token}\n      ORBIT_WORKER_HARNESSES: {harness}\n      ORBIT_WORKER_TARGET: {target}\n      ORBIT_EXECUTION_DRIVER: {driver}\n      ORBIT_API_URL: http://host.docker.internal:8080\n{volumes}{command}",
         name = name,
         image = image,
         id = profile.id,
@@ -567,6 +652,8 @@ pub async fn bootstrap(
         harness = profile.harness_kind,
         target = profile.target,
         driver = profile.execution_driver,
+        cpu_limit = cpu_limit,
+        memory_limit = memory_limit,
         volumes = compose_volumes,
         command = compose_command
     );
@@ -609,8 +696,8 @@ spec:
             - name: ORBIT_API_URL
               value: "http://orbit-api:8080"
           resources:
-            requests: {{ cpu: 100m, memory: 256Mi }}
-            limits: {{ cpu: "2", memory: 1Gi }}
+            requests: {{ cpu: {cpu_request}, memory: {memory_request} }}
+            limits: {{ cpu: "{cpu_limit}", memory: {memory_limit} }}
           # Mount the harness auth Secret at the adapter's expected path:
           #   OpenCode: /seed/auth-export.json (init import)
           #   Pi:       /home/orbit/.pi/agent
@@ -621,7 +708,11 @@ spec:
         token = issued.token,
         harness = profile.harness_kind,
         target = profile.target,
-        driver = profile.execution_driver
+        driver = profile.execution_driver,
+        cpu_request = cpu_request,
+        memory_request = memory_request,
+        cpu_limit = cpu_limit,
+        memory_limit = memory_limit
     );
 
     let mut notes = vec![

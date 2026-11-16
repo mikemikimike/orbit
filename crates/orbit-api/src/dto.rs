@@ -309,6 +309,16 @@ impl ProviderView {
     }
 }
 
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeProviderRequest {
+    #[serde(rename = "kind")]
+    pub kind: String,
+    pub config: serde_json::Value,
+    #[serde(default)]
+    pub credential: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderProbeResponse {

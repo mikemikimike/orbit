@@ -8,6 +8,32 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-11-16
+
+### Added
+
+- Worker profiles have an explicit agent scope: **All agents (dynamic)** includes agents
+  created later; **Selected agents** keeps a fixed list. Migration `0022` backfills
+  existing profiles. The worker session/claim no longer relies on empty `agentIds` to mean
+  "all" implicitly.
+- Worker profiles have typed CPU/memory requests and limits plus a workspace size
+  (`resources.requests`, `resources.limits`, `resources.workspace`). Values are validated
+  (quantities, request ≤ limit) and defaulted when omitted.
+- The launcher applies those resources to Kubernetes Pods/Jobs and Docker containers
+  (`--cpus`/`--memory`); profile bootstrap output includes them.
+- Worker profiles default to the platform image tag (`ORBIT_IMAGE_TAG`, set by the chart to
+  the release `appVersion`) instead of `latest` when no tag is provided.
+- Provider models: `POST /api/v1/providers/probe` probes an unsaved config; a successful
+  probe on a saved provider persists discovered models to `settings.models`. The provider
+  dialog can test the connection before saving, fills the default model and catalog, and
+  OpenAI-compatible providers now support a model catalog.
+
+### Changed
+
+- Agent Studio no longer exposes unused `memoryMb` / `cpuMillis` as worker sizing; the
+  card is labelled **Execution limits** (timeout, concurrency, max output tokens).
+  Worker sizing belongs to the worker profile.
+
 ### Added
 
 - **OIDC group → role mapping** (issue #18): `roleClaim`, `groupRoles` and `syncRoles`

@@ -71,13 +71,19 @@ function WorkersPageInner() {
   const [target, setTarget] = useState("docker");
   const [driver, setDriver] = useState("process");
   const [image, setImage] = useState(DEFAULT_IMAGES.opencode);
-  const [tag, setTag] = useState("0.5.1");
+  const [tag, setTag] = useState("");
   const [provider, setProvider] = useState("opencode-go");
   const [model, setModel] = useState("deepseek-v4-pro");
   const [authSecret, setAuthSecret] = useState("");
   const [envMappings, setEnvMappings] = useState<Array<{ envVar: string; connectionId: string; secretKey: string }>>([]);
+  const [agentScope, setAgentScope] = useState<"all" | "selected">("all");
   const [agentIds, setAgentIds] = useState<string[]>([]);
   const [skillSlugs, setSkillSlugs] = useState<string[]>([]);
+  const [cpuRequest, setCpuRequest] = useState("100m");
+  const [memoryRequest, setMemoryRequest] = useState("256Mi");
+  const [cpuLimit, setCpuLimit] = useState("1");
+  const [memoryLimit, setMemoryLimit] = useState("1Gi");
+  const [workspaceSize, setWorkspaceSize] = useState("1Gi");
 
   // Pre-fill from Work wizard query params.
   if (searchParams.get("create") === "1" && !prefilled) {
@@ -112,7 +118,8 @@ function WorkersPageInner() {
         executionDriver: driver,
         image,
         imageTag: tag,
-        agentIds,
+        agentScope,
+        agentIds: agentScope === "selected" ? agentIds : [],
         skillSlugs,
         provider: provider || undefined,
         model: model || undefined,
@@ -123,7 +130,11 @@ function WorkersPageInner() {
           connectionId: m.connectionId || null,
           secretKey: m.secretKey || null,
         })),
-        resources: editing?.resources ?? {},
+        resources: {
+          requests: { cpu: cpuRequest || undefined, memory: memoryRequest || undefined },
+          limits: { cpu: cpuLimit || undefined, memory: memoryLimit || undefined },
+          workspace: { sizeLimit: workspaceSize || undefined },
+        },
       };
       if (editing) {
         return unwrap(
@@ -152,13 +163,19 @@ function WorkersPageInner() {
     setTarget("docker");
     setDriver("process");
     setImage(DEFAULT_IMAGES.opencode);
-    setTag("latest");
+    setTag("");
     setProvider("opencode-go");
     setModel("deepseek-v4-pro");
     setAuthSecret("");
     setEnvMappings([]);
+    setAgentScope("all");
     setAgentIds([]);
     setSkillSlugs([]);
+    setCpuRequest("100m");
+    setMemoryRequest("256Mi");
+    setCpuLimit("1");
+    setMemoryLimit("1Gi");
+    setWorkspaceSize("1Gi");
     setOpen(true);
   }
 
@@ -175,8 +192,20 @@ function WorkersPageInner() {
     setAuthSecret(profile.authSecretName ?? "");
     const mappings = (profile as { envMappings?: Array<{ envVar: string; connectionId?: string; secretKey?: string }> }).envMappings ?? [];
     setEnvMappings(mappings.map((m) => ({ envVar: m.envVar ?? "", connectionId: m.connectionId ?? "", secretKey: m.secretKey ?? "" })));
+    const scoped = (profile as WorkerProfile & { agentScope?: string }).agentScope === "selected";
+    setAgentScope(scoped ? "selected" : "all");
     setAgentIds(profile.agentIds);
     setSkillSlugs(profile.skillSlugs);
+    const resources = ((profile as WorkerProfile & { resources?: Record<string, unknown> }).resources ?? {}) as {
+      requests?: { cpu?: string; memory?: string };
+      limits?: { cpu?: string; memory?: string };
+      workspace?: { sizeLimit?: string };
+    };
+    setCpuRequest(resources.requests?.cpu ?? "100m");
+    setMemoryRequest(resources.requests?.memory ?? "256Mi");
+    setCpuLimit(resources.limits?.cpu ?? "1");
+    setMemoryLimit(resources.limits?.memory ?? "1Gi");
+    setWorkspaceSize(resources.workspace?.sizeLimit ?? "1Gi");
     setOpen(true);
   }
 
@@ -290,7 +319,11 @@ function WorkersPageInner() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex flex-wrap gap-1 text-[11px]">
-                  <Badge variant="secondary">{profile.agentIds.length} agents</Badge>
+                  <Badge variant="secondary">
+                    {(profile as WorkerProfile & { agentScope?: string }).agentScope === "selected"
+                      ? `${profile.agentIds.length} agents`
+                      : "all agents"}
+                  </Badge>
                   <Badge variant="secondary">{profile.skillSlugs.length} skills</Badge>
                   {profile.authSecretName ? (
                     <Badge variant="outline">auth: {profile.authSecretName}</Badge>
@@ -509,7 +542,33 @@ function WorkersPageInner() {
             </div>
             <div className="space-y-1.5">
               <Label>Tag</Label>
-              <Input value={tag} onChange={(event) => setTag(event.target.value)} />
+              <Input
+                value={tag}
+                placeholder="release version (defaults to the platform image tag)"
+                onChange={(event) => setTag(event.target.value)}
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>CPU request</Label>
+                <Input value={cpuRequest} onChange={(event) => setCpuRequest(event.target.value)} placeholder="100m" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Memory request</Label>
+                <Input value={memoryRequest} onChange={(event) => setMemoryRequest(event.target.value)} placeholder="256Mi" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>CPU limit</Label>
+                <Input value={cpuLimit} onChange={(event) => setCpuLimit(event.target.value)} placeholder="1" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Memory limit</Label>
+                <Input value={memoryLimit} onChange={(event) => setMemoryLimit(event.target.value)} placeholder="1Gi" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Workspace size</Label>
+                <Input value={workspaceSize} onChange={(event) => setWorkspaceSize(event.target.value)} placeholder="1Gi" />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Provider</Label>
@@ -683,41 +742,47 @@ function WorkersPageInner() {
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <div className="flex items-center justify-between">
-                <Label>Agents ({agentIds.length} selected)</Label>
+                <Label>Agents</Label>
                 <div className="flex gap-1">
                   <Button
                     type="button"
                     size="sm"
-                    variant="ghost"
-                    onClick={() => setAgentIds((agents.data?.items ?? []).map((a) => a.id))}
+                    variant={agentScope === "all" ? "secondary" : "ghost"}
+                    onClick={() => setAgentScope("all")}
                   >
-                    Select all
+                    All agents
                   </Button>
                   <Button
                     type="button"
                     size="sm"
-                    variant="ghost"
-                    onClick={() => setAgentIds([])}
+                    variant={agentScope === "selected" ? "secondary" : "ghost"}
+                    onClick={() => setAgentScope("selected")}
                   >
-                    Clear
+                    Selected agents
                   </Button>
                 </div>
               </div>
-              <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border p-2">
-                {(agents.data?.items ?? []).map((agent) => (
-                  <label key={agent.id} className="flex items-center justify-between gap-2 text-xs">
-                    <span className="truncate">{agent.name}</span>
-                    <Switch
-                      checked={agentIds.includes(agent.id)}
-                      onCheckedChange={(checked) =>
-                        setAgentIds((current) =>
-                          checked ? [...current, agent.id] : current.filter((id) => id !== agent.id),
-                        )
-                      }
-                    />
-                  </label>
-                ))}
-              </div>
+              {agentScope === "all" ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Dynamic scope: agents created later are automatically included.
+                </p>
+              ) : (
+                <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border p-2">
+                  {(agents.data?.items ?? []).map((agent) => (
+                    <label key={agent.id} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="truncate">{agent.name}</span>
+                      <Switch
+                        checked={agentIds.includes(agent.id)}
+                        onCheckedChange={(checked) =>
+                          setAgentIds((current) =>
+                            checked ? [...current, agent.id] : current.filter((id) => id !== agent.id),
+                          )
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <div className="flex items-center justify-between">

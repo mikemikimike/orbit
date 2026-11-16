@@ -211,6 +211,10 @@ pub fn build_router(state: AppState) -> Router {
             patch(handlers::catalog::update_provider).delete(handlers::catalog::delete_provider),
         )
         .route(
+            "/api/v1/providers/probe",
+            post(handlers::catalog::probe_unsaved),
+        )
+        .route(
             "/api/v1/providers/{provider_id}/test",
             post(handlers::catalog::probe_provider),
         )

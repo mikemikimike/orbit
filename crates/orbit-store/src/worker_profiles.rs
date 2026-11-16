@@ -46,6 +46,7 @@ impl Store {
         execution_driver: &str,
         image: &str,
         image_tag: &str,
+        agent_scope: &str,
         agent_ids: &[Uuid],
         skill_slugs: &[String],
         provider: Option<&str>,
@@ -58,8 +59,8 @@ impl Store {
         sqlx::query_as::<_, WorkerProfile>(
             r#"
             INSERT INTO worker_profiles (id, org_id, name, harness_kind, target, execution_driver,
-                image, image_tag, agent_ids, skill_slugs, provider, model, auth_secret_name, env, env_mappings, resources)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                image, image_tag, agent_scope, agent_ids, skill_slugs, provider, model, auth_secret_name, env, env_mappings, resources)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
             RETURNING *
             "#,
         )
@@ -71,6 +72,7 @@ impl Store {
         .bind(execution_driver)
         .bind(image)
         .bind(image_tag)
+        .bind(agent_scope)
         .bind(agent_ids)
         .bind(skill_slugs)
         .bind(provider)
@@ -101,6 +103,7 @@ impl Store {
         execution_driver: &str,
         image: &str,
         image_tag: &str,
+        agent_scope: &str,
         agent_ids: &[Uuid],
         skill_slugs: &[String],
         provider: Option<&str>,
@@ -114,9 +117,9 @@ impl Store {
             r#"
             UPDATE worker_profiles
             SET name = $3, harness_kind = $4, target = $5, execution_driver = $6,
-                image = $7, image_tag = $8, agent_ids = $9, skill_slugs = $10,
-                provider = $11, model = $12, auth_secret_name = $13, env = $14,
-                env_mappings = $15, resources = $16, updated_at = now()
+                image = $7, image_tag = $8, agent_scope = $9, agent_ids = $10,
+                skill_slugs = $11, provider = $12, model = $13, auth_secret_name = $14,
+                env = $15, env_mappings = $16, resources = $17, updated_at = now()
             WHERE org_id = $1 AND id = $2
             RETURNING *
             "#,
@@ -129,6 +132,7 @@ impl Store {
         .bind(execution_driver)
         .bind(image)
         .bind(image_tag)
+        .bind(agent_scope)
         .bind(agent_ids)
         .bind(skill_slugs)
         .bind(provider)
