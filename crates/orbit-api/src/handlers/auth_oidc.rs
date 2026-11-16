@@ -54,10 +54,7 @@ async fn discovery(issuer: &str) -> Result<Value, ApiError> {
         "{}/.well-known/openid-configuration",
         issuer.trim_end_matches('/')
     );
-    let response = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-        .map_err(|error| ApiError::internal(error.to_string()))?
+    let response = orbit_security::client_with_custom_ca(Duration::from_secs(10))
         .get(&url)
         .send()
         .await
@@ -125,10 +122,7 @@ pub async fn token(
     if let Some(secret) = &config.client_secret {
         form.push(("client_secret", secret.clone()));
     }
-    let response = reqwest::Client::builder()
-        .timeout(Duration::from_secs(20))
-        .build()
-        .map_err(|error| ApiError::internal(error.to_string()))?
+    let response = orbit_security::client_with_custom_ca(Duration::from_secs(20))
         .post(token_endpoint)
         .form(&form)
         .send()

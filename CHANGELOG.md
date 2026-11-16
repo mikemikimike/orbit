@@ -8,6 +8,15 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+## [0.8.4] — 2026-11-16
+
+### Fixed
+
+- OIDC browser discovery and authorization-code token exchange now use the shared
+  custom-CA HTTP client. They previously built plain `reqwest` clients, so a private CA
+  (for example Dex behind an internal CA) worked for `curl` and JWKS validation but the
+  login flow failed TLS.
+
 ## [0.8.3] — 2026-11-16
 
 ### Fixed
