@@ -51,6 +51,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check version alignment
+        run: ./scripts/check-versions.sh
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:

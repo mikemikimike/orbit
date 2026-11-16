@@ -3,24 +3,43 @@
 A release is a version bump, a changelog entry, a signed git tag, and a green CI run that
 publishes images and binaries. Everything below is automated except the bump and tag.
 
+## When to release
+
+Whoever owns the change chooses the moment; releases are not tied one-to-one to issues.
+Guidelines:
+
+| Change | Next version | Release when |
+|---|---|---|
+| Bug fix, docs, dependency bump | patch (`0.9.1`) | batched weekly, or immediately for a blocking fix |
+| Feature, chart default/behaviour change, API addition | minor (`0.10.0`) | when the feature is merged and verified, usually weekly |
+| Breaking change (API, spec, chart values) | major (or a documented minor while pre-1.0) | announced in the changelog/ADR first |
+
+- Release only from `main` with green CI; never from a branch.
+- One tag ships **all six images** plus the chart and binaries. If any image is missing,
+  the release is incomplete (this is why `launcher`/harness images must be in the tag run).
+- Do not retag a published version. If a release is broken, fix forward with a patch.
+- A release is not a per-issue event: bundle related work, but do not hold a fix for an
+  unrelated unfinished feature.
+
+## Version alignment
+
+`./scripts/bump-version.sh X.Y.Z` updates the Rust workspace, every Node package and the
+Helm chart (`version` **and** `appVersion`). `./scripts/check-versions.sh` fails CI when
+they drift, and the chart's `appVersion` is the default image tag workers receive.
+
 ## 1. Prepare the version
 
-The version lives in four places and they must match:
+Use the helper so every declaration moves together:
 
 ```bash
-# Rust workspace (also drives the crate and binary versions)
-crates  -> Cargo.toml             [workspace.package] version
-# Node packages
-package.json
-apps/web/package.json
-packages/api-client/package.json
-packages/contracts/package.json
-# Helm chart (version = chart, appVersion = image tag)
-deploy/helm/orbit/Chart.yaml
+./scripts/bump-version.sh X.Y.Z
+cargo check --workspace   # refresh Cargo.lock versions
+./scripts/check-versions.sh
 ```
 
-`Chart.yaml` `appVersion` is what the chart uses as the default image tag, so it must
-equal the version CI publishes.
+The script updates `Cargo.toml` `[workspace.package]`, the four `package.json` files and
+`Chart.yaml` `version`/`appVersion`. `Chart.yaml` `appVersion` is the default image tag,
+so it must equal the version CI publishes.
 
 Update the changelog: move everything under `## [Unreleased]` into a new
 `## [X.Y.Z] — YYYY-MM-DD` section. The release notes are generated from git history, but
