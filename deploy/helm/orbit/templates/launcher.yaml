@@ -52,6 +52,15 @@ spec:
       labels:
         {{- include "orbit.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: launcher
+      {{- if or .Values.podAnnotations .Values.secrets.create }}
+      annotations:
+        {{- if .Values.secrets.create }}
+        checksum/config: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
     spec:
       serviceAccountName: {{ include "orbit.fullname" . }}-launcher
       securityContext:
@@ -70,9 +79,9 @@ spec:
                 secretKeyRef:
                   name: {{ include "orbit.secretName" . }}
                   key: launcher-token
-            {{- if .Values.launcher.imagePullSecret }}
+            {{- with include "orbit.launcherImagePullSecret" . }}
             - name: ORBIT_LAUNCHER_IMAGE_PULL_SECRET
-              value: {{ .Values.launcher.imagePullSecret | quote }}
+              value: {{ . | quote }}
             {{- end }}
           ports:
             - name: http

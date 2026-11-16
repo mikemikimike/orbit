@@ -97,3 +97,53 @@ Call with: dict "root" $ "image" .Values.api.image "registry" .Values.imageRegis
 {{- define "orbit.webHost" -}}
 {{- printf "%s-web" (include "orbit.fullname" .) -}}
 {{- end -}}
+
+{{/*
+Tag used for generated worker-profile image defaults. Mirrors the API image tag so a
+profile seeded at startup references the same release the chart deployed.
+*/}}
+{{- define "orbit.imageTag" -}}
+{{- if .Values.worker.tag -}}
+{{- .Values.worker.tag -}}
+{{- else if .Values.api.tag -}}
+{{- .Values.api.tag -}}
+{{- else -}}
+{{- .Chart.AppVersion -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Registry credentials for pods created by the launcher. Falls back to the first
+imagePullSecrets entry so a private registry works without configuring it twice.
+*/}}
+{{- define "orbit.launcherImagePullSecret" -}}
+{{- if .Values.launcher.imagePullSecret -}}
+{{- .Values.launcher.imagePullSecret -}}
+{{- else if .Values.imagePullSecrets -}}
+{{- (index .Values.imagePullSecrets 0).name -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Launcher bearer token shared by orbit-api and orbit-launcher.
+
+Precedence: explicit launcher.token > value already stored in the release Secret >
+newly generated. The lookup keeps the token stable across upgrades (and lets the
+launcher restart keep authenticating) without requiring the operator to handle it.
+
+GitOps caveat: `helm template`/rendering has no cluster access, so the generated value
+differs per render. Set `launcher.token` explicitly (or put `launcher-token` in
+`secrets.existingSecret`) when the rendered output is committed or diffed.
+*/}}
+{{- define "orbit.launcherToken" -}}
+{{- if .Values.launcher.token -}}
+{{- .Values.launcher.token -}}
+{{- else -}}
+{{- $secret := lookup "v1" "Secret" .Release.Namespace (include "orbit.secretName" .) -}}
+{{- if and $secret $secret.data (index $secret.data "launcher-token") -}}
+{{- index $secret.data "launcher-token" | b64dec -}}
+{{- else -}}
+{{- randAlphaNum 48 -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

@@ -118,13 +118,14 @@ helm upgrade --install orbit deploy/helm/orbit \
   --namespace orbit --create-namespace \
   -f deploy/helm/orbit/values.yaml \
   --set imageRegistry=registry.example.com:5000 \
-  --set worker.token="$WORKER_TOKEN" \
   --set ingress.host=orbit.example.com
 ```
 
-The chart refuses to render without `worker.token`; issue one from a running API with
-`POST /api/v1/worker-tokens`. `./scripts/deploy.sh` automates this and reuses existing
-tokens from the cluster.
+No worker token is needed: the launcher is enabled by default, a launchable mock worker
+profile is seeded on first start, and the API mints a scoped token per launch (revoked on
+stop). Tokens (`POST /api/v1/worker-tokens`) are only for custom/external workers or a
+fixed worker Deployment (`worker.enabled=true`). `./scripts/deploy.sh` wraps the same
+flow.
 
 `values.yaml` bundles PostgreSQL and NATS for test clusters and uses dev auth. For
 production, start from `deploy/helm/orbit/values-prod.example.yaml` (external DB/NATS,
@@ -156,8 +157,8 @@ pnpm --filter @orbit/web dev       # terminal 3 (proxies /api to localhost:8080)
 cargo test --workspace
 ORBIT_TEST_DATABASE_URL=postgres://orbit:orbit@localhost:5432/orbit cargo test --workspace
 pnpm --filter @orbit/web typecheck && pnpm --filter @orbit/web build
-helm lint deploy/helm/orbit --set worker.token=lint
-helm template orbit deploy/helm/orbit -n orbit --set worker.token=lint >/dev/null
+helm lint deploy/helm/orbit
+helm template orbit deploy/helm/orbit -n orbit >/dev/null
 API_URL=http://localhost:8080 ./scripts/smoke-k8s.sh
 ```
 

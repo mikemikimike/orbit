@@ -7,6 +7,11 @@ out to `kubectl` to create and manage worker pods. The API never receives kubect
 or Docker socket access — it stores launch intent and calls the launcher over a
 separate authenticated HTTP channel.
 
+The launcher is the default way platform workers run (`launcher.enabled=true` in the Helm
+chart). The API mints a scoped worker token per launch, hands it to the launcher, and
+revokes it when the launch stops. Operators do not issue worker tokens for platform
+workers; tokens exist for custom/external workers only.
+
 ## How authentication works
 
 ### 1. Kubeconfig (default)
@@ -66,7 +71,7 @@ The launcher adds `imagePullSecrets` to every pod it creates.
 | `ORBIT_LAUNCHER_NAMESPACE` | Target namespace for worker pods (default `orbit`) |
 | `ORBIT_LAUNCHER_IMAGE_PULL_SECRET` | Secret name for registry auth |
 | `ORBIT_LAUNCHER_IMAGE_ALIASES` | Rewrite registry hosts (e.g. `registry.example.com:5000=registry.example.com:5000`) |
-| `ORBIT_LAUNCHER_TOKEN` | Bearer token the API uses to authenticate to the launcher |
+| `ORBIT_LAUNCHER_TOKEN` | Bearer token the API uses to authenticate to the launcher. The Helm chart generates it and reuses it from the release Secret when `launcher.token` is empty; set the value explicitly for GitOps. |
 
 ## Security model
 
@@ -74,7 +79,8 @@ The launcher adds `imagePullSecrets` to every pod it creates.
   bearer token (`ORBIT_LAUNCHER_TOKEN`).
 - The launcher validates the token, then runs `kubectl create -f -` with the pod
   manifest.
-- Worker pods receive `ORBIT_WORKER_TOKEN` (a scoped worker token) via env var.
+- Worker pods receive `ORBIT_WORKER_TOKEN` (a scoped worker token minted for that
+  launch) via env var. The token is revoked when the launch stops or fails.
 - The launcher never exposes kubectl or the Docker socket to the API or web app.
 EOF
 echo done

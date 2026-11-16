@@ -16,9 +16,14 @@ spec:
       labels:
         {{- include "orbit.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: api
-      {{- with .Values.podAnnotations }}
+      {{- if or .Values.podAnnotations .Values.secrets.create }}
       annotations:
+        {{- if .Values.secrets.create }}
+        checksum/config: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
     spec:
       serviceAccountName: {{ include "orbit.serviceAccountName" . }}
@@ -67,6 +72,12 @@ spec:
               value: {{ .Values.platform.publicBaseUrl | quote }}
             - name: ORBIT_WORKER_API_URL
               value: "http://{{ include "orbit.apiHost" . }}:{{ .Values.api.port }}"
+            - name: ORBIT_IMAGE_PREFIX
+              value: {{ .Values.imageRegistry | quote }}
+            - name: ORBIT_IMAGE_TAG
+              value: {{ include "orbit.imageTag" . | quote }}
+            - name: ORBIT_SEED_WORKER_PROFILE
+              value: {{ .Values.platform.seedWorkerProfile | quote }}
             {{- if .Values.launcher.enabled }}
             - name: ORBIT_LAUNCHER_URL
               value: "http://{{ include "orbit.fullname" . }}-launcher:8090"

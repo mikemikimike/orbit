@@ -11,6 +11,10 @@ pub struct ApiConfig {
     pub auto_migrate: bool,
     pub cors_origins: Vec<String>,
     pub seed_demo: bool,
+    /// Seed a launchable mock worker profile when a launcher is configured.
+    pub seed_worker_profile: bool,
+    /// Tag used for generated worker-profile image defaults.
+    pub image_tag: String,
     pub default_org_slug: String,
     pub default_org_name: String,
     pub public_base_url: String,
@@ -50,6 +54,8 @@ impl ApiConfig {
             auto_migrate: env_bool("ORBIT_DB_AUTO_MIGRATE", true),
             cors_origins,
             seed_demo: env_bool("ORBIT_SEED_DEMO", true),
+            seed_worker_profile: env_bool("ORBIT_SEED_WORKER_PROFILE", true),
+            image_tag: env_or("ORBIT_IMAGE_TAG", "latest"),
             default_org_slug: env_or("ORBIT_DEFAULT_ORG_SLUG", "orbit"),
             default_org_name: env_or("ORBIT_DEFAULT_ORG_NAME", "ORBIT"),
             public_base_url: env_or("ORBIT_PUBLIC_BASE_URL", "http://localhost:8080"),

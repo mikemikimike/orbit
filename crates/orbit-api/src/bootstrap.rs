@@ -87,11 +87,64 @@ pub async fn initialize(
         }
     }
 
+    if config.seed_worker_profile {
+        if let Err(err) = seed_worker_profile(store, organization.id, config).await {
+            tracing::warn!(error = %err, "worker profile seed failed (continuing)");
+        }
+    }
+
     let _ = bus; // reserved for publishing seed events in later phases
     Ok(Initialized {
         default_org_id: organization.id,
         dev_identity,
     })
+}
+
+/// Seed one launchable profile so the launcher path works on a fresh install.
+///
+/// Only when a launcher is configured: without one, workers are run from the worker
+/// profile bootstrap output (Docker/Compose) or a fixed Deployment, and a Kubernetes
+/// profile would be misleading.
+async fn seed_worker_profile(
+    store: &Store,
+    org_id: Uuid,
+    config: &ApiConfig,
+) -> anyhow::Result<()> {
+    if config.launcher_url.is_none() {
+        return Ok(());
+    }
+    if !store.list_worker_profiles(org_id).await?.is_empty() {
+        return Ok(());
+    }
+
+    let harness = HarnessKind::Mock;
+    let image = crate::images::default_image(harness);
+    let profile = store
+        .create_worker_profile(
+            org_id,
+            "Platform worker (mock)",
+            harness.as_str(),
+            "kubernetes",
+            "process",
+            &image,
+            &config.image_tag,
+            &[],
+            &[],
+            None,
+            None,
+            None,
+            &json!({}),
+            &json!({}),
+            &json!({}),
+        )
+        .await?;
+    tracing::info!(
+        profile_id = %profile.id,
+        image = %image,
+        tag = %config.image_tag,
+        "seeded default worker profile"
+    );
+    Ok(())
 }
 
 async fn seed_demo(store: &Store, org_id: Uuid, config: &ApiConfig) -> anyhow::Result<()> {

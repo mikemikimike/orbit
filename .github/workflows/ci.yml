@@ -302,7 +302,7 @@ jobs:
           version: v3.16.3
 
       - name: Lint chart
-        run: helm lint deploy/helm/orbit --set worker.token=lint
+        run: helm lint deploy/helm/orbit
 
       - name: Package chart
         run: |

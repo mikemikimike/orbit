@@ -14,6 +14,7 @@ pub mod dto;
 pub mod error;
 pub mod extract;
 pub mod handlers;
+pub mod images;
 pub mod metrics;
 pub mod openapi;
 pub mod request_id;

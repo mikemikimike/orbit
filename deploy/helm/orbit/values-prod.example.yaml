@@ -31,6 +31,9 @@ api:
       memory: 768Mi
 
 worker:
+  # Platform workers are launched from worker profiles through the launcher (below).
+  # Enable this only for a fixed worker, and add `worker-token` to the external Secret.
+  enabled: false
   image: orbit-worker
   tag: "0.7.0"
   replicas: 2
@@ -40,7 +43,9 @@ worker:
   harnesses: mock
 
 opencodeWorker:
-  enabled: true
+  # Fixed worker. For profile-launched OpenCode, leave this off and create a profile
+  # with authSecretName=orbit-opencode-auth; the launcher mints the token per launch.
+  enabled: false
   image: orbit-worker-opencode
   tag: "0.7.0"
   replicas: 1
@@ -110,7 +115,9 @@ auth:
     defaultRole: viewer
 
 # Manage secrets externally (Vault, External Secrets, sealed-secrets, …).
-# Required keys in the Secret: database-url, master-key.
+# Required keys: database-url, master-key, launcher-token when the launcher is enabled,
+# plus worker-token / opencode-worker-token / pi-worker-token for any fixed worker that
+# is enabled (the chart cannot generate them into an existing Secret).
 secrets:
   create: false
   existingSecret: orbit-secrets
@@ -131,9 +138,17 @@ externalNats:
   enabled: true
   url: nats://nats.example.internal:4222
 
+launcher:
+  # Default worker path. `launcher-token` must be present in secrets.existingSecret and
+  # should be generated with: openssl rand -base64 36
+  enabled: true
+  image: orbit-launcher
+  tag: "0.7.0"
+
 platform:
   environment: production
   seedDemo: false
+  seedWorkerProfile: false # create worker profiles explicitly in Workers
   logFormat: json
   corsOrigins: "https://orbit.example.com"
   publicBaseUrl: "https://orbit.example.com"

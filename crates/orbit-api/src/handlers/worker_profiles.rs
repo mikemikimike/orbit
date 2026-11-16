@@ -300,7 +300,7 @@ pub async fn create_profile(
         return Err(ApiError::validation(issues));
     }
     let image = if body.image.trim().is_empty() {
-        default_image(harness)
+        crate::images::default_image(harness)
     } else {
         body.image.trim().to_string()
     };
@@ -386,7 +386,7 @@ pub async fn update_profile(
         return Err(ApiError::validation(issues));
     }
     let image = if body.image.trim().is_empty() {
-        default_image(harness)
+        crate::images::default_image(harness)
     } else {
         body.image.trim().to_string()
     };
@@ -643,26 +643,6 @@ spec:
         kubernetes,
         notes,
     }))
-}
-
-/// Registry prefix for the worker images. Defaults to the images CI publishes; set
-/// `ORBIT_IMAGE_PREFIX` to point at your own mirror.
-fn image_prefix() -> String {
-    std::env::var("ORBIT_IMAGE_PREFIX")
-        .ok()
-        .map(|value| value.trim().trim_end_matches('/').to_string())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "ghcr.io/opsifyhq/orbit".into())
-}
-
-fn default_image(harness: HarnessKind) -> String {
-    let prefix = image_prefix();
-    let name = match harness {
-        HarnessKind::Pi => "orbit-worker-pi",
-        HarnessKind::OpenCode => "orbit-worker-opencode",
-        _ => "orbit-worker",
-    };
-    format!("{prefix}/{name}")
 }
 
 trait HarnessKindExt {

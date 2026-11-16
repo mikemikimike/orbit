@@ -30,10 +30,16 @@ api:
       memory: 512Mi
 
 worker:
+  # Fixed worker Deployment. Off by default: platform workers are launched from worker
+  # profiles through the launcher (see `launcher.*`), which mints and revokes a scoped
+  # token per launch. Enable this only when you want a worker outside that path (for
+  # example a pinned mock worker when the launcher is disabled).
+  enabled: false
   image: orbit-worker
   # Empty tag = Chart.AppVersion.
   tag: ""
-  # Scoped token issued by the API (POST /api/v1/worker-tokens). Required.
+  # Required only when `worker.enabled=true`. Issue one with POST /api/v1/worker-tokens
+  # or let `scripts/deploy.sh` do it.
   token: ""
   replicas: 1
   concurrency: 4
@@ -125,13 +131,18 @@ web:
       cpu: 500m
       memory: 384Mi
 
-# Optional worker launcher. Enables Launch/Stop/Logs in Workers. The launcher gets
-# namespaced Pod RBAC; the API does not.
+# Worker launcher: the default way platform workers run. Enables Launch/Stop/Logs in
+# Workers; the API mints a scoped worker token per launch and revokes it on stop. The
+# launcher gets namespaced Pod RBAC; the API does not.
 launcher:
-  enabled: false
+  enabled: true
   image: orbit-launcher
   # Empty tag = Chart.AppVersion.
   tag: ""
+  # Internal bearer token shared by orbit-api and orbit-launcher. Leave empty to let the
+  # chart generate one and reuse it from the release Secret across upgrades (the value
+  # is never shown in the UI or Helm output). Set it explicitly for GitOps, or put
+  # `launcher-token` in `secrets.existingSecret`.
   token: ""
   imagePullSecret: ""
   resources:
@@ -227,6 +238,9 @@ platform:
   # Use values-prod.example.yaml for a production deployment.
   environment: development
   seedDemo: true
+  # Seed a launchable worker profile when a launcher is configured (requires
+  # `launcher.enabled=true`). Set false to manage profiles entirely from the UI.
+  seedWorkerProfile: true
   logFormat: json
   corsOrigins: "http://orbit.example.com"
   publicBaseUrl: "http://orbit.example.com"
