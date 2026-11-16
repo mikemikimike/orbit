@@ -450,6 +450,12 @@ mod tests {
     }
 
     #[test]
+    fn build_public_key_is_loaded() {
+        let verifier = LicenseVerifier::new();
+        assert!(verifier.keys.contains_key("orbit-2026-01"));
+    }
+
+    #[test]
     fn verifies_a_valid_license() {
         let signing = SigningKey::generate(&mut OsRng);
         let token = token_for(&signing, "test-key", claims(30, 30));
