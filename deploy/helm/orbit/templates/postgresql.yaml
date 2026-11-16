@@ -42,7 +42,10 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       securityContext:
-        fsGroup: 999
+        runAsNonRoot: true
+        runAsUser: {{ .Values.postgresql.runAsUser }}
+        runAsGroup: {{ .Values.postgresql.runAsGroup }}
+        fsGroup: {{ .Values.postgresql.fsGroup }}
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -76,14 +79,15 @@ spec:
             periodSeconds: 15
           resources:
             {{- toYaml .Values.postgresql.resources | nindent 12 }}
-          # The bundled PostgreSQL is for test/reference only. The upstream entrypoint
-          # needs these capabilities to chown/chmod its data directory before dropping
-          # privileges. Use an external managed database in production.
+          # Restricted Pod Security: no privilege escalation, no capabilities.
+          # The upstream image runs as the unprivileged `postgres` user; the data
+          # directory must be writable by that user (or group `fsGroup`).
           securityContext:
+            runAsNonRoot: true
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
             capabilities:
               drop: ["ALL"]
-              add: ["CHOWN", "FOWNER", "DAC_OVERRIDE", "SETUID", "SETGID"]
       volumes:
         - name: data
           persistentVolumeClaim:

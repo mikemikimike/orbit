@@ -8,6 +8,28 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-11-16
+
+### Changed
+
+- Every chart workload is now consistent with the Kubernetes **restricted** Pod
+  Security profile: `runAsNonRoot`, `allowPrivilegeEscalation: false`,
+  `capabilities.drop: [ALL]`, `seccompProfile: RuntimeDefault`.
+- The launcher container gets a security context, a writable `/tmp`, `HOME=/tmp` for
+  kubectl's cache and the chart's `imagePullSecrets`.
+- The bundled PostgreSQL no longer runs as root or adds `CHOWN`/`SETUID`/… capabilities;
+  it runs as the upstream `postgres` user (999) with `fsGroup: 999`. Use a managed
+  database in production; its data directory must be writable by that user/group.
+- NATS and the web container state `runAsNonRoot` explicitly.
+
+### Fixed
+
+- The launcher now emits restricted-PSS-compatible Pods and Jobs for platform workers
+  (`runAsNonRoot`, RuntimeDefault seccomp, no privilege escalation, all capabilities
+  dropped). OpenCode/Pi get writable emptyDir mounts for their home data.
+- `externalDatabase` key names fall back to `host`/`port`/`dbname`/`user`/`password`
+  when `--reuse-values` comes from an older chart.
+
 ## [0.8.0] — 2026-11-16
 
 ### Added

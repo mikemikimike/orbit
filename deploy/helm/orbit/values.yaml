@@ -201,6 +201,12 @@ postgresql:
   password: orbit
   storage: 5Gi
   storageClassName: ""
+  # The upstream image runs as the `postgres` user (999) when started non-root.
+  # Restricted Pod Security requires runAsNonRoot, so the bundled database runs as
+  # 999. Use a managed database in production.
+  runAsUser: 999
+  runAsGroup: 999
+  fsGroup: 999
   resources:
     requests:
       cpu: 100m
@@ -235,6 +241,10 @@ nats:
   image: nats:2.11-alpine
   storage: 2Gi
   storageClassName: ""
+  # The upstream image already runs as an unprivileged user; keep it explicit so
+  # restricted Pod Security passes.
+  runAsNonRoot: true
+  fsGroup: 10001
   resources:
     requests:
       cpu: 50m
@@ -314,6 +324,7 @@ podSecurityContext:
     type: RuntimeDefault
 
 containerSecurityContext:
+  runAsNonRoot: true
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
   capabilities:

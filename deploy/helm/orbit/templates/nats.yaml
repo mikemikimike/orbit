@@ -38,7 +38,8 @@ spec:
         app.kubernetes.io/component: nats
     spec:
       securityContext:
-        fsGroup: 10001
+        runAsNonRoot: {{ .Values.nats.runAsNonRoot }}
+        fsGroup: {{ .Values.nats.fsGroup }}
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -67,7 +68,9 @@ spec:
           resources:
             {{- toYaml .Values.nats.resources | nindent 12 }}
           securityContext:
+            runAsNonRoot: true
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
             capabilities:
               drop: ["ALL"]
       volumes:

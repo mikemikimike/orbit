@@ -384,6 +384,7 @@ async fn launch_kubernetes(
         json!({ "name": "ORBIT_EXECUTION_DRIVER", "value": request.execution_driver }),
         json!({ "name": "ORBIT_WORKER_ID", "value": request.worker_id }),
         json!({ "name": "ORBIT_WORKSPACE_ROOT", "value": "/tmp/orbit-workspaces" }),
+        json!({ "name": "HOME", "value": "/home/orbit" }),
     ];
     if let Ok(extra) = serde_json::from_value::<BTreeMap<String, String>>(request.env.clone()) {
         for (key, value) in extra {
@@ -400,6 +401,22 @@ async fn launch_kubernetes(
     let mut mounts = vec![json!({ "name": "tmp", "mountPath": "/tmp" })];
     let mut pod_volumes = vec![json!({ "name": "tmp", "emptyDir": {} })];
     if request.harness_kind == "opencode" {
+        // OpenCode writes its data under $HOME/.local; keep it on an emptyDir so it
+        // never writes into the image layer.
+        pod_volumes.push(json!({ "name": "opencode-local", "emptyDir": {} }));
+        mounts.push(json!({
+            "name": "opencode-local",
+            "mountPath": "/home/orbit/.local"
+        }));
+        env.push(json!({
+            "name": "XDG_DATA_HOME",
+            "value": "/home/orbit/.local/share"
+        }));
+        env.push(json!({
+            "name": "XDG_CONFIG_HOME",
+            "value": "/home/orbit/.config"
+        }));
+        env.push(json!({ "name": "XDG_CACHE_HOME", "value": "/tmp/.cache" }));
         if let Some(secret) = &request.auth_secret_name {
             pod_volumes.push(json!({
                 "name": "harness-auth",
@@ -418,6 +435,15 @@ async fn launch_kubernetes(
             ];
         }
     } else if request.harness_kind == "pi" {
+        pod_volumes.push(json!({ "name": "pi-home", "emptyDir": {} }));
+        mounts.push(json!({
+            "name": "pi-home",
+            "mountPath": "/home/orbit/.pi"
+        }));
+        env.push(json!({
+            "name": "PI_CODING_AGENT_DIR",
+            "value": "/home/orbit/.pi/agent"
+        }));
         if let Some(secret) = &request.auth_secret_name {
             pod_volumes.push(json!({
                 "name": "harness-auth",
@@ -438,13 +464,24 @@ async fn launch_kubernetes(
     }
     let mut spec = json!({
         "restartPolicy": "Never",
+        // Restricted Pod Security: unprivileged, RuntimeDefault seccomp, no caps.
+        "securityContext": {
+            "runAsNonRoot": true,
+            "seccompProfile": { "type": "RuntimeDefault" }
+        },
         "containers": [{
             "name": "worker",
             "image": format!("{}:{}", request.image, request.image_tag),
             "imagePullPolicy": "IfNotPresent",
             "env": env,
             "command": command,
-            "volumeMounts": mounts
+            "volumeMounts": mounts,
+            "securityContext": {
+                "runAsNonRoot": true,
+                "allowPrivilegeEscalation": false,
+                "readOnlyRootFilesystem": false,
+                "capabilities": { "drop": ["ALL"] }
+            }
         }],
         "volumes": pod_volumes
     });

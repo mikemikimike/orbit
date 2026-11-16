@@ -63,13 +63,22 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ include "orbit.fullname" . }}-launcher
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: launcher
           image: {{ include "orbit.image" (dict "root" . "registry" .Values.imageRegistry "image" .Values.launcher.image "tag" .Values.launcher.tag) | quote }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           env:
+            # kubectl may try to cache discovery data under $HOME.
+            - name: HOME
+              value: "/tmp"
             - name: ORBIT_LAUNCHER_ADDR
               value: "0.0.0.0:8090"
             - name: ORBIT_LAUNCHER_NAMESPACE
@@ -86,8 +95,15 @@ spec:
           ports:
             - name: http
               containerPort: 8090
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             {{- toYaml .Values.launcher.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
 ---
 apiVersion: v1
 kind: Service
