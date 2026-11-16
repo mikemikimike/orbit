@@ -1,11 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ORBIT">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="ORBIT">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#7c5cff"/>
-      <stop offset="1" stop-color="#36b6c9"/>
+    <linearGradient id="ring" x1="180" y1="760" x2="900" y2="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6D5DF6"/>
+      <stop offset="0.55" stop-color="#A894FF"/>
+      <stop offset="1" stop-color="#C7BCFF"/>
     </linearGradient>
+    <radialGradient id="glow" cx="0.28" cy="0.18" r="0.8">
+      <stop offset="0" stop-color="#7C6CFF" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#7C6CFF" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="rounded">
+      <rect width="1024" height="1024" rx="240"/>
+    </clipPath>
   </defs>
-  <rect width="64" height="64" rx="14" fill="#0f0f14"/>
-  <circle cx="32" cy="34" r="16" fill="none" stroke="url(#g)" stroke-width="3.5"/>
-  <circle cx="32" cy="14" r="4.5" fill="url(#g)"/>
+  <g clip-path="url(#rounded)">
+    <rect width="1024" height="1024" fill="#0B0B12"/>
+    <rect width="1024" height="1024" fill="url(#glow)"/>
+    <g transform="rotate(-25 512 512)">
+      <ellipse cx="512" cy="512" rx="330" ry="145" fill="none" stroke="#7C6CFF" stroke-opacity="0.22" stroke-width="120"/>
+      <ellipse cx="512" cy="512" rx="330" ry="145" fill="none" stroke="url(#ring)" stroke-width="64"/>
+      <ellipse cx="512" cy="512" rx="238" ry="104" fill="none" stroke="#A894FF" stroke-opacity="0.20" stroke-width="3"/>
+      <circle cx="842" cy="512" r="70" fill="#FFFFFF"/>
+      <circle cx="842" cy="512" r="38" fill="#7C6CFF"/>
+    </g>
+  </g>
 </svg>

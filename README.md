@@ -1,3 +1,7 @@
+<div align="center">
+<img src="docs/assets/brand/orbit-logo.png" alt="ORBIT" width="520">
+</div>
+
 # ORBIT — Open Agent Platform
 
 <div align="center">
