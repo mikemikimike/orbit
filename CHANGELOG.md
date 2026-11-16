@@ -8,6 +8,13 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+## [0.8.2] — 2026-11-16
+
+### Fixed
+
+- Bundled NATS runs as the unprivileged `nats` user (1000) instead of root, so the pod
+  is admitted under the restricted Pod Security profile.
+
 ## [0.8.1] — 2026-11-16
 
 ### Changed

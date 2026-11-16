@@ -39,6 +39,8 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: {{ .Values.nats.runAsNonRoot }}
+        runAsUser: {{ .Values.nats.runAsUser }}
+        runAsGroup: {{ .Values.nats.runAsGroup }}
         fsGroup: {{ .Values.nats.fsGroup }}
         seccompProfile:
           type: RuntimeDefault

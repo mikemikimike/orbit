@@ -241,10 +241,12 @@ nats:
   image: nats:2.11-alpine
   storage: 2Gi
   storageClassName: ""
-  # The upstream image already runs as an unprivileged user; keep it explicit so
-  # restricted Pod Security passes.
+  # The upstream image defaults to root, so pin the unprivileged `nats` user (1000).
+  # The data directory must be writable by that user or by `fsGroup`.
   runAsNonRoot: true
-  fsGroup: 10001
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
   resources:
     requests:
       cpu: 50m
