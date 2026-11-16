@@ -1,0 +1,52 @@
+# Worker profiles
+
+A worker profile is a launchable execution-plane worker: image, harness, placement,
+agents, sizing and auth. Platform workers are normally launched from a profile by the
+in-cluster launcher; the API mints a scoped token per launch and revokes it on stop.
+
+## Fields
+
+| Field | Purpose |
+|---|---|
+| `harnessKind` | Harness the worker claims (`mock`, `opencode`, `pi`, …) |
+| `image` / `imageTag` | Execution-plane image. Empty tag defaults to `ORBIT_IMAGE_TAG`, which the chart sets to the release version (never `latest` in a release install) |
+| `target` / `executionDriver` | `local`, `docker`, `kubernetes`; `process` or `docker` |
+| `agentScope` | `all` (dynamic: new agents included) or `selected` |
+| `agentIds` | Allowlist when scope is `selected` |
+| `skillSlugs`, `agentIds` | What the worker may run |
+| `provider` / `model` | Optional model selection for the worker |
+| `authSecretName` | Existing Secret with harness auth (OpenCode/Pi) |
+| `env`, `envMappings` | Static env and connection/secret → env mappings |
+| `resources` | CPU/memory requests + limits and workspace size |
+| `enabled` | Only enabled profiles launch |
+
+## Resources
+
+```json
+{
+  "requests": { "cpu": "100m", "memory": "256Mi" },
+  "limits": { "cpu": "1", "memory": "1Gi" },
+  "workspace": { "sizeLimit": "1Gi" }
+}
+```
+
+Validated as Kubernetes quantities, request ≤ limit; defaults are applied when omitted.
+The launcher sets container resources on the Deployment/Job and `--cpus/--memory` for the
+Docker driver. **Worker CPU/memory belong here, not in the agent definition.**
+
+## Launch lifecycle
+
+- Long-lived profile → a Kubernetes **Deployment** (recreated after drains/evictions)
+- Single execution → a **Job** with TTL cleanup
+- Stop deletes the workload; logs are read by the `orbit.launch-id` label
+- OOMKilled/exit 137 is surfaced as a failed launch with the memory limit, and running
+  executions on that worker fail with a `worker_oom` event
+
+The profile can also generate copy-paste Docker/Compose/Kubernetes bootstrap output with a
+scoped token. Generating bootstrap output rotates the profile token.
+
+## Tokens
+
+Worker tokens are separate from user API tokens (`orbit_wk_`), scoped and revocable. CLI
+deployments set `ORBIT_API_URL` + `ORBIT_WORKER_TOKEN`; workers never receive database,
+NATS or master-key credentials.

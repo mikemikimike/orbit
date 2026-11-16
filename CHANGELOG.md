@@ -8,6 +8,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Docs
+
+- Added a task-oriented `docs/guide` (agents, teams, worker profiles, skills, RBAC, licensing,
+  tool policies, providers) and removed planning documents whose work shipped.
+
 ### Added
 
 - Offline license verification (`orbit-security::license`): Ed25519 JWS, embedded public
