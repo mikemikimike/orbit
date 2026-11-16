@@ -62,29 +62,29 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.externalDatabase.existingSecret }}
-                  key: {{ .Values.externalDatabase.hostKey }}
+                  key: {{ default "host" .Values.externalDatabase.hostKey }}
             - name: ORBIT_DATABASE_PORT
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.externalDatabase.existingSecret }}
-                  key: {{ .Values.externalDatabase.portKey }}
+                  key: {{ default "port" .Values.externalDatabase.portKey }}
             - name: ORBIT_DATABASE_NAME
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.externalDatabase.existingSecret }}
-                  key: {{ .Values.externalDatabase.databaseKey }}
+                  key: {{ default "dbname" .Values.externalDatabase.databaseKey }}
             - name: ORBIT_DATABASE_USER
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.externalDatabase.existingSecret }}
-                  key: {{ .Values.externalDatabase.userKey }}
+                  key: {{ default "user" .Values.externalDatabase.userKey }}
             - name: ORBIT_DATABASE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.externalDatabase.existingSecret }}
-                  key: {{ .Values.externalDatabase.passwordKey }}
+                  key: {{ default "password" .Values.externalDatabase.passwordKey }}
             - name: ORBIT_DATABASE_SSLMODE
-              value: {{ .Values.externalDatabase.sslMode | quote }}
+              value: {{ default "require" .Values.externalDatabase.sslMode | quote }}
             {{- end }}
             {{- else }}
             - name: ORBIT_DATABASE_URL
