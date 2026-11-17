@@ -35,6 +35,7 @@ import {
   useWorkerLaunches,
   useConnections,
   useEnvMappings,
+  useMeta,
   useWorkerProfileEnvMappings,
   useWorkerProfiles,
 } from "@/lib/queries";
@@ -57,6 +58,8 @@ function WorkersPageInner() {
   const agents = useAgents({ limit: 100 });
   const skills = useSkills();
   const connections = useConnections();
+  const meta = useMeta();
+  const platformVersion = meta.data?.version;
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
@@ -398,6 +401,14 @@ function WorkersPageInner() {
                       : "all agents"}
                   </Badge>
                   <Badge variant="secondary">{profile.skillSlugs.length} skills</Badge>
+                  {platformVersion && profile.imageTag && profile.imageTag !== platformVersion ? (
+                    <Badge
+                      variant="warning"
+                      title={`Profile uses ${profile.imageTag}; platform is ${platformVersion}. Edit and relaunch to update.`}
+                    >
+                      image {profile.imageTag} · platform {platformVersion}
+                    </Badge>
+                  ) : null}
                   {profile.authSecretName ? (
                     <Badge variant="outline">auth: {profile.authSecretName}</Badge>
                   ) : null}
@@ -660,6 +671,15 @@ function WorkersPageInner() {
                 placeholder="release version (defaults to the platform image tag)"
                 onChange={(event) => setTag(event.target.value)}
               />
+              {platformVersion && tag !== platformVersion ? (
+                <button
+                  type="button"
+                  className="text-left text-[11px] text-primary underline-offset-2 hover:underline"
+                  onClick={() => setTag(platformVersion)}
+                >
+                  Use platform tag {platformVersion}
+                </button>
+              ) : null}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
