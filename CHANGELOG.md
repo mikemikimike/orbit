@@ -8,6 +8,8 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-11-16
+
 ### Added
 
 - Reusable environment mappings (`/api/v1/env-mappings`) attachable to multiple worker
@@ -28,12 +30,15 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 - Execution Output card is width-constrained; long output wraps/scrolls instead of widening
   the page (#39).
+- Launcher ServiceAccount can create/read/delete Deployments and Jobs on clusters that
+  enforce RBAC (namespaced least-privilege Role).
 
 ### Changed
 
 - Agent Studio and worker profiles use provider model catalogs: the model is a select when
   the provider exposes `settings.models`, with "Provider default"/custom fallback. Worker
   profiles now list ORBIT-managed and harness-managed providers.
+- Added the ORBIT wordmark/icon/social preview, README header and matching web favicon.
 
 ## [0.10.0] — 2026-11-16
 
