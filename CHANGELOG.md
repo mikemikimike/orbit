@@ -8,6 +8,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- Connections UI renders connector `configSchema` fields (string/number/boolean) for
+  connectors other than GitLab and webhook, while keeping advanced JSON editing.
+
 ### Security
 
 - Worker claims are now restricted to the authenticated worker's organization. Previously

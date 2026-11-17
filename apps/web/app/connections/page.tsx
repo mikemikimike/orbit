@@ -42,6 +42,7 @@ export default function ConnectionsPage() {
   const [scopes, setScopes] = useState<string[]>([]);
   const [configText, setConfigText] = useState("{}");
   const [connectionUrl, setConnectionUrl] = useState("");
+  const [schemaValues, setSchemaValues] = useState<Record<string, string>>({});
 
   const defaultConfig = (slug: string) => {
     if (slug === "gitlab") {
@@ -66,6 +67,45 @@ export default function ConnectionsPage() {
     name: string;
     effect: string;
   }>;
+  const schema = (selected?.configSchema ?? {}) as {
+    properties?: Record<
+      string,
+      {
+        type?: string;
+        title?: string;
+        description?: string;
+        default?: unknown;
+        format?: string;
+      }
+    >;
+    required?: string[];
+  };
+  const schemaFields = Object.entries(schema.properties ?? {}).filter(
+    ([key]) => !["baseUrl", "cloneBaseUrl", "url"].includes(key),
+  );
+
+  function setSchemaField(key: string, value: string) {
+    const next = { ...schemaValues, [key]: value };
+    setSchemaValues(next);
+    let config: Record<string, unknown> = {};
+    try {
+      config = JSON.parse(configText || "{}") as Record<string, unknown>;
+    } catch {
+      config = {};
+    }
+    for (const [field, raw] of Object.entries(next)) {
+      const property = schema.properties?.[field];
+      if (raw === "") continue;
+      if (property?.type === "number" || property?.type === "integer") {
+        config[field] = Number(raw);
+      } else if (property?.type === "boolean") {
+        config[field] = raw === "true";
+      } else {
+        config[field] = raw;
+      }
+    }
+    setConfigText(JSON.stringify(config, null, 2));
+  }
 
   const save = useMutation({
     mutationFn: async () => {
@@ -137,6 +177,7 @@ export default function ConnectionsPage() {
     setScopes([]);
     setConfigText(defaultConfig("telegram"));
     setConnectionUrl("");
+    setSchemaValues({});
     setOpen(true);
   }
 
@@ -148,6 +189,14 @@ export default function ConnectionsPage() {
     setScopes(connection.scopes);
     setConfigText(JSON.stringify(connection.config ?? {}, null, 2));
     const config = (connection.config ?? {}) as Record<string, unknown>;
+    setSchemaValues(
+      Object.fromEntries(
+        Object.entries(config).map(([key, value]) => [
+          key,
+          typeof value === "object" ? JSON.stringify(value) : String(value ?? ""),
+        ]),
+      ),
+    );
     const baseUrl = String(config.baseUrl ?? "");
     const cloneBaseUrl = String(config.cloneBaseUrl ?? "");
     setConnectionUrl(
@@ -358,6 +407,7 @@ export default function ConnectionsPage() {
                   setConnectorSlug(event.target.value);
                   setScopes([]);
                   setConfigText(defaultConfig(event.target.value));
+                  setSchemaValues({});
                   setConnectionUrl(
                     event.target.value === "gitlab" ? "https://gitlab.com" : "",
                   );
@@ -418,6 +468,47 @@ export default function ConnectionsPage() {
                 })}
               </div>
             </div>
+            {schemaFields.length > 0 &&
+            connectorSlug !== "gitlab" &&
+            connectorSlug !== "webhook" ? (
+              <div className="space-y-3 rounded-lg border p-3">
+                <p className="text-xs font-medium text-muted-foreground">Configuration</p>
+                {schemaFields.map(([key, property]) => (
+                  <div key={key} className="space-y-1.5">
+                    <Label>
+                      {property.title || key}
+                      {schema.required?.includes(key) ? " *" : ""}
+                    </Label>
+                    {property.type === "boolean" ? (
+                      <select
+                        className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+                        value={schemaValues[key] ?? String(property.default ?? "false")}
+                        onChange={(event) => setSchemaField(key, event.target.value)}
+                      >
+                        <option value="false">No</option>
+                        <option value="true">Yes</option>
+                      </select>
+                    ) : (
+                      <Input
+                        type={
+                          property.type === "integer" || property.type === "number"
+                            ? "number"
+                            : property.format === "password"
+                              ? "password"
+                              : "text"
+                        }
+                        value={schemaValues[key] ?? String(property.default ?? "")}
+                        placeholder={String(property.default ?? "")}
+                        onChange={(event) => setSchemaField(key, event.target.value)}
+                      />
+                    )}
+                    {property.description ? (
+                      <p className="text-[11px] text-muted-foreground">{property.description}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {connectorSlug === "gitlab" || connectorSlug === "webhook" ? (
               <div className="space-y-1.5">
                 <Label>
