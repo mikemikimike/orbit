@@ -1180,3 +1180,34 @@ async fn private_execution_events_and_approvals_are_hidden() {
                     .all(|item| item["id"] != approval.id.to_string()))
     );
 }
+
+#[tokio::test]
+async fn community_license_blocks_team_and_sharing_writes() {
+    let Some(app) = test_app(true).await else {
+        return;
+    };
+    let token = "test-token";
+    let (status, body) = send(
+        &app.router,
+        auth_post(
+            "/api/v1/teams",
+            token,
+            json!({ "name": "Ops", "slug": "ops" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
+    assert_eq!(body["error"]["code"], "license_required");
+
+    let (status, body) = send(
+        &app.router,
+        auth_patch(
+            &format!("/api/v1/sharing/agents/{}", app.agent_id),
+            token,
+            json!({ "visibility": "private" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
+    assert_eq!(body["error"]["code"], "license_required");
+}

@@ -10,6 +10,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- Access-team owner guide (`docs/guide/access-teams.md`) and a community-license test
+  proving team/sharing writes return `402 license_required`.
+
+### Added
+
 - Connections UI renders connector `configSchema` fields (string/number/boolean) for
   connectors other than GitLab and webhook, while keeping advanced JSON editing.
 

@@ -10,6 +10,7 @@ Practical, task-oriented documentation. For design rationale see
 | Worker profiles, launcher, sizing | [worker-profiles.md](worker-profiles.md) |
 | Skills and script materialization | [skills.md](skills.md) |
 | Roles, permissions and RBAC | [rbac.md](rbac.md) |
+| Access teams and resource sharing | [access-teams.md](access-teams.md) |
 | Offline enterprise licensing | [licensing.md](licensing.md) |
 | Tool policy and approvals | [tool-policies.md](tool-policies.md) |
 | Outputs (webhooks, Slack, Mattermost) | [outputs.md](outputs.md) |
