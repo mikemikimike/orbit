@@ -8,6 +8,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Security
+
+- Worker claims are now restricted to the authenticated worker's organization. Previously
+  the claim query could pick a queued execution from another org.
+
 ### Documentation
 
 - Documented Agent Team ownership/visibility and worker-profile team claim/context rules.

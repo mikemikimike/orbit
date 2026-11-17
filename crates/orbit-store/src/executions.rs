@@ -492,6 +492,7 @@ impl Store {
     /// Claim the oldest queued execution atomically.
     pub async fn claim_next_queued(
         &self,
+        org_id: Uuid,
         worker_id: &str,
         harnesses: &[String],
         worker_target: &str,
@@ -503,7 +504,7 @@ impl Store {
                   AND EXISTS (
                       SELECT 1 FROM agents a
                       WHERE a.id = executions.agent_id
-                        AND (a.visibility = 'org' OR a.owner_team_id = $5)
+                        AND (a.visibility = 'org' OR a.owner_team_id = $6)
                   )
             "#
         } else {
@@ -512,14 +513,15 @@ impl Store {
         let sql = format!(
             r#"
             UPDATE executions
-            SET status = 'dispatched', worker_id = $1,
+            SET status = 'dispatched', worker_id = $2,
                 started_at = COALESCE(started_at, now()), updated_at = now()
             WHERE id = (
                 SELECT id FROM executions
-                WHERE status = 'queued'
-                  AND harness_kind = ANY($2)
-                  AND (placement = 'auto' OR placement = $3)
-                  AND (cardinality($4::uuid[]) = 0 OR agent_id = ANY($4))
+                WHERE org_id = $1
+                  AND status = 'queued'
+                  AND harness_kind = ANY($3)
+                  AND (placement = 'auto' OR placement = $4)
+                  AND (cardinality($5::uuid[]) = 0 OR agent_id = ANY($5))
                   {team_filter}
                 ORDER BY created_at ASC
                 LIMIT 1
@@ -529,6 +531,7 @@ impl Store {
             "#
         );
         let mut query = sqlx::query_as::<_, ExecutionRecord>(&sql)
+            .bind(org_id)
             .bind(worker_id)
             .bind(harnesses)
             .bind(worker_target)

@@ -317,6 +317,7 @@ pub async fn claim(
     let execution = match state
         .store
         .claim_next_queued(
+            auth.org_id,
             &body.worker_id,
             &harnesses,
             &body.target,

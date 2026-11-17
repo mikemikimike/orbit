@@ -706,6 +706,7 @@ async fn skills_profiles_and_agent_scoped_claims() {
 
     let claimed = store
         .claim_next_queued(
+            org,
             "scoped-worker",
             &["mock".into()],
             "local",
@@ -1059,6 +1060,7 @@ async fn team_worker_cannot_claim_another_teams_execution() {
     // A random team must not claim anything.
     let none = store
         .claim_next_queued(
+            org,
             "random-worker",
             &["mock".into()],
             "local",
@@ -1072,6 +1074,7 @@ async fn team_worker_cannot_claim_another_teams_execution() {
     // B was queued first but is invisible to Team A.
     let claimed = store
         .claim_next_queued(
+            org,
             "team-a-worker",
             &["mock".into()],
             "local",
@@ -1085,6 +1088,7 @@ async fn team_worker_cannot_claim_another_teams_execution() {
 
     let next = store
         .claim_next_queued(
+            org,
             "team-a-worker",
             &["mock".into()],
             "local",
