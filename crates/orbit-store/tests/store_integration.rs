@@ -1052,6 +1052,19 @@ async fn team_worker_cannot_claim_another_teams_execution() {
     assert_eq!(exec_a.agent_id, agent_a.id);
     assert_eq!(exec_b.agent_id, agent_b.id);
 
+    // A random team must not claim anything.
+    let none = store
+        .claim_next_queued(
+            "random-worker",
+            &["mock".into()],
+            "local",
+            &[],
+            Some(uuid::Uuid::now_v7()),
+        )
+        .await
+        .unwrap();
+    assert!(none.is_none(), "claim ignored the team predicate");
+
     // B was queued first but is invisible to Team A.
     let claimed = store
         .claim_next_queued(
