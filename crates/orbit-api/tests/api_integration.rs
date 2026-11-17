@@ -716,3 +716,251 @@ async fn private_skills_are_hidden_from_other_users() {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+async fn make_private(store: &Store, org_id: Uuid, table: &str, id: Uuid, user_id: Uuid) {
+    store
+        .assign_resource_owner(org_id, table, id, user_id)
+        .await
+        .unwrap();
+    store
+        .set_resource_visibility(org_id, table, id, "private", None)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn private_resources_are_hidden_from_other_users() {
+    let Some(app) = test_app(true).await else {
+        return;
+    };
+    let alice = app
+        .store
+        .ensure_user(
+            app.org_id,
+            "res-alice@test.local",
+            "Alice",
+            UserRole::Operator,
+        )
+        .await
+        .unwrap();
+    let bob = app
+        .store
+        .ensure_user(app.org_id, "res-bob@test.local", "Bob", UserRole::Operator)
+        .await
+        .unwrap();
+    let alice_token = token_for(&app.store, app.org_id, alice.id, "alice").await;
+    let bob_token = token_for(&app.store, app.org_id, bob.id, "bob").await;
+    let alice_agent = create_demo_agent(&app.store, app.org_id, alice.id).await;
+    let bob_agent = create_demo_agent(&app.store, app.org_id, bob.id).await;
+    let connector = app
+        .store
+        .get_connector_by_slug(app.org_id, "webhook")
+        .await
+        .unwrap()
+        .expect("webhook connector");
+
+    let alice_provider = app
+        .store
+        .create_provider(
+            app.org_id,
+            "Alice provider",
+            "openai_compatible",
+            &json!({ "baseUrl": "http://127.0.0.1:9/v1" }),
+            None,
+        )
+        .await
+        .unwrap();
+    let bob_provider = app
+        .store
+        .create_provider(
+            app.org_id,
+            "Bob provider",
+            "openai_compatible",
+            &json!({ "baseUrl": "http://127.0.0.1:9/v1" }),
+            None,
+        )
+        .await
+        .unwrap();
+    let alice_connection = app
+        .store
+        .create_connection(
+            app.org_id,
+            connector.id,
+            "Alice webhook",
+            &json!({ "url": "http://127.0.0.1:9/alice" }),
+            &[],
+            None,
+            Some(alice.id),
+        )
+        .await
+        .unwrap();
+    let bob_connection = app
+        .store
+        .create_connection(
+            app.org_id,
+            connector.id,
+            "Bob webhook",
+            &json!({ "url": "http://127.0.0.1:9/bob" }),
+            &[],
+            None,
+            Some(bob.id),
+        )
+        .await
+        .unwrap();
+    let alice_worker = app
+        .store
+        .create_worker_profile(
+            app.org_id,
+            "Alice worker",
+            "mock",
+            "local",
+            "deployment",
+            "orbit-worker",
+            "test",
+            "all",
+            &[],
+            &[],
+            None,
+            None,
+            None,
+            &json!({}),
+            &json!({}),
+            &json!({}),
+        )
+        .await
+        .unwrap();
+    let bob_worker = app
+        .store
+        .create_worker_profile(
+            app.org_id,
+            "Bob worker",
+            "mock",
+            "local",
+            "deployment",
+            "orbit-worker",
+            "test",
+            "all",
+            &[],
+            &[],
+            None,
+            None,
+            None,
+            &json!({}),
+            &json!({}),
+            &json!({}),
+        )
+        .await
+        .unwrap();
+    let alice_trigger = app
+        .store
+        .create_trigger(app.org_id, alice_agent, "manual", json!({}), true)
+        .await
+        .unwrap();
+    let bob_trigger = app
+        .store
+        .create_trigger(app.org_id, bob_agent, "manual", json!({}), true)
+        .await
+        .unwrap();
+    let alice_policy = app
+        .store
+        .create_tool_policy(
+            app.org_id,
+            None,
+            "Alice policy",
+            100,
+            true,
+            "allow",
+            &json!({}),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    let bob_policy = app
+        .store
+        .create_tool_policy(
+            app.org_id,
+            None,
+            "Bob policy",
+            100,
+            true,
+            "allow",
+            &json!({}),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+    for (table, alice_id, bob_id) in [
+        ("providers", alice_provider.id, bob_provider.id),
+        ("connections", alice_connection.id, bob_connection.id),
+        ("worker_profiles", alice_worker.id, bob_worker.id),
+        ("triggers", alice_trigger.id, bob_trigger.id),
+        ("tool_policies", alice_policy.id, bob_policy.id),
+    ] {
+        make_private(&app.store, app.org_id, table, alice_id, alice.id).await;
+        make_private(&app.store, app.org_id, table, bob_id, bob.id).await;
+    }
+
+    for (list, path, bob_id, has_get) in [
+        ("providers", "/api/v1/providers", bob_provider.id, true),
+        (
+            "connections",
+            "/api/v1/connections",
+            bob_connection.id,
+            true,
+        ),
+        (
+            "worker_profiles",
+            "/api/v1/worker-profiles",
+            bob_worker.id,
+            true,
+        ),
+        ("triggers", "/api/v1/triggers", bob_trigger.id, false),
+        (
+            "tool_policies",
+            "/api/v1/tool-policies",
+            bob_policy.id,
+            false,
+        ),
+    ] {
+        let (status, body) = send(&app.router, auth_get(list, &alice_token)).await;
+        assert_eq!(status, StatusCode::OK, "{path} list");
+        let items = body
+            .as_array()
+            .unwrap_or_else(|| panic!("{path} list is not an array"));
+        assert!(
+            items.iter().all(|item| item["id"] != bob_id.to_string()),
+            "{path} leaked another user's resource"
+        );
+
+        if has_get {
+            let (status, _) = send(
+                &app.router,
+                auth_get(&format!("{path}/{bob_id}"), &alice_token),
+            )
+            .await;
+            assert_eq!(status, StatusCode::NOT_FOUND, "{path}/{{id}} get");
+        }
+
+        let (status, _) = send(
+            &app.router,
+            auth_delete(&format!("{path}/{bob_id}"), &alice_token),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{path}/{{id}} delete");
+    }
+
+    // The owner still sees their own resource.
+    let (status, body) = send(
+        &app.router,
+        auth_get(
+            &format!("/api/v1/providers/{}", bob_provider.id),
+            &bob_token,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["id"], bob_provider.id.to_string());
+}
