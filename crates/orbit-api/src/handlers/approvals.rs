@@ -95,6 +95,22 @@ async fn decide(
     comment: Option<String>,
 ) -> Result<Json<Approval>, ApiError> {
     auth.require(Permission::ApprovalsDecide)?;
+    let existing = state.store.get_approval(auth.org_id, approval_id).await?;
+    let execution = state
+        .store
+        .get_execution(auth.org_id, existing.execution_id)
+        .await?;
+    let agent = state
+        .store
+        .get_agent(auth.org_id, execution.agent_id)
+        .await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_view(
+        "approval",
+        agent.owner_user_id,
+        agent.owner_team_id,
+        &agent.visibility,
+    )?;
     let approval = state
         .store
         .decide_approval(

@@ -8,6 +8,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Security
+
+- Approval decisions now require visibility of the underlying execution's agent. Added
+  cross-team tests for execution get/events/SSE/cancel and approval lists.
+
 ### Added
 
 - Agent Teams now carry owner/visibility and are filtered like other shareable resources.

@@ -1100,3 +1100,83 @@ async fn private_agent_teams_and_runs_are_hidden_from_other_users() {
     .await;
     assert_eq!(status, StatusCode::OK);
 }
+
+#[tokio::test]
+async fn private_execution_events_and_approvals_are_hidden() {
+    let Some(app) = test_app(true).await else {
+        return;
+    };
+    let alice = app
+        .store
+        .ensure_user(
+            app.org_id,
+            "exec-alice@test.local",
+            "Alice",
+            UserRole::Operator,
+        )
+        .await
+        .unwrap();
+    let bob = app
+        .store
+        .ensure_user(app.org_id, "exec-bob@test.local", "Bob", UserRole::Operator)
+        .await
+        .unwrap();
+    let alice_token = token_for(&app.store, app.org_id, alice.id, "alice").await;
+    let bob_token = token_for(&app.store, app.org_id, bob.id, "bob").await;
+    let bob_agent = create_demo_agent(&app.store, app.org_id, bob.id).await;
+    make_private(&app.store, app.org_id, "agents", bob_agent, bob.id).await;
+
+    let (status, execution) = send(
+        &app.router,
+        auth_post(
+            &format!("/api/v1/agents/{bob_agent}/executions"),
+            &bob_token,
+            json!({ "task": "private execution" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let execution_id = execution["id"].as_str().unwrap();
+
+    for path in [
+        format!("/api/v1/executions/{execution_id}"),
+        format!("/api/v1/executions/{execution_id}/events"),
+        format!("/api/v1/executions/{execution_id}/events/stream"),
+    ] {
+        let (status, _) = send(&app.router, auth_get(&path, &alice_token)).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{path}");
+    }
+
+    let (status, _) = send(
+        &app.router,
+        auth_post(
+            &format!("/api/v1/executions/{execution_id}/cancel"),
+            &alice_token,
+            json!({}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let approval = app
+        .store
+        .create_approval(
+            app.org_id,
+            Uuid::parse_str(execution_id).unwrap(),
+            json!({ "action": "deploy" }),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let (status, body) = send(&app.router, auth_get("/api/v1/approvals", &alice_token)).await;
+    assert!(
+        status == StatusCode::FORBIDDEN
+            || (status == StatusCode::OK
+                && body
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|item| item["id"] != approval.id.to_string()))
+    );
+}
