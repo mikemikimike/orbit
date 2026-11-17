@@ -942,27 +942,12 @@ async fn private_resources_are_hidden_from_other_users() {
         make_private(&app.store, app.org_id, table, bob_id, bob.id).await;
     }
 
-    for (list, path, bob_id, has_get) in [
-        ("providers", "/api/v1/providers", bob_provider.id, true),
-        (
-            "connections",
-            "/api/v1/connections",
-            bob_connection.id,
-            true,
-        ),
-        (
-            "worker_profiles",
-            "/api/v1/worker-profiles",
-            bob_worker.id,
-            true,
-        ),
-        ("triggers", "/api/v1/triggers", bob_trigger.id, false),
-        (
-            "tool_policies",
-            "/api/v1/tool-policies",
-            bob_policy.id,
-            false,
-        ),
+    for (path, bob_id, has_get) in [
+        ("/api/v1/providers", bob_provider.id, true),
+        ("/api/v1/connections", bob_connection.id, true),
+        ("/api/v1/worker-profiles", bob_worker.id, true),
+        ("/api/v1/triggers", bob_trigger.id, false),
+        ("/api/v1/tool-policies", bob_policy.id, false),
     ] {
         let (status, body) = send(&app.router, auth_get(path, &alice_token)).await;
         assert_eq!(status, StatusCode::OK, "{path} list");

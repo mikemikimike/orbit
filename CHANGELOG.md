@@ -8,6 +8,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- Worker profile create/update rejects referenced agents and skills the caller cannot see,
+  preventing a team profile from being configured against another team's resources.
+
 ### Changed
 
 - List visibility is now enforced by repository SQL predicates for agents, skills,

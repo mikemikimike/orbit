@@ -332,6 +332,7 @@ pub async fn create_profile(
     crate::extract::ApiJson(body): crate::extract::ApiJson<CreateWorkerProfileRequest>,
 ) -> Result<(StatusCode, Json<WorkerProfile>), ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
     state.enforce_limit(
         "workers",
         state
@@ -358,7 +359,13 @@ pub async fn create_profile(
     }
     for slug in &body.skill_slugs {
         match state.store.get_skill_by_slug(auth.org_id, slug).await? {
-            Some(_) => {}
+            Some(skill)
+                if access.can_view(skill.owner_user_id, skill.owner_team_id, &skill.visibility) => {
+            }
+            Some(_) => issues.push(ValidationIssue::new(
+                "skillSlugs",
+                format!("skill '{slug}' is not visible to you"),
+            )),
             None => issues.push(ValidationIssue::new(
                 "skillSlugs",
                 format!("unknown skill '{slug}'"),
@@ -366,11 +373,18 @@ pub async fn create_profile(
         }
     }
     for agent_id in &body.agent_ids {
-        if state.store.get_agent(auth.org_id, *agent_id).await.is_err() {
-            issues.push(ValidationIssue::new(
+        match state.store.get_agent(auth.org_id, *agent_id).await {
+            Ok(agent)
+                if access.can_view(agent.owner_user_id, agent.owner_team_id, &agent.visibility) => {
+            }
+            Ok(_) => issues.push(ValidationIssue::new(
+                "agentIds",
+                format!("agent '{agent_id}' is not visible to you"),
+            )),
+            Err(_) => issues.push(ValidationIssue::new(
                 "agentIds",
                 format!("unknown agent '{agent_id}'"),
-            ));
+            )),
         }
     }
     if !issues.is_empty() {
@@ -481,24 +495,33 @@ pub async fn update_profile(
         issues.push(ValidationIssue::new("name", "name is required"));
     }
     for slug in &body.skill_slugs {
-        if state
-            .store
-            .get_skill_by_slug(auth.org_id, slug)
-            .await?
-            .is_none()
-        {
-            issues.push(ValidationIssue::new(
+        match state.store.get_skill_by_slug(auth.org_id, slug).await? {
+            Some(skill)
+                if access.can_view(skill.owner_user_id, skill.owner_team_id, &skill.visibility) => {
+            }
+            Some(_) => issues.push(ValidationIssue::new(
+                "skillSlugs",
+                format!("skill '{slug}' is not visible to you"),
+            )),
+            None => issues.push(ValidationIssue::new(
                 "skillSlugs",
                 format!("unknown skill '{slug}'"),
-            ));
+            )),
         }
     }
     for agent_id in &body.agent_ids {
-        if state.store.get_agent(auth.org_id, *agent_id).await.is_err() {
-            issues.push(ValidationIssue::new(
+        match state.store.get_agent(auth.org_id, *agent_id).await {
+            Ok(agent)
+                if access.can_view(agent.owner_user_id, agent.owner_team_id, &agent.visibility) => {
+            }
+            Ok(_) => issues.push(ValidationIssue::new(
+                "agentIds",
+                format!("agent '{agent_id}' is not visible to you"),
+            )),
+            Err(_) => issues.push(ValidationIssue::new(
                 "agentIds",
                 format!("unknown agent '{agent_id}'"),
-            ));
+            )),
         }
     }
     if !issues.is_empty() {
