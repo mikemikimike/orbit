@@ -39,6 +39,7 @@ pub async fn list_approvals(
             return Err(ApiError::bad_request("unknown approval status"));
         }
     }
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
     let approvals = state
         .store
         .list_approvals(
@@ -47,7 +48,23 @@ pub async fn list_approvals(
             query.limit.unwrap_or(50).clamp(1, 200) as i64,
         )
         .await?;
-    Ok(Json(approvals))
+    let mut visible = Vec::with_capacity(approvals.len());
+    for approval in approvals {
+        let Ok(execution) = state
+            .store
+            .get_execution(auth.org_id, approval.approval.execution_id)
+            .await
+        else {
+            continue;
+        };
+        let Ok(agent) = state.store.get_agent(auth.org_id, execution.agent_id).await else {
+            continue;
+        };
+        if access.can_view(agent.owner_user_id, agent.owner_team_id, &agent.visibility) {
+            visible.push(approval);
+        }
+    }
+    Ok(Json(visible))
 }
 
 #[utoipa::path(post, path = "/api/v1/approvals/{approval_id}/approve", tag = "approvals", request_body = ApprovalDecisionRequest, responses((status = 200, body = Approval)))]

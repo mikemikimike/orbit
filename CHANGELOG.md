@@ -10,6 +10,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- Execution visibility follows the agent's access scope for list/get/events/SSE/cancel and
+  approvals. Team workers claim only org-visible or owning-team agents.
+
+### Added
+
 - Worker claims are scoped by the worker profile's owning team: a team worker only claims
   queued executions whose agent is org-visible or owned by that team. Profile-less worker
   tokens keep the existing org-wide behavior.

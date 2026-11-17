@@ -22,6 +22,26 @@ use crate::error::ApiError;
 use crate::handlers::{limit, parse_spec};
 use crate::state::AppState;
 
+async fn require_execution_view(
+    state: &AppState,
+    auth: &AuthContext,
+    execution_id: Uuid,
+) -> Result<ExecutionRecord, ApiError> {
+    let execution = state.store.get_execution(auth.org_id, execution_id).await?;
+    let agent = state
+        .store
+        .get_agent(auth.org_id, execution.agent_id)
+        .await?;
+    let access = crate::access::AccessScope::load(state, auth).await?;
+    access.require_view(
+        "execution",
+        agent.owner_user_id,
+        agent.owner_team_id,
+        &agent.visibility,
+    )?;
+    Ok(execution)
+}
+
 #[utoipa::path(get, path = "/api/v1/executions", tag = "executions", params(ExecutionListQuery), responses((status = 200, body = ExecutionPage)))]
 pub async fn list_executions(
     State(state): State<AppState>,
@@ -34,7 +54,8 @@ pub async fn list_executions(
             return Err(ApiError::bad_request(format!("unknown status '{status}'")));
         }
     }
-    let (items, next_cursor, total) = state
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    let (items, next_cursor, _total) = state
         .store
         .list_executions(
             auth.org_id,
@@ -45,8 +66,19 @@ pub async fn list_executions(
             query.archived,
         )
         .await?;
+    let mut visible = Vec::with_capacity(items.len());
+    for execution in items {
+        let agent = state
+            .store
+            .get_agent(auth.org_id, execution.agent_id)
+            .await?;
+        if access.can_view(agent.owner_user_id, agent.owner_team_id, &agent.visibility) {
+            visible.push(execution);
+        }
+    }
+    let total = visible.len() as i64;
     Ok(Json(ExecutionPage {
-        items,
+        items: visible,
         next_cursor,
         total,
     }))
@@ -60,7 +92,7 @@ pub async fn get_execution(
 ) -> Result<Json<ExecutionRecord>, ApiError> {
     auth.require(Permission::ExecutionsRead)?;
     Ok(Json(
-        state.store.get_execution(auth.org_id, execution_id).await?,
+        require_execution_view(&state, &auth, execution_id).await?,
     ))
 }
 
@@ -72,8 +104,7 @@ pub async fn list_execution_events(
     Query(query): Query<EventListQuery>,
 ) -> Result<Json<ExecutionEventPage>, ApiError> {
     auth.require(Permission::ExecutionsRead)?;
-    // Ensure the execution exists in this org before exposing events.
-    state.store.get_execution(auth.org_id, execution_id).await?;
+    require_execution_view(&state, &auth, execution_id).await?;
     let items = state
         .store
         .list_execution_events(
@@ -94,7 +125,14 @@ pub async fn list_agent_executions(
     Query(query): Query<ExecutionListQuery>,
 ) -> Result<Json<ExecutionPage>, ApiError> {
     auth.require(Permission::ExecutionsRead)?;
-    state.store.get_agent(auth.org_id, agent_id).await?;
+    let agent = state.store.get_agent(auth.org_id, agent_id).await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_view(
+        "agent",
+        agent.owner_user_id,
+        agent.owner_team_id,
+        &agent.visibility,
+    )?;
     let (items, next_cursor, total) = state
         .store
         .list_executions(
@@ -346,6 +384,7 @@ pub async fn cancel_execution(
     Path(execution_id): Path<Uuid>,
 ) -> Result<Json<ExecutionRecord>, ApiError> {
     auth.require(Permission::ExecutionsCancel)?;
+    require_execution_view(&state, &auth, execution_id).await?;
     let execution = state
         .store
         .request_execution_cancel(auth.org_id, execution_id)
@@ -382,7 +421,7 @@ pub async fn stream_execution_events(
     Query(query): Query<EventListQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
     auth.require(Permission::ExecutionsRead)?;
-    state.store.get_execution(auth.org_id, execution_id).await?;
+    require_execution_view(&state, &auth, execution_id).await?;
 
     let last_event_id = headers
         .get("last-event-id")
