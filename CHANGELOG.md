@@ -16,7 +16,8 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
   with a live worker asks **Save only / Save & relaunch** and warns that running agents may
   be interrupted.
 - Outputs API (`/api/v1/outputs`) with Slack, Mattermost and generic webhook delivery,
-  durable outbox retries and a test endpoint. UI/SSRF/HMAC hardening is tracked in #28.
+  durable outbox retries and a test endpoint. Outputs page with create/edit/test/delete;
+  SSRF/HMAC hardening remains in #28.
 
 ### Fixed
 

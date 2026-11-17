@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Cpu,
   LayoutDashboard,
+  Megaphone,
   Plus,
   Server,
   Settings,
@@ -61,6 +62,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Operations",
     items: [
       { href: "/workers", label: "Workers", icon: Server },
+      { href: "/outputs", label: "Outputs", icon: Megaphone },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
   },

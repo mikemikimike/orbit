@@ -1,9 +1,15 @@
 # Outputs (webhooks, Slack, Mattermost)
 
-Outputs deliver an execution result after it reaches a terminal state. The first slice is
-API-only; the UI is tracked in #28.
+Outputs deliver an execution result after it reaches a terminal state. Manage them under
+**Outputs** in the sidebar (or via the API below).
 
-## Create
+## UI
+
+**Outputs → New output**: name, kind, optional agent, events, incoming webhook URL,
+optional template and enabled toggle. **Test** sends a sample notification; edit leaves the
+URL blank to keep the existing one.
+
+## Create via API
 
 ```bash
 curl -X POST "$API/api/v1/outputs" \
@@ -42,5 +48,5 @@ curl -X POST "$API/api/v1/outputs/$OUTPUT_ID/test" \
 - Deliveries are unique per `(output, execution)`.
 - List outputs: `GET /api/v1/outputs`; update/delete via `PATCH/DELETE /api/v1/outputs/{id}`.
 
-Not yet implemented: UI, HMAC signing for generic webhooks, SSRF/private-network blocking,
-team scoping, delivery log in the UI, and template rendering beyond the built-in summary.
+Not yet implemented: HMAC signing for generic webhooks, SSRF/private-network blocking,
+team scoping, a delivery-log UI, and template rendering beyond the built-in summary.
