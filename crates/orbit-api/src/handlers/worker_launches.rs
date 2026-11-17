@@ -15,7 +15,6 @@ use uuid::Uuid;
 use orbit_security::{AuthContext, Permission};
 use orbit_store::WorkerLaunch;
 
-use crate::dto::ArchiveListQuery;
 use crate::error::ApiError;
 use crate::state::AppState;
 
@@ -219,17 +218,25 @@ async fn fail_worker_executions(state: &AppState, launch: &WorkerLaunch) {
     }
 }
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkerLaunchesQuery {
+    #[serde(default)]
+    pub include_inactive: bool,
+}
+
 #[utoipa::path(get, path = "/api/v1/worker-launches", tag = "workers", responses((status = 200, body = [WorkerLaunch])))]
 pub async fn list_launches(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
-    Query(query): Query<ArchiveListQuery>,
+    Query(query): Query<WorkerLaunchesQuery>,
 ) -> Result<Json<Vec<WorkerLaunch>>, ApiError> {
     auth.require(Permission::HarnessesRead)?;
-    let launches = state
-        .store
-        .list_worker_launches(auth.org_id, query.archived)
-        .await?;
+    let launches = if query.include_inactive {
+        state.store.list_worker_launches(auth.org_id, None).await?
+    } else {
+        state.store.list_active_worker_launches(auth.org_id).await?
+    };
     let mut refreshed = Vec::with_capacity(launches.len());
     for launch in launches {
         refreshed.push(refresh(&state, launch).await);

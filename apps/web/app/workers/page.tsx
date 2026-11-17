@@ -53,7 +53,8 @@ const DEFAULT_IMAGES = DEFAULT_WORKER_IMAGES;
 
 function WorkersPageInner() {
   const profiles = useWorkerProfiles();
-  const launches = useWorkerLaunches();
+  const [showInactive, setShowInactive] = useState(false);
+  const launches = useWorkerLaunches(showInactive);
   const providers = useProviders();
   const agents = useAgents({ limit: 100 });
   const skills = useSkills();
@@ -465,11 +466,20 @@ function WorkersPageInner() {
       )}
 
       <div className="space-y-3">
-        <div>
-          <h2 className="text-sm font-semibold">Launches</h2>
-          <p className="text-[11px] text-muted-foreground">
-            Worker instances started by the optional launcher. Stop or inspect logs here.
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold">Launches</h2>
+            <p className="text-[11px] text-muted-foreground">
+              Active worker instances started by the launcher.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant={showInactive ? "secondary" : "ghost"}
+            onClick={() => setShowInactive((current) => !current)}
+          >
+            {showInactive ? "Active only" : "Show history"}
+          </Button>
         </div>
         {launches.isLoading ? (
           <Skeleton className="h-20 rounded-xl" />
@@ -477,7 +487,9 @@ function WorkersPageInner() {
           <p className="text-sm text-destructive">{errorMessage(launches.error)}</p>
         ) : !launches.data?.length ? (
           <p className="rounded-xl border border-dashed p-4 text-xs text-muted-foreground">
-            No launches yet. Use Launch on an enabled profile.
+            {showInactive
+              ? "No launches yet. Use Launch on an enabled profile."
+              : "No active launches. Use Launch on an enabled profile or show history."}
           </p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -524,14 +536,25 @@ function WorkersPageInner() {
                     >
                       <ScrollText /> Logs
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={!["pending", "starting", "running"].includes(item.status)}
-                      onClick={() => stop.mutate(item.id)}
-                    >
-                      <Square /> Stop
-                    </Button>
+                    {["pending", "starting", "running"].includes(item.status) ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={!["pending", "starting", "running"].includes(item.status)}
+                        onClick={() => stop.mutate(item.id)}
+                      >
+                        <Square /> Stop
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => launch.mutate(item.profileId)}
+                        loading={launch.isPending}
+                      >
+                        <Rocket /> Relaunch
+                      </Button>
+                    )}
                   </div>
                   <p className="text-[10px] text-muted-foreground">
                     updated {relativeTime(item.updatedAt)}

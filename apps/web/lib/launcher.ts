@@ -21,6 +21,7 @@ export function workerLaunchLogs(launchId: string): Promise<{ logs: string }> {
   return request<{ logs: string }>(`/api/v1/worker-launches/${launchId}/logs`);
 }
 
-export function workerLaunches(): Promise<WorkerLaunch[]> {
-  return request<WorkerLaunch[]>("/api/v1/worker-launches");
+export function workerLaunches(includeInactive = false): Promise<WorkerLaunch[]> {
+  const query = includeInactive ? "?includeInactive=true" : "";
+  return request<WorkerLaunch[]>(`/api/v1/worker-launches${query}`);
 }

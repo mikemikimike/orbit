@@ -8,6 +8,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- Worker launches default to active instances only; stopped/failed launches are available
+  behind **Show history** and have a Relaunch button. Removed `ArchiveListQuery` from the
+  launches endpoint.
+
 ## [0.11.0] — 2026-11-16
 
 ### Added

@@ -334,10 +334,10 @@ export function useTeamRuns(archived?: boolean) {
   });
 }
 
-export function useWorkerLaunches() {
+export function useWorkerLaunches(includeInactive = false) {
   return useQuery<WorkerLaunch[]>({
-    queryKey: queryKeys.workerLaunches,
-    queryFn: workerLaunches,
+    queryKey: [...queryKeys.workerLaunches, includeInactive ? "all" : "active"],
+    queryFn: () => workerLaunches(includeInactive),
     refetchInterval: 5_000,
   });
 }

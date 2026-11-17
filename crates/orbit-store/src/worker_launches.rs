@@ -189,3 +189,26 @@ impl Store {
         Ok(result.rows_affected())
     }
 }
+
+impl Store {
+    /// Launches currently in flight. Terminal/stopped launches are history and are hidden
+    /// from the default Workers view.
+    pub async fn list_active_worker_launches(
+        &self,
+        org_id: Uuid,
+    ) -> StoreResult<Vec<WorkerLaunch>> {
+        Ok(sqlx::query_as::<_, WorkerLaunch>(
+            r#"
+            SELECT * FROM worker_launches
+            WHERE org_id = $1
+              AND archived_at IS NULL
+              AND status IN ('pending', 'starting', 'running')
+            ORDER BY created_at DESC
+            LIMIT 100
+            "#,
+        )
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+}

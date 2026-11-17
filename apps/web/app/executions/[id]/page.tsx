@@ -293,7 +293,7 @@ export default function ExecutionDetailPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card className="min-w-0 lg:col-span-3">
           <CardHeader className="flex-row items-center justify-between pb-3">
             <CardTitle className="flex items-center gap-2">
               <Terminal className="h-4 w-4 text-primary" /> Harness timeline
