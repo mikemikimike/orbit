@@ -996,6 +996,14 @@ async fn team_worker_cannot_claim_another_teams_execution() {
         .await
         .unwrap();
 
+    let stored_a = store.get_agent(org, agent_a.id).await.unwrap();
+    let stored_b = store.get_agent(org, agent_b.id).await.unwrap();
+    assert_eq!(stored_a.visibility, "team");
+    assert_eq!(stored_a.owner_team_id, Some(team_a.id));
+    assert_eq!(stored_b.visibility, "team");
+    assert_eq!(stored_b.owner_team_id, Some(team_b.id));
+    assert_ne!(team_a.id, team_b.id);
+
     let input = serde_json::json!({
         "task": "x", "payload": {},
         "provenance": { "source": "test", "trusted": true, "receivedAt": chrono::Utc::now() }
@@ -1040,6 +1048,9 @@ async fn team_worker_cannot_claim_another_teams_execution() {
         })
         .await
         .unwrap();
+
+    assert_eq!(exec_a.agent_id, agent_a.id);
+    assert_eq!(exec_b.agent_id, agent_b.id);
 
     // B was queued first but is invisible to Team A.
     let claimed = store
