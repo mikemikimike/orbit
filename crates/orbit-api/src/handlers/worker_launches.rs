@@ -270,6 +270,13 @@ pub(crate) async fn launch_profile_internal(
         .store
         .get_worker_profile(auth.org_id, profile_id)
         .await?;
+    let access = crate::access::AccessScope::load(state, auth).await?;
+    access.require_view(
+        "worker profile",
+        profile.owner_user_id,
+        profile.owner_team_id,
+        &profile.visibility,
+    )?;
     if !profile.enabled {
         return Err(ApiError::conflict(
             "enable the worker profile before launching it",

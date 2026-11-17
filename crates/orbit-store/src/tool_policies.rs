@@ -104,6 +104,15 @@ impl Store {
         Ok(())
     }
 
+    pub async fn get_tool_policy(&self, org_id: Uuid, policy_id: Uuid) -> StoreResult<ToolPolicy> {
+        sqlx::query_as::<_, ToolPolicy>("SELECT * FROM tool_policies WHERE org_id = $1 AND id = $2")
+            .bind(org_id)
+            .bind(policy_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| StoreError::NotFound("tool policy".into()))
+    }
+
     /// List rules for management: without an agent this is the org-level set; with an
     /// agent it is the effective set (org defaults + that agent's rules).
     pub async fn list_tool_policies(

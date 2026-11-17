@@ -145,6 +145,21 @@ pub async fn execute_agent(
     )?;
     let version = state.store.get_current_version(auth.org_id, &agent).await?;
     let spec = parse_spec(&version)?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    for binding in &spec.connectors {
+        if let Some(connection_id) = binding.connection_id {
+            let connection = state
+                .store
+                .get_connection(auth.org_id, connection_id)
+                .await?;
+            access.require_view(
+                "connection",
+                connection.owner_user_id,
+                connection.owner_team_id,
+                &connection.visibility,
+            )?;
+        }
+    }
     let task = if body.task.trim().is_empty() {
         spec.run_defaults
             .task

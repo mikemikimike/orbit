@@ -10,9 +10,10 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
-- Access scope for multi-team visibility: agents and skills now enforce
-  `private | team | org` visibility for list/get/execute/update/delete/export, with org
-  owners/admins able to govern and team leads able to manage their team's resources.
+- Access scope for multi-team visibility: agents, skills, connections, providers, worker
+  profiles, triggers and tool policies enforce `private | team | org` visibility on
+  list/get/update/delete/export; agent execution requires access to the agent and its
+  referenced connections. Org owners/admins govern; team leads manage their team resources.
 
 ### Added
 

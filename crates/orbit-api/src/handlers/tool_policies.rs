@@ -127,10 +127,20 @@ pub async fn list(
     Query(query): Query<ListToolPoliciesQuery>,
 ) -> Result<Json<Vec<ToolPolicyView>>, ApiError> {
     auth.require(Permission::SettingsRead)?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
     let rows = state
         .store
         .list_tool_policies(auth.org_id, query.agent_id)
-        .await?;
+        .await?
+        .into_iter()
+        .filter(|policy| {
+            access.can_view(
+                policy.owner_user_id,
+                policy.owner_team_id,
+                &policy.visibility,
+            )
+        })
+        .collect::<Vec<_>>();
     let mut views = Vec::with_capacity(rows.len());
     for row in rows {
         views.push(ToolPolicyView::try_from(row)?);
@@ -189,6 +199,14 @@ pub async fn update(
     crate::extract::ApiJson(body): crate::extract::ApiJson<ToolPolicyRequest>,
 ) -> Result<Json<ToolPolicyView>, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    let existing = state.store.get_tool_policy(auth.org_id, policy_id).await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_manage(
+        "tool policy",
+        existing.owner_user_id,
+        existing.owner_team_id,
+        &existing.visibility,
+    )?;
     let rule = validated(&body)?;
     if let Some(agent_id) = body.agent_id {
         state.store.get_agent(auth.org_id, agent_id).await?;
@@ -233,6 +251,14 @@ pub async fn delete(
     Path(policy_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    let existing = state.store.get_tool_policy(auth.org_id, policy_id).await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_manage(
+        "tool policy",
+        existing.owner_user_id,
+        existing.owner_team_id,
+        &existing.visibility,
+    )?;
     state
         .store
         .delete_tool_policy(auth.org_id, policy_id)

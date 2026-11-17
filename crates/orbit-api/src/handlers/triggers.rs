@@ -110,6 +110,14 @@ pub async fn update_trigger(
     crate::extract::ApiJson(body): crate::extract::ApiJson<UpdateTriggerRequest>,
 ) -> Result<Json<Trigger>, ApiError> {
     auth.require(Permission::TriggersWrite)?;
+    let trigger = state.store.get_trigger(auth.org_id, trigger_id).await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_manage(
+        "trigger",
+        trigger.owner_user_id,
+        trigger.owner_team_id,
+        &trigger.visibility,
+    )?;
     let trigger = match body.enabled {
         Some(enabled) => {
             state
@@ -138,6 +146,14 @@ pub async fn delete_trigger(
     Path(trigger_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     auth.require(Permission::TriggersWrite)?;
+    let trigger = state.store.get_trigger(auth.org_id, trigger_id).await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_manage(
+        "trigger",
+        trigger.owner_user_id,
+        trigger.owner_team_id,
+        &trigger.visibility,
+    )?;
     state.store.delete_trigger(auth.org_id, trigger_id).await?;
     audit::record(
         &state,

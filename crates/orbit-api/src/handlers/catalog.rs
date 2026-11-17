@@ -84,13 +84,22 @@ pub async fn list_providers(
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Json<Vec<ProviderView>>, ApiError> {
     auth.require(Permission::ProvidersRead)?;
-    let providers = state.store.list_providers(auth.org_id).await?;
-    Ok(Json(
-        providers
-            .into_iter()
-            .map(ProviderView::from_record)
-            .collect(),
-    ))
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    let providers = state
+        .store
+        .list_providers(auth.org_id)
+        .await?
+        .into_iter()
+        .filter(|provider| {
+            access.can_view(
+                provider.owner_user_id,
+                provider.owner_team_id,
+                &provider.visibility,
+            )
+        })
+        .map(ProviderView::from_record)
+        .collect();
+    Ok(Json(providers))
 }
 
 #[utoipa::path(post, path = "/api/v1/providers", tag = "providers", request_body = CreateProviderRequest, responses((status = 201, body = ProviderView)))]
@@ -178,6 +187,13 @@ pub async fn update_provider(
 ) -> Result<Json<ProviderView>, ApiError> {
     auth.require(Permission::ProvidersWrite)?;
     let existing = state.store.get_provider(auth.org_id, provider_id).await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_manage(
+        "provider",
+        existing.owner_user_id,
+        existing.owner_team_id,
+        &existing.visibility,
+    )?;
     let kind = ProviderKind::parse(&existing.kind)
         .ok_or_else(|| ApiError::internal("provider has an unknown kind"))?;
 
@@ -248,6 +264,13 @@ pub async fn delete_provider(
 ) -> Result<StatusCode, ApiError> {
     auth.require(Permission::ProvidersWrite)?;
     let provider = state.store.get_provider(auth.org_id, provider_id).await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_manage(
+        "provider",
+        provider.owner_user_id,
+        provider.owner_team_id,
+        &provider.visibility,
+    )?;
     state
         .store
         .delete_provider(auth.org_id, provider_id)
@@ -278,6 +301,13 @@ pub async fn probe_provider(
 ) -> Result<Json<ProviderProbeResponse>, ApiError> {
     auth.require(Permission::ProvidersRead)?;
     let provider = state.store.get_provider(auth.org_id, provider_id).await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_view(
+        "provider",
+        provider.owner_user_id,
+        provider.owner_team_id,
+        &provider.visibility,
+    )?;
     let kind = ProviderKind::parse(&provider.kind)
         .ok_or_else(|| ApiError::internal("provider has an unknown kind"))?;
     if kind == ProviderKind::HarnessManaged {
@@ -463,8 +493,22 @@ pub async fn list_connections(
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Json<Vec<ConnectionView>>, ApiError> {
     auth.require(Permission::ConnectionsRead)?;
-    let rows = state.store.list_connections(auth.org_id).await?;
-    Ok(Json(rows.into_iter().map(ConnectionView::from).collect()))
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    let rows = state
+        .store
+        .list_connections(auth.org_id)
+        .await?
+        .into_iter()
+        .filter(|row| {
+            access.can_view(
+                row.connection.owner_user_id,
+                row.connection.owner_team_id,
+                &row.connection.visibility,
+            )
+        })
+        .map(ConnectionView::from)
+        .collect();
+    Ok(Json(rows))
 }
 
 #[utoipa::path(post, path = "/api/v1/connections", tag = "connectors", request_body = CreateConnectionRequest, responses((status = 201, body = ConnectionView)))]
@@ -559,6 +603,13 @@ pub async fn update_connection(
         .store
         .get_connection(auth.org_id, connection_id)
         .await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_manage(
+        "connection",
+        existing.owner_user_id,
+        existing.owner_team_id,
+        &existing.visibility,
+    )?;
     let name = body
         .name
         .as_deref()
@@ -628,6 +679,13 @@ pub async fn delete_connection(
         .store
         .get_connection(auth.org_id, connection_id)
         .await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_manage(
+        "connection",
+        connection.owner_user_id,
+        connection.owner_team_id,
+        &connection.visibility,
+    )?;
     state
         .store
         .delete_connection(auth.org_id, connection_id)

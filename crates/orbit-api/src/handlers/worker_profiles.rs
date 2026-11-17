@@ -50,6 +50,24 @@ pub struct CreateWorkerProfileRequest {
     pub resources: serde_json::Value,
 }
 
+async fn require_profile_manage(
+    state: &AppState,
+    auth: &AuthContext,
+    profile_id: Uuid,
+) -> Result<(), ApiError> {
+    let profile = state
+        .store
+        .get_worker_profile(auth.org_id, profile_id)
+        .await?;
+    let access = crate::access::AccessScope::load(state, auth).await?;
+    access.require_manage(
+        "worker profile",
+        profile.owner_user_id,
+        profile.owner_team_id,
+        &profile.visibility,
+    )
+}
+
 fn default_target() -> String {
     "docker".into()
 }
@@ -298,7 +316,22 @@ pub async fn list_profiles(
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Json<Vec<WorkerProfile>>, ApiError> {
     auth.require(Permission::HarnessesRead)?;
-    Ok(Json(state.store.list_worker_profiles(auth.org_id).await?))
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    Ok(Json(
+        state
+            .store
+            .list_worker_profiles(auth.org_id)
+            .await?
+            .into_iter()
+            .filter(|profile| {
+                access.can_view(
+                    profile.owner_user_id,
+                    profile.owner_team_id,
+                    &profile.visibility,
+                )
+            })
+            .collect(),
+    ))
 }
 
 #[utoipa::path(post, path = "/api/v1/worker-profiles", tag = "workers", request_body = CreateWorkerProfileRequest, responses((status = 201, body = WorkerProfile)))]
@@ -413,6 +446,13 @@ pub async fn update_profile(
         .store
         .get_worker_profile(auth.org_id, profile_id)
         .await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_manage(
+        "worker profile",
+        existing.owner_user_id,
+        existing.owner_team_id,
+        &existing.visibility,
+    )?;
     let mut attached_before: Vec<Uuid> = state
         .store
         .list_worker_profile_env_mappings(profile_id)
@@ -566,12 +606,18 @@ pub async fn get_profile(
     Path(profile_id): Path<Uuid>,
 ) -> Result<Json<WorkerProfile>, ApiError> {
     auth.require(Permission::HarnessesRead)?;
-    Ok(Json(
-        state
-            .store
-            .get_worker_profile(auth.org_id, profile_id)
-            .await?,
-    ))
+    let profile = state
+        .store
+        .get_worker_profile(auth.org_id, profile_id)
+        .await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_view(
+        "worker profile",
+        profile.owner_user_id,
+        profile.owner_team_id,
+        &profile.visibility,
+    )?;
+    Ok(Json(profile))
 }
 
 #[utoipa::path(post, path = "/api/v1/worker-profiles/{profile_id}/enable", tag = "workers", responses((status = 200, body = WorkerProfile)))]
@@ -581,6 +627,7 @@ pub async fn enable_profile(
     Path(profile_id): Path<Uuid>,
 ) -> Result<Json<WorkerProfile>, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    require_profile_manage(&state, &auth, profile_id).await?;
     Ok(Json(
         state
             .store
@@ -596,6 +643,7 @@ pub async fn disable_profile(
     Path(profile_id): Path<Uuid>,
 ) -> Result<Json<WorkerProfile>, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    require_profile_manage(&state, &auth, profile_id).await?;
     Ok(Json(
         state
             .store
@@ -647,6 +695,13 @@ pub async fn bootstrap(
         .store
         .get_worker_profile(auth.org_id, profile_id)
         .await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_manage(
+        "worker profile",
+        profile.owner_user_id,
+        profile.owner_team_id,
+        &profile.visibility,
+    )?;
     if !profile.enabled {
         return Err(ApiError::conflict(
             "enable the worker profile before generating bootstrap output",
