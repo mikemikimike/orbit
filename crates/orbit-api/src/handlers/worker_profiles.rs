@@ -422,6 +422,10 @@ pub async fn create_profile(
         .store
         .set_worker_profile_env_mappings(auth.org_id, profile.id, &body.env_mapping_ids)
         .await?;
+    state
+        .store
+        .assign_resource_owner(auth.org_id, "worker_profiles", profile.id, auth.user_id)
+        .await?;
     audit::record(
         &state,
         &auth,

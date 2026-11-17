@@ -71,3 +71,26 @@ impl Store {
         Ok(())
     }
 }
+
+impl Store {
+    /// Set the owner of a newly created resource when the insert did not carry one.
+    pub async fn assign_resource_owner(
+        &self,
+        org_id: Uuid,
+        resource: &str,
+        id: Uuid,
+        user_id: Uuid,
+    ) -> StoreResult<()> {
+        let table = table(resource)?;
+        let query = format!(
+            "UPDATE {table} SET owner_user_id = COALESCE(owner_user_id, $3), updated_at = now() WHERE org_id = $1 AND id = $2"
+        );
+        sqlx::query(&query)
+            .bind(org_id)
+            .bind(id)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+}

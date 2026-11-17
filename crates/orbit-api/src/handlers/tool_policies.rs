@@ -175,6 +175,10 @@ pub async fn create(
             rule.impact.as_deref(),
         )
         .await?;
+    state
+        .store
+        .assign_resource_owner(auth.org_id, "tool_policies", record.id, auth.user_id)
+        .await?;
     audit::record(
         &state,
         &auth,

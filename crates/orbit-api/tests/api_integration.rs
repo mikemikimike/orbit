@@ -612,3 +612,107 @@ async fn private_agents_are_hidden_from_other_users() {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+fn auth_post(path: &str, token: &str, body: Value) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("authorization", format!("Bearer {token}"))
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn private_skills_are_hidden_from_other_users() {
+    let Some(app) = test_app(true).await else {
+        return;
+    };
+    let alice = app
+        .store
+        .ensure_user(
+            app.org_id,
+            "skills-alice@test.local",
+            "Alice",
+            UserRole::Operator,
+        )
+        .await
+        .unwrap();
+    let bob = app
+        .store
+        .ensure_user(
+            app.org_id,
+            "skills-bob@test.local",
+            "Bob",
+            UserRole::Operator,
+        )
+        .await
+        .unwrap();
+    let alice_token = token_for(&app.store, app.org_id, alice.id, "alice").await;
+    let bob_token = token_for(&app.store, app.org_id, bob.id, "bob").await;
+
+    let (status, alice_skill) = send(
+        &app.router,
+        auth_post(
+            "/api/v1/skills",
+            &alice_token,
+            json!({
+                "name": "Alice skill",
+                "slug": "alice-skill",
+                "content": "alice",
+                "files": {}
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, bob_skill) = send(
+        &app.router,
+        auth_post(
+            "/api/v1/skills",
+            &bob_token,
+            json!({
+                "name": "Bob skill",
+                "slug": "bob-skill",
+                "content": "bob",
+                "files": {}
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let alice_id = alice_skill["id"].as_str().unwrap();
+    let bob_id = bob_skill["id"].as_str().unwrap();
+    for id in [alice_id, bob_id] {
+        app.store
+            .set_resource_visibility(
+                app.org_id,
+                "skills",
+                Uuid::parse_str(id).unwrap(),
+                "private",
+                None,
+            )
+            .await
+            .unwrap();
+    }
+
+    let (status, body) = send(&app.router, auth_get("/api/v1/skills", &alice_token)).await;
+    assert_eq!(status, StatusCode::OK);
+    let items = body.as_array().unwrap();
+    assert!(items.iter().any(|item| item["id"] == alice_id));
+    assert!(items.iter().all(|item| item["id"] != bob_id));
+
+    let (status, _) = send(
+        &app.router,
+        auth_get(&format!("/api/v1/skills/{bob_id}"), &alice_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (status, _) = send(
+        &app.router,
+        auth_delete(&format!("/api/v1/skills/{bob_id}"), &alice_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}

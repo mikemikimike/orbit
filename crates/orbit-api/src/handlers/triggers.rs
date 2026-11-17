@@ -90,6 +90,10 @@ pub async fn create_trigger(
             body.enabled.unwrap_or(true),
         )
         .await?;
+    state
+        .store
+        .assign_resource_owner(auth.org_id, "triggers", trigger.id, auth.user_id)
+        .await?;
     audit::record(
         &state,
         &auth,

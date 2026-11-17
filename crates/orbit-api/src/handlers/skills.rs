@@ -77,6 +77,10 @@ pub async fn create_skill(
             &body.files,
         )
         .await?;
+    state
+        .store
+        .assign_resource_owner(auth.org_id, "skills", skill.id, auth.user_id)
+        .await?;
     audit::record(
         &state,
         &auth,

@@ -164,6 +164,10 @@ pub async fn create_provider(
         }
     };
 
+    state
+        .store
+        .assign_resource_owner(auth.org_id, "providers", provider.id, auth.user_id)
+        .await?;
     audit::record(
         &state,
         &auth,

@@ -8,6 +8,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- Newly created skills, providers, triggers, tool policies and worker profiles now record
+  the creating user as owner, so private/team sharing does not lock the creator out.
+- Added a second IDOR integration test covering private skills.
+
 ### Added
 
 - Connection test endpoint and UI for GitLab/GitHub (`/user` with the stored token) and
