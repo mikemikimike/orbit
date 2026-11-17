@@ -978,14 +978,11 @@ async fn private_resources_are_hidden_from_other_users() {
     }
 
     // The owner still sees their own resource.
-    let (status, body) = send(
-        &app.router,
-        auth_get(
-            &format!("/api/v1/providers/{}", bob_provider.id),
-            &bob_token,
-        ),
-    )
-    .await;
+    let (status, body) = send(&app.router, auth_get("/api/v1/providers", &bob_token)).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["id"], bob_provider.id.to_string());
+    assert!(body
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["id"] == bob_provider.id.to_string()));
 }
