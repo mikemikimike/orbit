@@ -498,7 +498,18 @@ impl Store {
         agent_ids: &[Uuid],
         profile_team_id: Option<Uuid>,
     ) -> StoreResult<Option<ExecutionRecord>> {
-        Ok(sqlx::query_as::<_, ExecutionRecord>(
+        let team_filter = if profile_team_id.is_some() {
+            r#"
+                  AND EXISTS (
+                      SELECT 1 FROM agents a
+                      WHERE a.id = executions.agent_id
+                        AND (a.visibility = 'org' OR a.owner_team_id = $5)
+                  )
+            "#
+        } else {
+            ""
+        };
+        let sql = format!(
             r#"
             UPDATE executions
             SET status = 'dispatched', worker_id = $1,
@@ -509,28 +520,23 @@ impl Store {
                   AND harness_kind = ANY($2)
                   AND (placement = 'auto' OR placement = $3)
                   AND (cardinality($4::uuid[]) = 0 OR agent_id = ANY($4))
-                  AND (
-                      $5::uuid IS NULL
-                      OR EXISTS (
-                          SELECT 1 FROM agents a
-                          WHERE a.id = executions.agent_id
-                            AND (a.visibility = 'org' OR a.owner_team_id = $5)
-                      )
-                  )
+                  {team_filter}
                 ORDER BY created_at ASC
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED
             )
             RETURNING *
-            "#,
-        )
-        .bind(worker_id)
-        .bind(harnesses)
-        .bind(worker_target)
-        .bind(agent_ids)
-        .bind(profile_team_id)
-        .fetch_optional(&self.pool)
-        .await?)
+            "#
+        );
+        let mut query = sqlx::query_as::<_, ExecutionRecord>(&sql)
+            .bind(worker_id)
+            .bind(harnesses)
+            .bind(worker_target)
+            .bind(agent_ids);
+        if let Some(team_id) = profile_team_id {
+            query = query.bind(team_id);
+        }
+        Ok(query.fetch_optional(&self.pool).await?)
     }
 }
 
