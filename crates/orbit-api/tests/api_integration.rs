@@ -925,7 +925,7 @@ async fn private_resources_are_hidden_from_other_users() {
             false,
         ),
     ] {
-        let (status, body) = send(&app.router, auth_get(list, &alice_token)).await;
+        let (status, body) = send(&app.router, auth_get(path, &alice_token)).await;
         assert_eq!(status, StatusCode::OK, "{path} list");
         let items = body
             .as_array()
