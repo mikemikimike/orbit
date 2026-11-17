@@ -34,7 +34,8 @@ import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { api, setAccessToken } from "@/lib/api";
+import { api } from "@/lib/api";
+import { signOut } from "@/lib/session";
 import { createEnvMapping, deleteEnvMapping } from "@/lib/env-mappings";
 import { copyText } from "@/lib/browser";
 import {
@@ -129,9 +130,7 @@ export default function SettingsPage() {
   });
 
   function signOutLocal() {
-    setAccessToken(null);
-    toast.success("Local token cleared");
-    window.location.reload();
+    signOut();
   }
 
   const authMode = String((meta.data?.auth as { mode?: string } | undefined)?.mode ?? "—");
@@ -144,7 +143,7 @@ export default function SettingsPage() {
         description="Identity, authentication, API tokens, audit trail and platform metadata."
         actions={
           <Button variant="outline" onClick={signOutLocal}>
-            <LogOut /> Clear local token
+            <LogOut /> Sign out
           </Button>
         }
       />

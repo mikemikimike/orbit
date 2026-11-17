@@ -8,6 +8,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- Sign-out control in the sidebar user chip, mobile header and Settings. Clears the
+  browser token and returns to `/login`; API tokens are unaffected.
+
 ## [0.12.0] — 2026-11-16
 
 ### Added

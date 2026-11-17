@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Cpu,
   LayoutDashboard,
+  LogOut,
   Megaphone,
   Plus,
   Server,
@@ -21,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { signOut } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { getAccessToken } from "@/lib/api";
@@ -204,7 +206,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </span>
               </span>
             </Link>
-            <ThemeToggle />
+            <div className="flex items-center">
+              <ThemeToggle />
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Sign out"
+                title="Sign out"
+                onClick={signOut}
+              >
+                <LogOut />
+              </Button>
+            </div>
           </div>
           <div className="rounded-lg bg-muted/60 p-3">
             <p className="text-xs font-medium">Self-hosted</p>
@@ -240,6 +253,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             </Button>
           ) : null}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Sign out"
+            title="Sign out"
+            onClick={signOut}
+          >
+            <LogOut />
+          </Button>
           <ThemeToggle />
         </div>
       </header>
