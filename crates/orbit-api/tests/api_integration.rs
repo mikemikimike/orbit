@@ -940,7 +940,7 @@ async fn private_resources_are_hidden_from_other_users() {
 
     for (path, bob_id, has_get) in [
         ("/api/v1/providers", bob_provider.id, false),
-        ("/api/v1/connections", bob_connection.id, true),
+        ("/api/v1/connections", bob_connection.id, false),
         ("/api/v1/worker-profiles", bob_worker.id, true),
         ("/api/v1/triggers", bob_trigger.id, false),
         ("/api/v1/tool-policies", bob_policy.id, false),
