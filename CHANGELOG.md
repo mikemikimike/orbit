@@ -10,6 +10,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- Agent Team steps default to a 1-hour timeout (configurable per team via
+  `timeoutSeconds`) instead of inheriting the 5-minute agent default.
+- Agent Team skill picker has Select all / Clear controls.
+
+### Added
+
 - Read-only Kubernetes connector: ServiceAccount-token or strict static kubeconfig auth,
   namespace/resource allowlists, namespaces/pods/deployments/events list/get and bounded pod
   logs. Example reader RBAC and guide included. Cluster E2E and test-connection remain.

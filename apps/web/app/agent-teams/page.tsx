@@ -86,6 +86,7 @@ export default function AgentTeamsPage() {
   const [workerProfileId, setWorkerProfileId] = useState("");
   const [autoLaunch, setAutoLaunch] = useState(false);
   const [teamSkills, setTeamSkills] = useState<string[]>([]);
+  const [teamTimeout, setTeamTimeout] = useState("");
   const [steps, setSteps] = useState<TeamStepInput[]>([
     { agentId: "" },
     { agentId: "" },
@@ -216,6 +217,7 @@ export default function AgentTeamsPage() {
         workerProfileId: workerProfileId || undefined,
         autoLaunch,
         skills: teamSkills,
+        timeoutSeconds: teamTimeout ? Number(teamTimeout) : undefined,
         steps,
       };
       return editing
@@ -246,6 +248,7 @@ export default function AgentTeamsPage() {
     setWorkerProfileId("");
     setAutoLaunch(false);
     setTeamSkills([]);
+    setTeamTimeout("");
     setSteps([{ agentId: "" }, { agentId: "" }]);
     setOpen(true);
   }
@@ -263,6 +266,9 @@ export default function AgentTeamsPage() {
     setWorkerProfileId(team.definition.workerProfileId ?? "");
     setAutoLaunch(team.definition.autoLaunch ?? false);
     setTeamSkills(team.definition.skills ?? []);
+    setTeamTimeout(
+      String((team.definition as unknown as { timeoutSeconds?: number }).timeoutSeconds ?? ""),
+    );
     setSteps((team.definition.steps ?? []).map((step) => ({ agentId: step.agentId })));
     setOpen(true);
   }
@@ -857,7 +863,27 @@ export default function AgentTeamsPage() {
               </p>
             </div>
             <div className="space-y-1.5">
-              <Label>Team skills</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label>Team skills</Label>
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setTeamSkills(skillOptions.map((skill) => skill.slug))}
+                  >
+                    Select all
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setTeamSkills([])}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
               <div className="flex flex-wrap gap-2 rounded-lg border p-3">
                 {skillOptions.length ? skillOptions.map((skill) => {
                   const checked = teamSkills.includes(skill.slug);

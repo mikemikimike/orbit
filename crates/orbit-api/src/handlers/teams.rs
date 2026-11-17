@@ -64,6 +64,9 @@ pub struct CreateTeamRequest {
     /// Skills materialized for every step in the team.
     #[serde(default)]
     pub skills: Vec<String>,
+    /// Per-step wall-clock timeout; defaults to 1 hour for team runs.
+    #[serde(default)]
+    pub timeout_seconds: Option<u64>,
     pub steps: Vec<TeamStepInput>,
 }
 
@@ -113,6 +116,9 @@ pub struct TeamDefinition {
     pub skills: Vec<String>,
     #[serde(default)]
     pub model: Option<TeamModelOverride>,
+    /// Wall-clock timeout for each step. Defaults to 1 hour for team runs.
+    #[serde(default)]
+    pub timeout_seconds: Option<u64>,
     pub steps: Vec<TeamStepDefinition>,
 }
 
@@ -275,118 +281,13 @@ pub async fn create_team(
             "mode must be pipeline or native",
         )]));
     }
-    if let Some(repository) = body
-        .repository
-        .as_deref()
-        .map(str::trim)
-        .filter(|r| !r.is_empty())
+    if body
+        .timeout_seconds
+        .is_some_and(|seconds| !(1..=86_400).contains(&seconds))
     {
-        if !repository.contains('/') || repository.chars().any(char::is_whitespace) {
-            return Err(ApiError::validation(vec![ValidationIssue::new(
-                "repository",
-                "repository must be owner/repo",
-            )]));
-        }
-    }
-    let mut issues = Vec::new();
-    if let Some(source) = &body.work_source {
-        issues.extend(validate_work_source(source));
-    }
-    if !body.repositories.is_empty() {
-        issues.extend(validate_repositories(&body.repositories));
-    }
-    let mut agent_ids = std::collections::BTreeSet::new();
-    for step in &body.steps {
-        if !agent_ids.insert(step.agent_id) {
-            issues.push(ValidationIssue::new(
-                "steps.agentId",
-                "the same agent cannot appear twice in one team",
-            ));
-        }
-        if state
-            .store
-            .get_agent(auth.org_id, step.agent_id)
-            .await
-            .is_err()
-        {
-            issues.push(ValidationIssue::new(
-                "steps.agentId",
-                format!("unknown agent '{}'", step.agent_id),
-            ));
-        }
-    }
-    for slug in &body.skills {
-        if state
-            .store
-            .get_skill_by_slug(auth.org_id, slug)
-            .await?
-            .is_none()
-        {
-            issues.push(ValidationIssue::new(
-                "skills",
-                format!("unknown skill '{slug}'"),
-            ));
-        }
-    }
-    if let Some(source) = &body.work_source {
-        validate_work_source_connection(&state, auth.org_id, source, &mut issues).await;
-    }
-    validate_native_primary(&state, auth.org_id, &body.mode, &body.steps, &mut issues).await;
-    if !issues.is_empty() {
-        return Err(ApiError::validation(issues));
-    }
-    let definition = serde_json::json!({
-        "mode": body.mode,
-        "instructions": body.instructions.trim(),
-        "repository": body.repository.as_deref().map(str::trim).filter(|value| !value.is_empty()),
-        "branch": body.branch.as_deref().map(str::trim).filter(|value| !value.is_empty()),
-        "workSource": body.work_source.as_ref().map(work_source_to_json),
-        "repositories": repositories_to_json(&body.repositories),
-        "model": body.model,
-        "workerProfileId": body.worker_profile_id,
-        "autoLaunch": body.auto_launch,
-        "skills": body.skills,
-        "steps": body.steps.iter().map(|step| serde_json::json!({
-            "agentId": step.agent_id,
-            "model": step.model,
-        })).collect::<Vec<_>>()
-    });
-    let team = state
-        .store
-        .create_agent_team(
-            auth.org_id,
-            body.name.trim(),
-            body.description.trim(),
-            &definition,
-            Some(auth.user_id),
-        )
-        .await?;
-    state
-        .store
-        .assign_resource_owner(auth.org_id, "agent_teams", team.id, auth.user_id)
-        .await?;
-    Ok((StatusCode::CREATED, Json(team)))
-}
-
-#[utoipa::path(patch, path = "/api/v1/agent-teams/{team_id}", tag = "agent-teams", request_body = CreateTeamRequest, responses((status = 200, body = orbit_store::AgentTeam)))]
-pub async fn update_team(
-    State(state): State<AppState>,
-    Extension(auth): Extension<AuthContext>,
-    Path(team_id): Path<Uuid>,
-    crate::extract::ApiJson(body): crate::extract::ApiJson<CreateTeamRequest>,
-) -> Result<Json<AgentTeam>, ApiError> {
-    auth.require(Permission::SettingsWrite)?;
-    require_team_manage(&state, &auth, team_id).await?;
-    if body.name.trim().is_empty() || body.steps.is_empty() {
-        return Err(ApiError::validation(vec![
-            ValidationIssue::new("name", "name is required"),
-            ValidationIssue::new("steps", "at least one step is required"),
-        ]));
-    }
-    if !matches!(body.mode.as_str(), "pipeline" | "native") {
         return Err(ApiError::validation(vec![ValidationIssue::new(
-            "mode",
-            "mode must be pipeline or native",
+            "timeoutSeconds",
+            "must be 1..=86400",
         )]));
     }
     if let Some(repository) = body
@@ -460,6 +361,131 @@ pub async fn update_team(
         "workerProfileId": body.worker_profile_id,
         "autoLaunch": body.auto_launch,
         "skills": body.skills,
+        "timeoutSeconds": body.timeout_seconds,
+        "steps": body.steps.iter().map(|step| serde_json::json!({
+            "agentId": step.agent_id,
+            "model": step.model,
+        })).collect::<Vec<_>>()
+    });
+    let team = state
+        .store
+        .create_agent_team(
+            auth.org_id,
+            body.name.trim(),
+            body.description.trim(),
+            &definition,
+            Some(auth.user_id),
+        )
+        .await?;
+    state
+        .store
+        .assign_resource_owner(auth.org_id, "agent_teams", team.id, auth.user_id)
+        .await?;
+    Ok((StatusCode::CREATED, Json(team)))
+}
+
+#[utoipa::path(patch, path = "/api/v1/agent-teams/{team_id}", tag = "agent-teams", request_body = CreateTeamRequest, responses((status = 200, body = orbit_store::AgentTeam)))]
+pub async fn update_team(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(team_id): Path<Uuid>,
+    crate::extract::ApiJson(body): crate::extract::ApiJson<CreateTeamRequest>,
+) -> Result<Json<AgentTeam>, ApiError> {
+    auth.require(Permission::SettingsWrite)?;
+    require_team_manage(&state, &auth, team_id).await?;
+    if body.name.trim().is_empty() || body.steps.is_empty() {
+        return Err(ApiError::validation(vec![
+            ValidationIssue::new("name", "name is required"),
+            ValidationIssue::new("steps", "at least one step is required"),
+        ]));
+    }
+    if !matches!(body.mode.as_str(), "pipeline" | "native") {
+        return Err(ApiError::validation(vec![ValidationIssue::new(
+            "mode",
+            "mode must be pipeline or native",
+        )]));
+    }
+    if body
+        .timeout_seconds
+        .is_some_and(|seconds| !(1..=86_400).contains(&seconds))
+    {
+        return Err(ApiError::validation(vec![ValidationIssue::new(
+            "timeoutSeconds",
+            "must be 1..=86400",
+        )]));
+    }
+    if let Some(repository) = body
+        .repository
+        .as_deref()
+        .map(str::trim)
+        .filter(|r| !r.is_empty())
+    {
+        if !repository.contains('/') || repository.chars().any(char::is_whitespace) {
+            return Err(ApiError::validation(vec![ValidationIssue::new(
+                "repository",
+                "repository must be owner/repo",
+            )]));
+        }
+    }
+    let mut issues = Vec::new();
+    if let Some(source) = &body.work_source {
+        issues.extend(validate_work_source(source));
+    }
+    if !body.repositories.is_empty() {
+        issues.extend(validate_repositories(&body.repositories));
+    }
+    let mut agent_ids = std::collections::BTreeSet::new();
+    for step in &body.steps {
+        if !agent_ids.insert(step.agent_id) {
+            issues.push(ValidationIssue::new(
+                "steps.agentId",
+                "the same agent cannot appear twice in one team",
+            ));
+        }
+        if state
+            .store
+            .get_agent(auth.org_id, step.agent_id)
+            .await
+            .is_err()
+        {
+            issues.push(ValidationIssue::new(
+                "steps.agentId",
+                format!("unknown agent '{}'", step.agent_id),
+            ));
+        }
+    }
+    for slug in &body.skills {
+        if state
+            .store
+            .get_skill_by_slug(auth.org_id, slug)
+            .await?
+            .is_none()
+        {
+            issues.push(ValidationIssue::new(
+                "skills",
+                format!("unknown skill '{slug}'"),
+            ));
+        }
+    }
+    if let Some(source) = &body.work_source {
+        validate_work_source_connection(&state, auth.org_id, source, &mut issues).await;
+    }
+    validate_native_primary(&state, auth.org_id, &body.mode, &body.steps, &mut issues).await;
+    if !issues.is_empty() {
+        return Err(ApiError::validation(issues));
+    }
+    let definition = serde_json::json!({
+        "mode": body.mode,
+        "instructions": body.instructions.trim(),
+        "repository": body.repository.as_deref().map(str::trim).filter(|value| !value.is_empty()),
+        "branch": body.branch.as_deref().map(str::trim).filter(|value| !value.is_empty()),
+        "workSource": body.work_source.as_ref().map(work_source_to_json),
+        "repositories": repositories_to_json(&body.repositories),
+        "model": body.model,
+        "workerProfileId": body.worker_profile_id,
+        "autoLaunch": body.auto_launch,
+        "skills": body.skills,
+        "timeoutSeconds": body.timeout_seconds,
         "steps": body.steps.iter().map(|step| serde_json::json!({
             "agentId": step.agent_id,
             "model": step.model,
@@ -699,7 +725,9 @@ pub(crate) async fn start_step(
             trigger_id: None,
             input,
             skills: &definition.skills,
-            timeout_seconds: spec.resources.timeout_seconds,
+            timeout_seconds: definition
+                .timeout_seconds
+                .unwrap_or_else(|| spec.resources.timeout_seconds.max(3600)),
             requested_by: run.requested_by,
             idempotency_key: Some(&format!("team:{}:{}", run.id, step_index)),
             team_run_id: Some(run.id),
