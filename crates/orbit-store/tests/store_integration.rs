@@ -964,3 +964,110 @@ async fn access_teams_and_ownership_defaults() {
     store.remove_team_member(team.id, user).await.unwrap();
     store.delete_access_team(org, team.id).await.unwrap();
 }
+
+#[tokio::test]
+async fn team_worker_cannot_claim_another_teams_execution() {
+    let Some(store) = test_store().await else {
+        return;
+    };
+    let (org, user) = seed_org(&store).await;
+    let team_a = store
+        .create_access_team(org, "Team A", "team-a", Some(user))
+        .await
+        .unwrap();
+    let team_b = store
+        .create_access_team(org, "Team B", "team-b", Some(user))
+        .await
+        .unwrap();
+    let (agent_a, version_a) = store
+        .create_agent(org, Some(user), &definition("Team A Agent"))
+        .await
+        .unwrap();
+    let (agent_b, version_b) = store
+        .create_agent(org, Some(user), &definition("Team B Agent"))
+        .await
+        .unwrap();
+    store
+        .set_resource_visibility(org, "agents", agent_a.id, "team", Some(team_a.id))
+        .await
+        .unwrap();
+    store
+        .set_resource_visibility(org, "agents", agent_b.id, "team", Some(team_b.id))
+        .await
+        .unwrap();
+
+    let input = serde_json::json!({
+        "task": "x", "payload": {},
+        "provenance": { "source": "test", "trusted": true, "receivedAt": chrono::Utc::now() }
+    });
+    let exec_b = store
+        .create_execution(NewExecution {
+            org_id: org,
+            agent_id: agent_b.id,
+            agent_version_id: version_b.id,
+            agent_name: &agent_b.name,
+            harness_kind: HarnessKind::Mock,
+            trigger_source: TriggerSource::Manual,
+            placement: "auto",
+            trigger_id: None,
+            input: input.clone(),
+            skills: &[],
+            timeout_seconds: 30,
+            requested_by: Some(user),
+            idempotency_key: Some("team-b-claim"),
+            team_run_id: None,
+            team_step_index: None,
+        })
+        .await
+        .unwrap();
+    let exec_a = store
+        .create_execution(NewExecution {
+            org_id: org,
+            agent_id: agent_a.id,
+            agent_version_id: version_a.id,
+            agent_name: &agent_a.name,
+            harness_kind: HarnessKind::Mock,
+            trigger_source: TriggerSource::Manual,
+            placement: "auto",
+            trigger_id: None,
+            input,
+            skills: &[],
+            timeout_seconds: 30,
+            requested_by: Some(user),
+            idempotency_key: Some("team-a-claim"),
+            team_run_id: None,
+            team_step_index: None,
+        })
+        .await
+        .unwrap();
+
+    // B was queued first but is invisible to Team A.
+    let claimed = store
+        .claim_next_queued(
+            "team-a-worker",
+            &["mock".into()],
+            "local",
+            &[],
+            Some(team_a.id),
+        )
+        .await
+        .unwrap()
+        .expect("Team A execution should be claimable");
+    assert_eq!(claimed.id, exec_a.id);
+
+    let next = store
+        .claim_next_queued(
+            "team-a-worker",
+            &["mock".into()],
+            "local",
+            &[],
+            Some(team_a.id),
+        )
+        .await
+        .unwrap();
+    assert!(next.is_none(), "Team A worker claimed Team B execution");
+
+    // The Team B execution is still queued.
+    let still_queued = store.get_execution(org, exec_b.id).await.unwrap();
+    assert_eq!(still_queued.status, "queued");
+}
