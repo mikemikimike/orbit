@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 
 import { RunAgentDialog } from "@/components/agents/run-agent-dialog";
+import { ShareResourceDialog } from "@/components/share-resource-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -157,6 +158,11 @@ export default function AgentDetailPage() {
           description={data.description || "No description yet."}
           actions={
             <>
+              <ShareResourceDialog
+                resource="agents"
+                resourceId={data.id}
+                resourceName={data.name}
+              />
               <Button asChild variant="outline">
                 <Link href={`/agents/${data.id}/edit`}>
                   <Pencil /> Edit

@@ -28,6 +28,7 @@ pub mod models;
 pub mod outputs;
 pub mod platform_settings;
 pub mod secrets;
+pub mod sharing;
 pub mod skills;
 pub mod team_queue;
 pub mod tool_policies;

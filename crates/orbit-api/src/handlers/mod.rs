@@ -12,6 +12,7 @@ pub mod license;
 pub mod outputs;
 pub mod roles;
 pub mod settings;
+pub mod sharing;
 pub mod skills;
 pub mod team_queue;
 pub mod teams;

@@ -10,6 +10,13 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- Generic resource sharing: `GET/PATCH /api/v1/sharing/{resource}/{id}` with
+  private/team/org visibility, ownership validation and audit. Share dialog on the agent
+  detail page (same API works for skills, connections, providers, workers, triggers and
+  tool policies).
+
+### Added
+
 - Access team management: `/api/v1/teams` CRUD, members/roles (lead/member/viewer), and a
   Library → Teams UI. Default team protected; team creation makes the creator lead.
 
