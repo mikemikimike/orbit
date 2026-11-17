@@ -35,11 +35,25 @@ impl Store {
         .map_err(Into::into)
     }
 
-    pub async fn list_agent_teams(&self, org_id: Uuid) -> StoreResult<Vec<AgentTeam>> {
+    pub async fn list_agent_teams(
+        &self,
+        org_id: Uuid,
+        access: Option<&crate::access::ResourceAccess>,
+    ) -> StoreResult<Vec<AgentTeam>> {
+        let (privileged, user_id, team_ids) = crate::access::binds(access);
         Ok(sqlx::query_as::<_, AgentTeam>(
-            "SELECT * FROM agent_teams WHERE org_id = $1 ORDER BY created_at DESC",
+            r#"
+            SELECT * FROM agent_teams
+            WHERE org_id = $1
+              AND ($2::bool OR visibility = 'org' OR owner_user_id = $3
+                   OR (visibility = 'team' AND owner_team_id = ANY($4)))
+            ORDER BY created_at DESC
+            "#,
         )
         .bind(org_id)
+        .bind(privileged)
+        .bind(user_id)
+        .bind(&team_ids)
         .fetch_all(&self.pool)
         .await?)
     }
@@ -159,12 +173,28 @@ impl Store {
         &self,
         org_id: Uuid,
         archived: Option<bool>,
+        access: Option<&crate::access::ResourceAccess>,
     ) -> StoreResult<Vec<TeamRun>> {
+        let (privileged, user_id, team_ids) = crate::access::binds(access);
         Ok(sqlx::query_as::<_, TeamRun>(
-            "SELECT * FROM team_runs WHERE org_id = $1 AND ($2::boolean IS NULL OR ($2 = FALSE AND archived_at IS NULL) OR ($2 = TRUE AND archived_at IS NOT NULL)) ORDER BY created_at DESC LIMIT 100",
+            r#"
+            SELECT r.* FROM team_runs r
+            JOIN agent_teams t ON t.id = r.team_id AND t.org_id = r.org_id
+            WHERE r.org_id = $1
+              AND ($2::boolean IS NULL
+                   OR ($2 = FALSE AND r.archived_at IS NULL)
+                   OR ($2 = TRUE AND r.archived_at IS NOT NULL))
+              AND ($3::bool OR t.visibility = 'org' OR t.owner_user_id = $4
+                   OR (t.visibility = 'team' AND t.owner_team_id = ANY($5)))
+            ORDER BY r.created_at DESC
+            LIMIT 100
+            "#,
         )
         .bind(org_id)
         .bind(archived)
+        .bind(privileged)
+        .bind(user_id)
+        .bind(&team_ids)
         .fetch_all(&self.pool)
         .await?)
     }

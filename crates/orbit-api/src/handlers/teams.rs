@@ -224,6 +224,38 @@ async fn validate_native_primary(
     }
 }
 
+async fn require_team_view(
+    state: &AppState,
+    auth: &AuthContext,
+    team_id: Uuid,
+) -> Result<orbit_store::AgentTeam, ApiError> {
+    let team = state.store.get_agent_team(auth.org_id, team_id).await?;
+    let access = crate::access::AccessScope::load(state, auth).await?;
+    access.require_view(
+        "agent team",
+        team.owner_user_id,
+        team.owner_team_id,
+        &team.visibility,
+    )?;
+    Ok(team)
+}
+
+async fn require_team_manage(
+    state: &AppState,
+    auth: &AuthContext,
+    team_id: Uuid,
+) -> Result<orbit_store::AgentTeam, ApiError> {
+    let team = state.store.get_agent_team(auth.org_id, team_id).await?;
+    let access = crate::access::AccessScope::load(state, auth).await?;
+    access.require_manage(
+        "agent team",
+        team.owner_user_id,
+        team.owner_team_id,
+        &team.visibility,
+    )?;
+    Ok(team)
+}
+
 #[utoipa::path(post, path = "/api/v1/agent-teams", tag = "agent-teams", request_body = CreateTeamRequest, responses((status = 201, body = orbit_store::AgentTeam)))]
 pub async fn create_team(
     State(state): State<AppState>,
@@ -329,6 +361,10 @@ pub async fn create_team(
             Some(auth.user_id),
         )
         .await?;
+    state
+        .store
+        .assign_resource_owner(auth.org_id, "agent_teams", team.id, auth.user_id)
+        .await?;
     Ok((StatusCode::CREATED, Json(team)))
 }
 
@@ -340,6 +376,7 @@ pub async fn update_team(
     crate::extract::ApiJson(body): crate::extract::ApiJson<CreateTeamRequest>,
 ) -> Result<Json<AgentTeam>, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    require_team_manage(&state, &auth, team_id).await?;
     if body.name.trim().is_empty() || body.steps.is_empty() {
         return Err(ApiError::validation(vec![
             ValidationIssue::new("name", "name is required"),
@@ -448,7 +485,13 @@ pub async fn list_teams(
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Json<Vec<AgentTeam>>, ApiError> {
     auth.require(Permission::HarnessesRead)?;
-    Ok(Json(state.store.list_agent_teams(auth.org_id).await?))
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    Ok(Json(
+        state
+            .store
+            .list_agent_teams(auth.org_id, Some(&access.store_access()))
+            .await?,
+    ))
 }
 
 #[utoipa::path(get, path = "/api/v1/agent-teams/{team_id}", tag = "agent-teams", responses((status = 200, body = orbit_store::AgentTeam)))]
@@ -458,9 +501,7 @@ pub async fn get_team(
     Path(team_id): Path<Uuid>,
 ) -> Result<Json<AgentTeam>, ApiError> {
     auth.require(Permission::HarnessesRead)?;
-    Ok(Json(
-        state.store.get_agent_team(auth.org_id, team_id).await?,
-    ))
+    Ok(Json(require_team_view(&state, &auth, team_id).await?))
 }
 
 #[utoipa::path(delete, path = "/api/v1/agent-teams/{team_id}", tag = "agent-teams", responses((status = 204)))]
@@ -470,6 +511,7 @@ pub async fn delete_team(
     Path(team_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    require_team_manage(&state, &auth, team_id).await?;
     state.store.delete_agent_team(auth.org_id, team_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -697,7 +739,7 @@ pub async fn create_run(
             .count_all_executions_since(auth.org_id, since)
             .await?,
     )?;
-    let team = state.store.get_agent_team(auth.org_id, team_id).await?;
+    let team = require_team_view(&state, &auth, team_id).await?;
     let definition = parse_definition(&team)?;
     let task = if body.task.trim().is_empty() {
         definition.instructions.trim()
@@ -788,10 +830,11 @@ pub async fn list_runs(
     Query(query): Query<ArchiveListQuery>,
 ) -> Result<Json<Vec<TeamRun>>, ApiError> {
     auth.require(Permission::HarnessesRead)?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
     Ok(Json(
         state
             .store
-            .list_team_runs(auth.org_id, query.archived)
+            .list_team_runs(auth.org_id, query.archived, Some(&access.store_access()))
             .await?,
     ))
 }
@@ -804,6 +847,7 @@ pub async fn get_run(
 ) -> Result<Json<TeamRunDetail>, ApiError> {
     auth.require(Permission::HarnessesRead)?;
     let run = state.store.get_team_run(auth.org_id, run_id).await?;
+    require_team_view(&state, &auth, run.team_id).await?;
     let steps = state.store.list_team_steps(run.id).await?;
     Ok(Json(TeamRunDetail { run, steps }))
 }

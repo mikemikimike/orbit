@@ -375,6 +375,9 @@ mod tests {
         let mut team = AgentTeam {
             id: Uuid::now_v7(),
             org_id: Uuid::now_v7(),
+            owner_user_id: None,
+            owner_team_id: None,
+            visibility: "org".into(),
             name: "t".into(),
             description: String::new(),
             definition: serde_json::json!({}),

@@ -8,6 +8,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- Agent Teams now carry owner/visibility and are filtered like other shareable resources.
+  Team-run lists join the owning Agent Team; run detail and start require team visibility;
+  create/update/delete require manage access.
+
 ### Security
 
 - Worker execution endpoints (context, running, events, completion, cancel) now re-check

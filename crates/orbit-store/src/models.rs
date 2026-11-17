@@ -417,6 +417,12 @@ pub struct WorkerTokenRecord {
 pub struct AgentTeam {
     pub id: Uuid,
     pub org_id: Uuid,
+    #[sqlx(default)]
+    pub owner_user_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub owner_team_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub visibility: String,
     pub name: String,
     pub description: String,
     pub definition: serde_json::Value,

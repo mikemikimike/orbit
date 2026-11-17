@@ -12,6 +12,7 @@ const SHAREABLE: &[&str] = &[
     "worker_profiles",
     "triggers",
     "tool_policies",
+    "agent_teams",
 ];
 
 fn table(resource: &str) -> StoreResult<&'static str> {
