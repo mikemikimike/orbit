@@ -48,3 +48,12 @@ Agent Teams are shareable resources (separate from access teams). They carry
 `ownerUserId`, `ownerTeamId` and `visibility` (`private | team | org`). Team lists, team
 runs and run detail are filtered by the owning team; starting a run requires view access,
 and update/delete require manage access. Org owners/admins govern everything.
+
+## Team connections and environment mappings
+
+A team can attach `connectionIds` and `envMappingIds` directly in the Agent Team editor.
+Team connections are validated against visibility and merged into every step's grant set
+(capabilities come from the connection scopes, or read-only manifest defaults). Team
+environment mappings are resolved into the execution environment for every step. This
+avoids duplicating the same GitLab/cloud integration on each step agent; credentials stay
+in the broker and are never passed to the harness.
