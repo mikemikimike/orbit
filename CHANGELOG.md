@@ -8,6 +8,13 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Multi-team access model
+
+Enterprise (`teams` + `resource_permissions`): access teams, private/team/org visibility,
+sharing API/UI, team-scoped worker claims, execution/team-run/approval isolation. Community
+installations keep the Default team and org-wide visibility; existing data stays readable
+after license expiry, only new team/share writes return `402 license_required`.
+
 ### Added
 
 - Access-team owner guide (`docs/guide/access-teams.md`) and a community-license test
