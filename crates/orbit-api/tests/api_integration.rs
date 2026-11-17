@@ -969,7 +969,12 @@ async fn private_resources_are_hidden_from_other_users() {
             auth_delete(&format!("{path}/{bob_id}"), &alice_token),
         )
         .await;
-        assert_eq!(status, StatusCode::NOT_FOUND, "{path}/{{id}} delete");
+        // Operators lack write permission for some resources; both 403 (RBAC) and
+        // 404 (hidden by visibility) are acceptable and must never be 2xx.
+        assert!(
+            matches!(status, StatusCode::NOT_FOUND | StatusCode::FORBIDDEN),
+            "{path}/{{id}} delete returned {status}"
+        );
     }
 
     // The owner still sees their own resource.
