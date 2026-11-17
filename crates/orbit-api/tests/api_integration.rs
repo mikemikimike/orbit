@@ -611,6 +611,45 @@ async fn private_agents_are_hidden_from_other_users() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (status, _) = send(
+        &app.router,
+        auth_patch(
+            &format!("/api/v1/agents/{alice_agent}"),
+            &bob_token,
+            json!({}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (status, _) = send(
+        &app.router,
+        auth_get(&format!("/api/v1/agents/{alice_agent}/export"), &bob_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (status, _) = send(
+        &app.router,
+        auth_post(
+            &format!("/api/v1/agents/{alice_agent}/executions"),
+            &bob_token,
+            json!({ "task": "cross-team execution" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+fn auth_patch(path: &str, token: &str, body: Value) -> Request<Body> {
+    Request::builder()
+        .method("PATCH")
+        .uri(path)
+        .header("authorization", format!("Bearer {token}"))
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap()
 }
 
 fn auth_post(path: &str, token: &str, body: Value) -> Request<Body> {
