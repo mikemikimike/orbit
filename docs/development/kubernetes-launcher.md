@@ -44,11 +44,14 @@ The launcher needs these permissions in the target namespace:
 ```yaml
 rules:
 - apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get", "list", "create", "delete"]
-- apiGroups: [""]
-  resources: ["secrets"]
-  verbs: ["get"]
+  resources: ["pods", "pods/log"]
+  verbs: ["get", "list", "watch", "create", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "create", "delete", "patch"]
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["get", "list", "watch", "create", "delete", "patch"]
 ```
 
 The Helm chart creates a dedicated `ServiceAccount` and `Role`/`RoleBinding` for this.
