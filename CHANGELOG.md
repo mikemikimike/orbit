@@ -8,10 +8,19 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
-### Changed
+## [0.13.0] — 2026-11-16
 
-- Environment mappings moved from Settings to a dedicated **Library → Environments** page,
-  with row-by-row creation and a direct link from the worker profile editor.
+### Added
+
+- Dedicated **Library → Environments** page for reusable environment mappings, with
+  row-by-row creation (`ENV_VAR` + connection/secret), deletion and a direct link from the
+  worker profile editor. Settings no longer owns worker configuration.
+- Provider model discovery is clearer: **Fetch models** in the provider dialog, **Test &
+  discover** on saved providers, catalog count on OpenAI-compatible cards, and a hint that
+  the default model becomes a dropdown after discovery.
+- Self-hosted GitLab connection templates (`baseUrl`, `cloneBaseUrl`) and explicit
+  `GIT_SSL_CAINFO` for workers and launcher-created pods, so git clone/push trusts a
+  private CA as well as API calls.
 
 ## [0.12.1] — 2026-11-16
 
