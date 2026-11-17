@@ -8,22 +8,32 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-11-16
+
+### Added
+
+- **Agent default task** (`spec.runDefaults.task`): pre-fills manual runs and is used when a
+  run omits the task. System instructions remain separate and are never copied into it.
+- **Work → Then** shows the outputs configured for the selected agent or team, with a link
+  to manage them.
+- **Team-scoped outputs**: an output can target an Agent Team and fires once per terminal
+  team run. `agentId` and `teamId` are mutually exclusive.
+- Worker profiles pinned to an older image tag are flagged in Workers, with a one-click
+  **Use platform tag** and a Relaunch action for active profiles.
+
 ### Fixed
 
-- Worker launches default to active instances only; stopped/failed launches are available
-  behind **Show history** and have a Relaunch button. Active profiles also get a Relaunch
-  action (with interruption confirmation). Removed `ArchiveListQuery` from the launches
-  endpoint.
+- Worker launches default to active instances only; stopped/failed launches are behind
+  **Show history** and have a Relaunch button.
+- Launcher RBAC splits `pods/log` into its own `get`-only rule and drops unused `patch` on
+  Deployments/Jobs, satisfying RBAC escalation scanners.
+- Output webhook labels are explicit per kind (Slack/Mattermost incoming webhook vs generic
+  webhook).
 
 ## [0.11.0] — 2026-11-16
 
 ### Added
 
-- Agents can define an optional **Default task** (`spec.runDefaults.task`). It pre-fills
-  manual runs and is used by the API when a run omits the task; system instructions remain
-  separate and are never copied into the task.
-- Work → **Then** shows the outputs configured for the selected agent/team, with a link to
-  manage them. Outputs can target an Agent Team; team outputs fire once per terminal team run.
 - Reusable environment mappings (`/api/v1/env-mappings`) attachable to multiple worker
   profiles; Settings library + worker multi-select; inline mappings override attached ones.
 - Worker profile changes that need a restart mark the launch `relaunchRequired`. Saving
