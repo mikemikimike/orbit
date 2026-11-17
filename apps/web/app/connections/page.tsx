@@ -39,6 +39,7 @@ export default function ConnectionsPage() {
   const [credential, setCredential] = useState("");
   const [scopes, setScopes] = useState<string[]>([]);
   const [configText, setConfigText] = useState("{}");
+  const [connectionUrl, setConnectionUrl] = useState("");
 
   const defaultConfig = (slug: string) => {
     if (slug === "gitlab") {
@@ -66,11 +67,25 @@ export default function ConnectionsPage() {
 
   const save = useMutation({
     mutationFn: async () => {
-      let config: unknown = {};
+      let config: Record<string, unknown> = {};
       try {
-        config = configText.trim() ? JSON.parse(configText) : {};
+        const parsed = configText.trim() ? JSON.parse(configText) : {};
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          config = parsed as Record<string, unknown>;
+        }
       } catch {
         throw new Error("Connection config must be valid JSON");
+      }
+      const url = connectionUrl.trim().replace(/\/+$/, "");
+      if (url && !/^https?:\/\//.test(url)) {
+        throw new Error("URL must start with https:// or http://");
+      }
+      if (connectorSlug === "gitlab" && url) {
+        const root = url.replace(/\/api\/v4$/, "");
+        config = { ...config, baseUrl: `${root}/api/v4`, cloneBaseUrl: root };
+      }
+      if (connectorSlug === "webhook" && url) {
+        config = { ...config, url };
       }
       if (editing) {
         return unwrap(
@@ -105,6 +120,7 @@ export default function ConnectionsPage() {
       setCredential("");
       setScopes([]);
       setConfigText("{}");
+      setConnectionUrl("");
       void queryClient.invalidateQueries({ queryKey: queryKeys.connections });
       void queryClient.invalidateQueries({ queryKey: queryKeys.connectors });
     },
@@ -118,6 +134,7 @@ export default function ConnectionsPage() {
     setCredential("");
     setScopes([]);
     setConfigText(defaultConfig("telegram"));
+    setConnectionUrl("");
     setOpen(true);
   }
 
@@ -128,6 +145,16 @@ export default function ConnectionsPage() {
     setCredential("");
     setScopes(connection.scopes);
     setConfigText(JSON.stringify(connection.config ?? {}, null, 2));
+    const config = (connection.config ?? {}) as Record<string, unknown>;
+    const baseUrl = String(config.baseUrl ?? "");
+    const cloneBaseUrl = String(config.cloneBaseUrl ?? "");
+    setConnectionUrl(
+      connection.connectorSlug === "gitlab"
+        ? cloneBaseUrl || baseUrl.replace(/\/api\/v4$/, "")
+        : connection.connectorSlug === "webhook"
+          ? String(config.url ?? "")
+          : "",
+    );
     setOpen(true);
   }
 
@@ -299,6 +326,9 @@ export default function ConnectionsPage() {
                   setConnectorSlug(event.target.value);
                   setScopes([]);
                   setConfigText(defaultConfig(event.target.value));
+                  setConnectionUrl(
+                    event.target.value === "gitlab" ? "https://gitlab.com" : "",
+                  );
                 }}
               >
                 {(connectors.data ?? []).map((connector) => (
@@ -356,6 +386,27 @@ export default function ConnectionsPage() {
                 })}
               </div>
             </div>
+            {connectorSlug === "gitlab" || connectorSlug === "webhook" ? (
+              <div className="space-y-1.5">
+                <Label>
+                  {connectorSlug === "gitlab" ? "GitLab URL" : "Webhook URL"}
+                </Label>
+                <Input
+                  value={connectionUrl}
+                  placeholder={
+                    connectorSlug === "gitlab"
+                      ? "https://gitlab.internal"
+                      : "https://example.com/hooks/orbit"
+                  }
+                  onChange={(event) => setConnectionUrl(event.target.value)}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  {connectorSlug === "gitlab"
+                    ? "The base URL; ORBIT derives /api/v4 for API calls and the same host for git clone/push."
+                    : "The endpoint ORBIT sends signed JSON to."}
+                </p>
+              </div>
+            ) : null}
             <details className="text-xs">
               <summary className="cursor-pointer text-muted-foreground">Advanced config (JSON)</summary>
               <textarea

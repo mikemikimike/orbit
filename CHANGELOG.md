@@ -8,6 +8,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- Connection dialog exposes a first-class **GitLab URL** (deriving `/api/v4` and clone
+  URL) and **Webhook URL** instead of requiring raw JSON; advanced JSON remains for the
+  other connector fields.
+
 ## [0.13.0] — 2026-11-16
 
 ### Added
