@@ -77,6 +77,8 @@ spec:
               value: "/etc/ssl/certs/ca-bundle.crt"
             - name: NODE_EXTRA_CA_CERTS
               value: "/etc/ssl/certs/ca-bundle.crt"
+            - name: GIT_SSL_CAINFO
+              value: "/etc/ssl/certs/ca-bundle.crt"
             {{- end }}
           volumeMounts:
             {{- if .Values.caCertificates.enabled }}

@@ -352,6 +352,15 @@ export default function ModelsPage() {
                         <p className="text-muted-foreground">
                           model: <span className="font-mono">{String(config.model ?? "—")}</span>
                         </p>
+                        <p className="text-muted-foreground">
+                          catalog:{" "}
+                          <span className="font-mono">
+                            {Array.isArray((config.settings as Record<string, unknown> | undefined)?.models)
+                              ? ((config.settings as Record<string, unknown>).models as string[]).length
+                              : 0}{" "}
+                            models
+                          </span>
+                        </p>
                       </>
                     ) : (
                       <>
@@ -390,7 +399,7 @@ export default function ModelsPage() {
                         onClick={() => probe(provider)}
                         loading={probing === provider.id}
                       >
-                        <Zap /> Test
+                        <Zap /> Test &amp; discover
                       </Button>
                     ) : null}
                     <Button size="sm" variant="ghost" onClick={() => openEdit(provider)}>
@@ -521,15 +530,28 @@ export default function ModelsPage() {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Model catalog (optional)</Label>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label>Model catalog</Label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={probeDraft}
+                      loading={probingDraft}
+                      disabled={!form.baseUrl.trim()}
+                    >
+                      <Zap /> Fetch models
+                    </Button>
+                  </div>
                   <Input
                     value={form.models}
                     placeholder="qwen3-coder, llama-3.3-70b"
                     onChange={(event) => setForm({ ...form, models: event.target.value })}
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Populated by Test connection. Comma-separated models drive the agent and
-                    worker model selectors.
+                    {form.models.trim()
+                      ? "Comma-separated models drive the agent and worker model selectors."
+                      : "Fetch models or Test connection to populate this and turn Default model into a dropdown."}
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 rounded-lg border p-3 text-sm sm:grid-cols-3">
@@ -638,7 +660,7 @@ export default function ModelsPage() {
                   loading={probingDraft}
                   disabled={!form.baseUrl.trim()}
                 >
-                  Test connection
+                  Test &amp; fetch models
                 </Button>
               ) : null}
             </div>

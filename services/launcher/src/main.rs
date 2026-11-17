@@ -483,7 +483,12 @@ async fn launch_kubernetes(
             "subPath": request.ca_secret_key,
             "readOnly": true
         }));
-        for variable in ["SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS"] {
+        for variable in [
+            "SSL_CERT_FILE",
+            "REQUESTS_CA_BUNDLE",
+            "NODE_EXTRA_CA_CERTS",
+            "GIT_SSL_CAINFO",
+        ] {
             env.push(json!({
                 "name": variable,
                 "value": "/etc/ssl/certs/ca-bundle.crt"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Boxes, Copy, Pencil, Plus, RotateCw, Rocket, ScrollText, Server, Square, Trash2 } from "lucide-react";
@@ -965,13 +966,21 @@ function WorkersPageInner() {
               </p>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label>Reusable environment mappings</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label>Reusable environment mappings</Label>
+                <Link
+                  href="/settings#environment-mappings"
+                  className="text-[11px] text-primary hover:underline"
+                >
+                  Manage mappings
+                </Link>
+              </div>
               {envMappingLibrary.isLoading ? (
                 <Skeleton className="h-16" />
               ) : !envMappingLibrary.data?.length ? (
                 <p className="text-[11px] text-muted-foreground">
-                  No reusable mappings yet. Create them with the env-mappings API; attached
-                  mappings are shared across profiles.
+                  No reusable mappings yet. Create them under Settings → Environment mappings;
+                  attached mappings are shared across profiles.
                 </p>
               ) : (
                 <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border p-2">

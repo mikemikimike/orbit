@@ -257,7 +257,7 @@ export default function SettingsPage() {
         />
       </div>
 
-      <Card>
+      <Card id="environment-mappings">
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Server className="h-4 w-4 text-primary" /> Environment mappings

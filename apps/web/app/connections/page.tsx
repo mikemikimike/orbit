@@ -40,6 +40,23 @@ export default function ConnectionsPage() {
   const [scopes, setScopes] = useState<string[]>([]);
   const [configText, setConfigText] = useState("{}");
 
+  const defaultConfig = (slug: string) => {
+    if (slug === "gitlab") {
+      return JSON.stringify(
+        {
+          baseUrl: "https://gitlab.com/api/v4",
+          cloneBaseUrl: "https://gitlab.com",
+        },
+        null,
+        2,
+      );
+    }
+    if (slug === "webhook") {
+      return JSON.stringify({ url: "" }, null, 2);
+    }
+    return "{}";
+  };
+
   const selected = connectors.data?.find((connector) => connector.slug === connectorSlug);
   const capabilities = (selected?.capabilities ?? []) as Array<{
     id: string;
@@ -100,7 +117,7 @@ export default function ConnectionsPage() {
     setName("");
     setCredential("");
     setScopes([]);
-    setConfigText("{}");
+    setConfigText(defaultConfig("telegram"));
     setOpen(true);
   }
 
@@ -281,6 +298,7 @@ export default function ConnectionsPage() {
                 onChange={(event) => {
                   setConnectorSlug(event.target.value);
                   setScopes([]);
+                  setConfigText(defaultConfig(event.target.value));
                 }}
               >
                 {(connectors.data ?? []).map((connector) => (
