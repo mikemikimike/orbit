@@ -345,21 +345,8 @@ pub async fn context(
     auth: WorkerAuth,
     Path(execution_id): Path<Uuid>,
 ) -> Result<Json<WorkerExecutionContext>, ApiError> {
+    let execution = ensure_execution(&state, &auth, execution_id).await?;
     let profile = active_profile(&state, &auth).await?;
-    let execution = state.store.get_execution_by_id(execution_id).await?;
-    if execution.org_id != auth.org_id {
-        return Err(ApiError::not_found("execution"));
-    }
-    if let Some(profile) = &profile {
-        if profile.agent_scope == "selected"
-            && !profile.agent_ids.is_empty()
-            && !profile.agent_ids.contains(&execution.agent_id)
-        {
-            return Err(ApiError::forbidden(
-                "execution agent is outside this worker profile",
-            ));
-        }
-    }
     Ok(Json(
         build_context(&state, auth.org_id, profile.as_ref(), &execution).await?,
     ))
@@ -666,6 +653,27 @@ async fn ensure_execution(
     let execution = state.store.get_execution_by_id(execution_id).await?;
     if execution.org_id != auth.org_id {
         return Err(ApiError::not_found("execution"));
+    }
+    if let Some(profile) = active_profile(state, auth).await? {
+        if profile.agent_scope == "selected"
+            && !profile.agent_ids.is_empty()
+            && !profile.agent_ids.contains(&execution.agent_id)
+        {
+            return Err(ApiError::forbidden(
+                "execution agent is outside this worker profile",
+            ));
+        }
+        let agent = state
+            .store
+            .get_agent(auth.org_id, execution.agent_id)
+            .await?;
+        let visible = agent.visibility == "org"
+            || (profile.owner_team_id.is_some() && agent.owner_team_id == profile.owner_team_id);
+        if !visible {
+            return Err(ApiError::forbidden(
+                "execution agent is outside this worker profile's team",
+            ));
+        }
     }
     Ok(execution)
 }

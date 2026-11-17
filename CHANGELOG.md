@@ -8,6 +8,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Security
+
+- Worker execution endpoints (context, running, events, completion, cancel) now re-check
+  that the execution's agent is org-visible or owned by the worker profile's team, and
+  enforce the profile's selected agent scope. Knowing an execution ID is not enough.
+
 ### Added
 
 - Worker profile create/update rejects referenced agents and skills the caller cannot see,
