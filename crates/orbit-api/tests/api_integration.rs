@@ -636,6 +636,30 @@ async fn private_agents_are_hidden_from_other_users() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // Sharing to org visibility makes the same resource visible again.
+    app.store
+        .set_resource_visibility(app.org_id, "agents", bob_agent, "org", None)
+        .await
+        .unwrap();
+    let (status, _) = send(
+        &app.router,
+        auth_get(&format!("/api/v1/agents/{bob_agent}"), &alice_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    // Back to private: hidden again.
+    app.store
+        .set_resource_visibility(app.org_id, "agents", bob_agent, "private", None)
+        .await
+        .unwrap();
+    let (status, _) = send(
+        &app.router,
+        auth_get(&format!("/api/v1/agents/{bob_agent}"), &alice_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 fn auth_patch(path: &str, token: &str, body: Value) -> Request<Body> {
