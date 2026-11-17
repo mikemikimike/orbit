@@ -35,6 +35,9 @@ pub struct AppState {
     pub launcher_url: Option<String>,
     pub launcher_token: Option<String>,
     pub worker_api_url: String,
+    /// Secret name/key mounted into launcher-created workers for private CAs.
+    pub ca_secret_name: Option<String>,
+    pub ca_secret_key: String,
     /// Archive terminal runs older than this many days. `None` disables retention.
     pub archive_after_days: Option<u32>,
     /// Offline enterprise license (hot reloadable).

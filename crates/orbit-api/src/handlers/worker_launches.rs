@@ -37,6 +37,9 @@ struct LauncherRequest {
     worker_token: String,
     worker_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    ca_secret_name: Option<String>,
+    ca_secret_key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     single_execution_id: Option<Uuid>,
 }
 
@@ -320,6 +323,8 @@ pub(crate) async fn launch_profile_internal(
         api_url: state.worker_api_url.clone(),
         worker_token: issued.token,
         worker_id: worker_id.clone(),
+        ca_secret_name: state.ca_secret_name.clone(),
+        ca_secret_key: state.ca_secret_key.clone(),
         single_execution_id,
     };
     let result: LauncherStatus = match call_launcher(

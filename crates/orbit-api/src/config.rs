@@ -24,6 +24,9 @@ pub struct ApiConfig {
     pub launcher_url: Option<String>,
     pub launcher_token: Option<String>,
     pub worker_api_url: String,
+    /// Secret mounted into launcher-created workers for private CAs.
+    pub ca_secret_name: Option<String>,
+    pub ca_secret_key: String,
     /// Days after which terminal executions, team runs and worker launches are archived.
     /// `0` disables the retention loop.
     pub archive_after_days: Option<u32>,
@@ -68,6 +71,10 @@ impl ApiConfig {
                 .ok()
                 .filter(|value| !value.trim().is_empty()),
             worker_api_url: env_or("ORBIT_WORKER_API_URL", "http://orbit-api:8080"),
+            ca_secret_name: std::env::var("ORBIT_CA_SECRET_NAME")
+                .ok()
+                .filter(|value| !value.trim().is_empty()),
+            ca_secret_key: env_or("ORBIT_CA_SECRET_KEY", "ca-bundle.crt"),
             archive_after_days: env_or("ORBIT_ARCHIVE_AFTER_DAYS", "30")
                 .parse::<u32>()
                 .ok()

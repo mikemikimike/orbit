@@ -51,7 +51,15 @@ struct LaunchRequest {
     worker_token: String,
     worker_id: String,
     #[serde(default)]
+    ca_secret_name: Option<String>,
+    #[serde(default = "default_ca_key")]
+    ca_secret_key: String,
+    #[serde(default)]
     single_execution_id: Option<Uuid>,
+}
+
+fn default_ca_key() -> String {
+    "ca-bundle.crt".into()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -464,6 +472,24 @@ async fn launch_kubernetes(
     let mut command = vec!["/usr/local/bin/orbit-worker".to_string()];
     let mut mounts = vec![json!({ "name": "tmp", "mountPath": "/tmp" })];
     let mut pod_volumes = vec![json!({ "name": "tmp", "emptyDir": {} })];
+    if let Some(secret_name) = &request.ca_secret_name {
+        pod_volumes.push(json!({
+            "name": "ca-bundle",
+            "secret": { "secretName": secret_name }
+        }));
+        mounts.push(json!({
+            "name": "ca-bundle",
+            "mountPath": "/etc/ssl/certs/ca-bundle.crt",
+            "subPath": request.ca_secret_key,
+            "readOnly": true
+        }));
+        for variable in ["SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS"] {
+            env.push(json!({
+                "name": variable,
+                "value": "/etc/ssl/certs/ca-bundle.crt"
+            }));
+        }
+    }
     if request.harness_kind == "opencode" {
         // OpenCode writes its data under $HOME/.local; keep it on an emptyDir so it
         // never writes into the image layer.

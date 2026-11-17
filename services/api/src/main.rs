@@ -76,6 +76,8 @@ async fn main() -> anyhow::Result<()> {
         launcher_url: config.launcher_url.clone(),
         launcher_token: config.launcher_token.clone(),
         worker_api_url: config.worker_api_url.clone(),
+        ca_secret_name: config.ca_secret_name.clone(),
+        ca_secret_key: config.ca_secret_key.clone(),
         archive_after_days: config.archive_after_days,
         license: LicenseHandle::load(LicenseSource::from_env()),
     };

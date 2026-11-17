@@ -110,6 +110,12 @@ spec:
               value: {{ .Values.platform.publicBaseUrl | quote }}
             - name: ORBIT_WORKER_API_URL
               value: "http://{{ include "orbit.apiHost" . }}:{{ .Values.api.port }}"
+            {{- if .Values.caCertificates.enabled }}
+            - name: ORBIT_CA_SECRET_NAME
+              value: {{ .Values.caCertificates.secretName | quote }}
+            - name: ORBIT_CA_SECRET_KEY
+              value: {{ .Values.caCertificates.key | default "ca-bundle.crt" | quote }}
+            {{- end }}
             - name: ORBIT_IMAGE_PREFIX
               value: {{ .Values.imageRegistry | quote }}
             - name: ORBIT_IMAGE_TAG

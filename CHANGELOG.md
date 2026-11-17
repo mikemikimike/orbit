@@ -21,6 +21,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Fixed
 
+- Launcher-created workers now receive the chart's custom CA Secret and
+  `SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE`/`NODE_EXTRA_CA_CERTS`. This fixes
+  `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` when an OpenCode worker calls a provider signed by a
+  private CA (#40).
+
 - Execution Output card is width-constrained; long output wraps/scrolls instead of widening
   the page (#39).
 

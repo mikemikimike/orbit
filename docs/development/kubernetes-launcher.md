@@ -87,3 +87,13 @@ The launcher adds `imagePullSecrets` to every pod it creates.
 - The launcher never exposes kubectl or the Docker socket to the API or web app.
 EOF
 echo done
+
+## Custom CA certificates
+
+When `caCertificates.enabled=true`, the chart passes the CA Secret name/key to the API
+(`ORBIT_CA_SECRET_NAME`, `ORBIT_CA_SECRET_KEY`). The launcher mounts that Secret into every
+worker Pod/Job at `/etc/ssl/certs/ca-bundle.crt` and sets `SSL_CERT_FILE`,
+`REQUESTS_CA_BUNDLE` and `NODE_EXTRA_CA_CERTS`. This covers harnesses that use the system
+store (Rust workers) and Node/Bun-based harnesses (OpenCode).
+
+The worker pod needs read access to the Secret; the launcher itself does not read it.

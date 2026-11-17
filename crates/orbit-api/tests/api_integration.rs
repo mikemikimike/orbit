@@ -95,6 +95,8 @@ async fn test_app(allow_anonymous: bool) -> Option<TestApp> {
         launcher_url: None,
         launcher_token: None,
         worker_api_url: "http://localhost:8080".into(),
+        ca_secret_name: None,
+        ca_secret_key: "ca-bundle.crt".into(),
         archive_after_days: None,
         license: orbit_security::LicenseHandle::load(orbit_security::LicenseSource {
             token: None,
