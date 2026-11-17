@@ -567,12 +567,8 @@ async fn private_agents_are_hidden_from_other_users() {
         .unwrap();
     let alice_agent = create_demo_agent(&app.store, app.org_id, alice.id).await;
     let bob_agent = create_demo_agent(&app.store, app.org_id, bob.id).await;
-    for agent in [alice_agent, bob_agent] {
-        app.store
-            .set_resource_visibility(app.org_id, "agents", agent, "private", None)
-            .await
-            .unwrap();
-    }
+    make_private(&app.store, app.org_id, "agents", alice_agent, alice.id).await;
+    make_private(&app.store, app.org_id, "agents", bob_agent, bob.id).await;
     let alice_token = token_for(&app.store, app.org_id, alice.id, "alice").await;
     let bob_token = token_for(&app.store, app.org_id, bob.id, "bob").await;
 
