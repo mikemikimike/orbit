@@ -461,3 +461,22 @@ impl Store {
         Ok(())
     }
 }
+
+impl Store {
+    pub async fn set_connection_check(
+        &self,
+        org_id: Uuid,
+        connection_id: Uuid,
+        ok: bool,
+    ) -> StoreResult<()> {
+        sqlx::query(
+            "UPDATE connections SET status = $3, last_checked_at = now(), updated_at = now() WHERE org_id = $1 AND id = $2",
+        )
+        .bind(org_id)
+        .bind(connection_id)
+        .bind(if ok { "connected" } else { "error" })
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+}

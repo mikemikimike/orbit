@@ -2,6 +2,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Extension;
 use axum::Json;
+use serde::Serialize;
 use uuid::Uuid;
 
 use orbit_contracts::{validate_provider_config, HarnessDescriptor, ProviderKind};
@@ -717,6 +718,134 @@ pub struct WorkerView {
     pub started_at: chrono::DateTime<chrono::Utc>,
     pub last_heartbeat_at: chrono::DateTime<chrono::Utc>,
     pub live: bool,
+}
+
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionTestResponse {
+    pub ok: bool,
+    pub status: Option<u16>,
+    pub latency_ms: u64,
+    pub message: String,
+}
+
+#[utoipa::path(post, path = "/api/v1/connections/{connection_id}/test", tag = "connectors", responses((status = 200, body = ConnectionTestResponse)))]
+pub async fn test_connection(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(connection_id): Path<Uuid>,
+) -> Result<Json<ConnectionTestResponse>, ApiError> {
+    auth.require(Permission::ConnectionsRead)?;
+    let row = state
+        .store
+        .get_connection_with_connector(auth.org_id, connection_id)
+        .await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_view(
+        "connection",
+        row.connection.owner_user_id,
+        row.connection.owner_team_id,
+        &row.connection.visibility,
+    )?;
+    let credential = match &row.connection.credential_ref {
+        Some(reference) => state
+            .store
+            .get_secret_value(reference)
+            .await?
+            .map(|value| value.expose().to_string()),
+        None => None,
+    };
+    let started = std::time::Instant::now();
+    let (ok, status, message) = probe_connection(
+        &row.connector_slug,
+        &row.connection.config,
+        credential.as_deref(),
+    )
+    .await;
+    let latency_ms = started.elapsed().as_millis() as u64;
+    let _ = state
+        .store
+        .set_connection_check(auth.org_id, connection_id, ok)
+        .await;
+    Ok(Json(ConnectionTestResponse {
+        ok,
+        status,
+        latency_ms,
+        message,
+    }))
+}
+
+async fn probe_connection(
+    slug: &str,
+    config: &serde_json::Value,
+    credential: Option<&str>,
+) -> (bool, Option<u16>, String) {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => return (false, None, error.to_string()),
+    };
+    let (url, request) = match slug {
+        "gitlab" | "github" => {
+            let base = config
+                .get("baseUrl")
+                .and_then(|value| value.as_str())
+                .unwrap_or("")
+                .trim_end_matches('/');
+            if base.is_empty() {
+                return (false, None, "connection config is missing baseUrl".into());
+            }
+            let request = client.get(format!("{base}/user"));
+            let request = match credential {
+                Some(token) if slug == "gitlab" => request.header("PRIVATE-TOKEN", token),
+                Some(token) => request.bearer_auth(token),
+                None => request,
+            };
+            (format!("{base}/user"), request)
+        }
+        "webhook" => {
+            let url = config
+                .get("url")
+                .and_then(|value| value.as_str())
+                .unwrap_or("")
+                .trim();
+            if url.is_empty() {
+                return (false, None, "connection config is missing url".into());
+            }
+            (url.to_string(), client.head(url))
+        }
+        other => {
+            return (
+                false,
+                None,
+                format!("test connection is not implemented for '{other}'"),
+            );
+        }
+    };
+    match request.send().await {
+        Ok(response) => {
+            let status = response.status();
+            let ok = if slug == "webhook" {
+                status.is_success()
+                    || status.is_redirection()
+                    || status == reqwest::StatusCode::METHOD_NOT_ALLOWED
+            } else {
+                status.is_success()
+            };
+            (
+                ok,
+                Some(status.as_u16()),
+                if ok {
+                    format!("{url} reachable")
+                } else {
+                    format!("{url} returned {status}")
+                },
+            )
+        }
+        Err(error) => (false, None, error.to_string()),
+    }
 }
 
 #[utoipa::path(get, path = "/api/v1/workers", tag = "harnesses", responses((status = 200, body = [WorkerView])))]

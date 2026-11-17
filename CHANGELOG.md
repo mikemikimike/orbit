@@ -10,6 +10,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- Connection test endpoint and UI for GitLab/GitHub (`/user` with the stored token) and
+  webhooks (reachability probe). Results update connection status/last-checked.
+
+### Added
+
 - Access teams (`teams`) and resource sharing (`resource_permissions`) are license-gated
   premium features. Documented the enterprise access model, the IDOR matrix and the
   cross-team threat.

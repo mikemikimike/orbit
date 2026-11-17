@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Cable, KeyRound, Pencil, Plus, Trash2, Webhook } from "lucide-react";
+import { Cable, KeyRound, Pencil, PlugZap, Plus, Trash2, Webhook } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ShareResourceDialog } from "@/components/share-resource-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { request } from "@/lib/http";
 import { queryKeys, unwrap, useConnections, useConnectors } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 import { formatDate, relativeTime, titleCase } from "@/lib/utils";
@@ -159,6 +160,23 @@ export default function ConnectionsPage() {
     setOpen(true);
   }
 
+  const test = useMutation({
+    mutationFn: (id: string) =>
+      request<{ ok: boolean; latencyMs: number; message: string }>(
+        `/api/v1/connections/${id}/test`,
+        { method: "POST" },
+      ),
+    onSuccess: (result) => {
+      if (result.ok) {
+        toast.success(`${result.message} · ${result.latencyMs}ms`);
+      } else {
+        toast.error(result.message);
+      }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.connections });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
   const remove = useMutation({
     mutationFn: async (id: string) =>
       unwrap(
@@ -241,6 +259,14 @@ export default function ConnectionsPage() {
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                     <span>created {formatDate(connection.createdAt)}</span>
                     <div className="flex flex-wrap items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => test.mutate(connection.id)}
+                      loading={test.isPending && test.variables === connection.id}
+                    >
+                      <PlugZap /> Test
+                    </Button>
                     <ShareResourceDialog
                       resource="connections"
                       resourceId={connection.id}
