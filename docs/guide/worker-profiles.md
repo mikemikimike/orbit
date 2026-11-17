@@ -58,3 +58,11 @@ scoped token. Generating bootstrap output rotates the profile token.
 Worker tokens are separate from user API tokens (`orbit_wk_`), scoped and revocable. CLI
 deployments set `ORBIT_API_URL` + `ORBIT_WORKER_TOKEN`; workers never receive database,
 NATS or master-key credentials.
+
+## Team scoping
+
+A worker profile has an owning access team (`ownerTeamId`, default **Default**). Claim is
+restricted to queued executions whose agent is `org`-visible or owned by that team; a
+profile can never claim another team's private agent. Execution context/running/events/
+completion/cancel endpoints re-check the same rule, so knowing an execution ID is not
+enough. Agent and skill references on create/update must be visible to the caller.

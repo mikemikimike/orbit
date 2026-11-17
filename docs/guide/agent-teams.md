@@ -41,3 +41,10 @@ operate on the worker workspace, not the control plane.
 
 Team runs are executions (and count against the license's executions/day limit) and use
 the same worker profiles, skills, tool policy and approvals as single agents.
+
+## Ownership and visibility
+
+Agent Teams are shareable resources (separate from access teams). They carry
+`ownerUserId`, `ownerTeamId` and `visibility` (`private | team | org`). Team lists, team
+runs and run detail are filtered by the owning team; starting a run requires view access,
+and update/delete require manage access. Org owners/admins govern everything.

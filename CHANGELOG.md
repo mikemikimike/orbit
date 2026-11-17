@@ -8,6 +8,10 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Documentation
+
+- Documented Agent Team ownership/visibility and worker-profile team claim/context rules.
+
 ### Security
 
 - Approval decisions now require visibility of the underlying execution's agent. Added
