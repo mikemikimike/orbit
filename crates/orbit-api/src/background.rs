@@ -26,6 +26,16 @@ pub fn spawn(state: AppState) {
         }
     });
 
+    let output_state = state.clone();
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(5));
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticker.tick().await;
+            crate::handlers::outputs::deliver_pending(&output_state).await;
+        }
+    });
+
     let scheduler_state = state.clone();
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(15));

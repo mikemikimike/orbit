@@ -166,3 +166,26 @@ impl Store {
         .ok_or_else(|| StoreError::NotFound("worker launch".into()))
     }
 }
+
+impl Store {
+    /// Flag every live launch of a profile as needing a relaunch after a profile update.
+    pub async fn mark_profile_launches_relaunch_required(
+        &self,
+        org_id: Uuid,
+        profile_id: Uuid,
+    ) -> StoreResult<u64> {
+        let result = sqlx::query(
+            r#"
+            UPDATE worker_launches
+            SET relaunch_required = true, updated_at = now()
+            WHERE org_id = $1 AND profile_id = $2
+              AND status IN ('pending', 'starting', 'running')
+            "#,
+        )
+        .bind(org_id)
+        .bind(profile_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+}

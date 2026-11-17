@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api, API_BASE_URL, getAccessToken } from "./api";
+import { listEnvMappings, workerProfileEnvMappings } from "./env-mappings";
 import type {
   AgentDetail,
   AgentPage,
@@ -95,6 +96,23 @@ export interface LicenseOverview {
   };
   usage: { seats: number; agents: number; workers: number; executionsToday: number };
   warnings: string[];
+}
+
+export function useEnvMappings() {
+  return useQuery({
+    queryKey: ["env-mappings"],
+    queryFn: listEnvMappings,
+    staleTime: 30_000,
+  });
+}
+
+export function useWorkerProfileEnvMappings(profileId?: string) {
+  return useQuery({
+    queryKey: ["worker-profile-env-mappings", profileId],
+    queryFn: () => workerProfileEnvMappings(profileId as string),
+    enabled: Boolean(profileId),
+    staleTime: 30_000,
+  });
 }
 
 export function useLicense() {

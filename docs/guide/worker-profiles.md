@@ -16,7 +16,8 @@ in-cluster launcher; the API mints a scoped token per launch and revokes it on s
 | `skillSlugs`, `agentIds` | What the worker may run |
 | `provider` / `model` | Optional model selection for the worker |
 | `authSecretName` | Existing Secret with harness auth (OpenCode/Pi) |
-| `env`, `envMappings` | Static env and connection/secret → env mappings |
+| `env`, `envMappings` | Static env and connection/secret → env mappings (inline) |
+| `envMappingIds` | Reusable environment mappings shared across profiles |
 | `resources` | CPU/memory requests + limits and workspace size |
 | `enabled` | Only enabled profiles launch |
 
@@ -33,6 +34,13 @@ in-cluster launcher; the API mints a scoped token per launch and revokes it on s
 Validated as Kubernetes quantities, request ≤ limit; defaults are applied when omitted.
 The launcher sets container resources on the Deployment/Job and `--cpus/--memory` for the
 Docker driver. **Worker CPU/memory belong here, not in the agent definition.**
+
+## Reusable environment mappings
+
+Environment mappings can be created once under **Settings → Environment mappings** and
+attached to many worker profiles. Inline mappings override attached mappings for the same
+env var. Changes to a mapping or to a profile require a worker relaunch; the Workers UI
+asks whether to relaunch now or save only (running agents may be interrupted).
 
 ## Launch lifecycle
 

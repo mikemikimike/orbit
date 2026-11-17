@@ -450,6 +450,8 @@ pub struct WorkerLaunch {
     pub worker_id: Option<String>,
     pub worker_token_id: Option<Uuid>,
     pub error: Option<String>,
+    #[sqlx(default)]
+    pub relaunch_required: bool,
     pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -513,4 +515,41 @@ pub struct CustomRole {
     pub permissions: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct EnvMapping {
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub name: String,
+    pub description: String,
+    pub mappings: serde_json::Value,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Output {
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub name: String,
+    pub kind: String,
+    pub agent_id: Option<Uuid>,
+    pub events: Vec<String>,
+    pub secret_ref: String,
+    pub template: Option<String>,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct OutputDeliveryJob {
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub output_id: Uuid,
+    pub execution_id: Uuid,
+    pub attempts: i32,
 }

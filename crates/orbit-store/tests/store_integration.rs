@@ -870,3 +870,45 @@ async fn custom_roles_round_trip() {
     store.delete_custom_role(org, role.id).await.unwrap();
     assert!(store.list_custom_roles(org).await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn env_mappings_and_outputs_round_trip() {
+    let Some(store) = test_store().await else {
+        return;
+    };
+    let (org, _user) = seed_org(&store).await;
+
+    let mapping = store
+        .create_env_mapping(
+            org,
+            "Shared tokens",
+            "reusable",
+            &serde_json::json!([
+                { "envVar": "EXAMPLE_TOKEN", "connectionId": null, "secretKey": "example" }
+            ]),
+        )
+        .await
+        .expect("env mapping");
+    assert_eq!(store.list_env_mappings(org).await.unwrap().len(), 1);
+    assert_eq!(mapping.name, "Shared tokens");
+    store.delete_env_mapping(org, mapping.id).await.unwrap();
+
+    let output = store
+        .create_output(
+            org,
+            "Slack release",
+            "slack",
+            None,
+            &["succeeded".to_string(), "failed".to_string()],
+            "secret://output/test",
+            Some("release finished"),
+        )
+        .await
+        .expect("output");
+    assert_eq!(store.list_outputs(org).await.unwrap().len(), 1);
+    assert_eq!(
+        store.get_output(org, output.id).await.unwrap().kind,
+        "slack"
+    );
+    store.delete_output(org, output.id).await.unwrap();
+}

@@ -43,6 +43,9 @@ pub struct CreateWorkerProfileRequest {
     pub env: serde_json::Value,
     #[serde(default)]
     pub env_mappings: serde_json::Value,
+    /// Reusable environment mapping IDs attached to this profile.
+    #[serde(default)]
+    pub env_mapping_ids: Vec<Uuid>,
     #[serde(default)]
     pub resources: serde_json::Value,
 }
@@ -382,6 +385,10 @@ pub async fn create_profile(
             &resources,
         )
         .await?;
+    state
+        .store
+        .set_worker_profile_env_mappings(auth.org_id, profile.id, &body.env_mapping_ids)
+        .await?;
     audit::record(
         &state,
         &auth,
@@ -402,6 +409,18 @@ pub async fn update_profile(
     crate::extract::ApiJson(body): crate::extract::ApiJson<CreateWorkerProfileRequest>,
 ) -> Result<Json<WorkerProfile>, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    let existing = state
+        .store
+        .get_worker_profile(auth.org_id, profile_id)
+        .await?;
+    let mut attached_before: Vec<Uuid> = state
+        .store
+        .list_worker_profile_env_mappings(profile_id)
+        .await?
+        .into_iter()
+        .map(|mapping| mapping.id)
+        .collect();
+    attached_before.sort();
     state.enforce_limit(
         "workers",
         state
@@ -484,13 +503,57 @@ pub async fn update_profile(
             &resources,
         )
         .await?;
+    state
+        .store
+        .set_worker_profile_env_mappings(auth.org_id, profile.id, &body.env_mapping_ids)
+        .await?;
+    let mut attached_after: Vec<Uuid> = state
+        .store
+        .list_worker_profile_env_mappings(profile_id)
+        .await?
+        .into_iter()
+        .map(|mapping| mapping.id)
+        .collect();
+    attached_after.sort();
+    let restart_required = attached_before != attached_after
+        || existing.harness_kind != profile.harness_kind
+        || existing.target != profile.target
+        || existing.execution_driver != profile.execution_driver
+        || existing.image != profile.image
+        || existing.image_tag != profile.image_tag
+        || existing.agent_scope != profile.agent_scope
+        || existing.agent_ids != profile.agent_ids
+        || existing.skill_slugs != profile.skill_slugs
+        || existing.provider != profile.provider
+        || existing.model != profile.model
+        || existing.auth_secret_name != profile.auth_secret_name
+        || existing.env != profile.env
+        || existing.env_mappings != profile.env_mappings
+        || existing.resources != profile.resources;
+    if restart_required {
+        let marked = state
+            .store
+            .mark_profile_launches_relaunch_required(auth.org_id, profile.id)
+            .await?;
+        if marked > 0 {
+            tracing::info!(
+                profile_id = %profile.id,
+                launches = marked,
+                "worker profile changed; relaunch required"
+            );
+        }
+    }
     audit::record(
         &state,
         &auth,
         "worker_profile.updated",
         Some("worker_profile"),
         Some(profile.id),
-        serde_json::json!({ "harness": profile.harness_kind, "target": profile.target }),
+        serde_json::json!({
+            "harness": profile.harness_kind,
+            "target": profile.target,
+            "relaunchRequired": restart_required,
+        }),
     )
     .await;
     Ok(Json(profile))

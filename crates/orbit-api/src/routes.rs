@@ -261,6 +261,30 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/v1/license", get(handlers::license::overview))
         .route(
+            "/api/v1/outputs",
+            get(handlers::outputs::list).post(handlers::outputs::create),
+        )
+        .route(
+            "/api/v1/outputs/{output_id}",
+            patch(handlers::outputs::update).delete(handlers::outputs::delete),
+        )
+        .route(
+            "/api/v1/outputs/{output_id}/test",
+            post(handlers::outputs::test_output),
+        )
+        .route(
+            "/api/v1/env-mappings",
+            get(handlers::env_mappings::list).post(handlers::env_mappings::create),
+        )
+        .route(
+            "/api/v1/env-mappings/{mapping_id}",
+            patch(handlers::env_mappings::update).delete(handlers::env_mappings::delete),
+        )
+        .route(
+            "/api/v1/worker-profiles/{profile_id}/env-mappings",
+            get(handlers::env_mappings::profile_mappings),
+        )
+        .route(
             "/api/v1/roles",
             get(handlers::roles::list).post(handlers::roles::create),
         )

@@ -12,4 +12,5 @@ Practical, task-oriented documentation. For design rationale see
 | Roles, permissions and RBAC | [rbac.md](rbac.md) |
 | Offline enterprise licensing | [licensing.md](licensing.md) |
 | Tool policy and approvals | [tool-policies.md](tool-policies.md) |
+| Outputs (webhooks, Slack, Mattermost) | [outputs.md](outputs.md) |
 | Providers and models | [providers.md](providers.md) |

@@ -33,13 +33,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { api, setAccessToken } from "@/lib/api";
+import { createEnvMapping, deleteEnvMapping } from "@/lib/env-mappings";
 import { copyText } from "@/lib/browser";
 import {
   queryKeys,
   unwrap,
   useApiTokens,
   useAuditLogs,
+  useEnvMappings,
   useLicense,
   useMe,
   useMeta,
@@ -51,6 +54,43 @@ export default function SettingsPage() {
   const me = useMe();
   const meta = useMeta();
   const license = useLicense();
+  const envMappings = useEnvMappings();
+  const [envOpen, setEnvOpen] = useState(false);
+  const [envName, setEnvName] = useState("");
+  const [envDescription, setEnvDescription] = useState("");
+  const [envJson, setEnvJson] = useState(
+    '[\n  { "envVar": "EXAMPLE_TOKEN", "connectionId": null, "secretKey": "my-secret" }\n]',
+  );
+  const createEnv = useMutation({
+    mutationFn: async () => {
+      const mappings = JSON.parse(envJson) as Array<{
+        envVar: string;
+        connectionId?: string | null;
+        secretKey?: string | null;
+      }>;
+      return createEnvMapping({
+        name: envName,
+        description: envDescription,
+        mappings,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Environment mapping created");
+      setEnvOpen(false);
+      setEnvName("");
+      setEnvDescription("");
+      void queryClient.invalidateQueries({ queryKey: ["env-mappings"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+  const removeEnv = useMutation({
+    mutationFn: deleteEnvMapping,
+    onSuccess: () => {
+      toast.success("Environment mapping deleted");
+      void queryClient.invalidateQueries({ queryKey: ["env-mappings"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
   const tokens = useApiTokens();
   const audit = useAuditLogs();
   const queryClient = useQueryClient();
@@ -217,6 +257,50 @@ export default function SettingsPage() {
           icon={<Server className="h-4 w-4" />}
         />
       </div>
+
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Server className="h-4 w-4 text-primary" /> Environment mappings
+          </CardTitle>
+          <Button size="sm" onClick={() => setEnvOpen(true)}>
+            <Plus /> New mapping
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <p className="text-[11px] text-muted-foreground">
+            Reusable connection/secret-to-env mappings shared by worker profiles.
+          </p>
+          {envMappings.isLoading ? (
+            <Skeleton className="h-16" />
+          ) : !envMappings.data?.length ? (
+            <p className="text-[11px] text-muted-foreground">No reusable mappings yet.</p>
+          ) : (
+            envMappings.data.map((mapping) => (
+              <div
+                key={mapping.id}
+                className="flex items-center justify-between gap-2 rounded-lg border p-2"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{mapping.name}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {mapping.description || `${mapping.mappings.length} mapping(s)`}
+                  </p>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="text-destructive"
+                  onClick={() => removeEnv.mutate(mapping.id)}
+                  aria-label={`Delete ${mapping.name}`}
+                >
+                  <Trash2 />
+                </Button>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -450,6 +534,49 @@ export default function SettingsPage() {
           </div>
           <DialogFooter>
             <Button onClick={() => setCreatedToken(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={envOpen} onOpenChange={setEnvOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New environment mapping</DialogTitle>
+            <DialogDescription>
+              A reusable set of env var mappings. Attach it to one or more worker profiles.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Name</Label>
+              <Input value={envName} onChange={(event) => setEnvName(event.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description</Label>
+              <Input
+                value={envDescription}
+                onChange={(event) => setEnvDescription(event.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Mappings (JSON)</Label>
+              <Textarea
+                value={envJson}
+                onChange={(event) => setEnvJson(event.target.value)}
+                className="min-h-32 font-mono text-xs"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEnvOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => createEnv.mutate()}
+              loading={createEnv.isPending}
+              disabled={!envName.trim()}
+            >
+              Create
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -379,7 +379,7 @@ export default function ExecutionDetailPage() {
 
       </div>
 
-      <Card>
+      <Card className="min-w-0 overflow-hidden">
         <CardHeader className="flex-row items-center justify-between pb-2">
           <CardTitle className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-primary" /> Output
@@ -399,7 +399,7 @@ export default function ExecutionDetailPage() {
             </Button>
           ) : null}
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="min-w-0 space-y-2">
           {execution.output ? (
             <>
               <div className="flex items-center justify-between">
@@ -415,11 +415,11 @@ export default function ExecutionDetailPage() {
                 </Button>
               </div>
               {showRawOutput ? (
-                <pre className="max-h-[600px] overflow-auto rounded-lg bg-muted/50 p-3 text-[11px] leading-relaxed">
+                <pre className="max-h-[600px] w-full max-w-full overflow-auto rounded-lg bg-muted/50 p-3 text-[11px] leading-relaxed">
                   {JSON.stringify(execution.output, null, 2)}
                 </pre>
               ) : (
-                <div className="max-h-[600px] overflow-auto rounded-lg bg-muted/50 p-4 text-sm leading-relaxed whitespace-pre-wrap">
+                <div className="max-h-[600px] w-full max-w-full overflow-auto break-words rounded-lg bg-muted/50 p-4 text-sm leading-relaxed whitespace-pre-wrap">
                   {renderOutput(execution.output)}
                 </div>
               )}

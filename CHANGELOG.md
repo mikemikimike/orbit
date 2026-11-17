@@ -8,6 +8,21 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- Reusable environment mappings (`/api/v1/env-mappings`) attachable to multiple worker
+  profiles; Settings library + worker multi-select; inline mappings override attached ones.
+- Worker profile changes that need a restart mark the launch `relaunchRequired`. Saving
+  with a live worker asks **Save only / Save & relaunch** and warns that running agents may
+  be interrupted.
+- Outputs API (`/api/v1/outputs`) with Slack, Mattermost and generic webhook delivery,
+  durable outbox retries and a test endpoint. UI/SSRF/HMAC hardening is tracked in #28.
+
+### Fixed
+
+- Execution Output card is width-constrained; long output wraps/scrolls instead of widening
+  the page (#39).
+
 ### Changed
 
 - Agent Studio and worker profiles use provider model catalogs: the model is a select when

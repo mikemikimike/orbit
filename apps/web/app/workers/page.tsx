@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Boxes, Copy, Pencil, Plus, Rocket, ScrollText, Server, Square, Trash2 } from "lucide-react";
@@ -34,6 +34,8 @@ import {
   useSkills,
   useWorkerLaunches,
   useConnections,
+  useEnvMappings,
+  useWorkerProfileEnvMappings,
   useWorkerProfiles,
 } from "@/lib/queries";
 import {
@@ -76,6 +78,7 @@ function WorkersPageInner() {
   const [model, setModel] = useState("deepseek-v4-pro");
   const [authSecret, setAuthSecret] = useState("");
   const [envMappings, setEnvMappings] = useState<Array<{ envVar: string; connectionId: string; secretKey: string }>>([]);
+  const [envMappingIds, setEnvMappingIds] = useState<string[]>([]);
   const [agentScope, setAgentScope] = useState<"all" | "selected">("all");
   const [agentIds, setAgentIds] = useState<string[]>([]);
   const [skillSlugs, setSkillSlugs] = useState<string[]>([]);
@@ -84,6 +87,7 @@ function WorkersPageInner() {
   const [cpuLimit, setCpuLimit] = useState("1");
   const [memoryLimit, setMemoryLimit] = useState("1Gi");
   const [workspaceSize, setWorkspaceSize] = useState("1Gi");
+  const [confirmRelaunch, setConfirmRelaunch] = useState(false);
 
   // Pre-fill from Work wizard query params.
   if (searchParams.get("create") === "1" && !prefilled) {
@@ -112,8 +116,54 @@ function WorkersPageInner() {
     return Array.isArray(settings?.models) ? (settings?.models as string[]) : [];
   })();
 
+  const envMappingLibrary = useEnvMappings();
+  const profileEnvMappings = useWorkerProfileEnvMappings(editing?.id);
+  useEffect(() => {
+    if (editing && profileEnvMappings.data) {
+      setEnvMappingIds(profileEnvMappings.data.map((mapping) => mapping.id));
+    }
+  }, [editing, profileEnvMappings.data]);
+
+  const activeProfileLaunches = (launches.data ?? []).filter(
+    (item) => editing && item.profileId === editing.id &&
+      ["pending", "starting", "running"].includes(item.status),
+  );
+
+  function restartFieldsChanged() {
+    if (!editing) return false;
+    const existingResources = ((editing as WorkerProfile & { resources?: Record<string, unknown> }).resources ?? {}) as {
+      requests?: { cpu?: string; memory?: string };
+      limits?: { cpu?: string; memory?: string };
+      workspace?: { sizeLimit?: string };
+    };
+    return (
+      editing.image !== image ||
+      editing.imageTag !== tag ||
+      editing.target !== target ||
+      editing.executionDriver !== driver ||
+      editing.harnessKind !== harness ||
+      (editing.authSecretName ?? "") !== authSecret ||
+      (editing.provider ?? "") !== (provider || "") ||
+      (editing.model ?? "") !== (model || "") ||
+      JSON.stringify(existingResources) !==
+        JSON.stringify({
+          requests: { cpu: cpuRequest || undefined, memory: memoryRequest || undefined },
+          limits: { cpu: cpuLimit || undefined, memory: memoryLimit || undefined },
+          workspace: { sizeLimit: workspaceSize || undefined },
+        })
+    );
+  }
+
+  function requestSave() {
+    if (editing && activeProfileLaunches.length && restartFieldsChanged()) {
+      setConfirmRelaunch(true);
+      return;
+    }
+    save.mutate(false);
+  }
+
   const save = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (applyNow: boolean) => {
       const body = {
         name,
         harnessKind: harness,
@@ -133,6 +183,7 @@ function WorkersPageInner() {
           connectionId: m.connectionId || null,
           secretKey: m.secretKey || null,
         })),
+        envMappingIds,
         resources: {
           requests: { cpu: cpuRequest || undefined, memory: memoryRequest || undefined },
           limits: { cpu: cpuLimit || undefined, memory: memoryLimit || undefined },
@@ -140,20 +191,37 @@ function WorkersPageInner() {
         },
       };
       if (editing) {
-        return unwrap(
+        const profile = unwrap(
           await api.PATCH("/api/v1/worker-profiles/{profile_id}", {
             params: { path: { profile_id: editing.id } },
             body,
           }),
         );
+        if (applyNow) {
+          for (const item of activeProfileLaunches) {
+            await stopWorkerLaunch(item.id);
+          }
+          await launchWorkerProfile(editing.id);
+        }
+        return profile;
       }
       return unwrap(await api.POST("/api/v1/worker-profiles", { body }));
     },
-    onSuccess: (profile) => {
-      toast.success(editing ? "Worker profile updated" : "Worker profile created");
+    onSuccess: (profile, applyNow) => {
+      if (applyNow) {
+        toast.success("Worker profile updated and relaunched");
+      } else {
+        toast.success(
+          editing ? "Worker profile updated" : "Worker profile created",
+          editing && activeProfileLaunches.length && restartFieldsChanged()
+            ? { description: "Relaunch the worker to apply the new configuration." }
+            : undefined,
+        );
+      }
       setOpen(false);
       setEditing(null);
       void queryClient.invalidateQueries({ queryKey: queryKeys.workerProfiles });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workerLaunches });
       if (!editing) setBootstrapProfile(profile as WorkerProfile);
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -171,6 +239,7 @@ function WorkersPageInner() {
     setModel("deepseek-v4-pro");
     setAuthSecret("");
     setEnvMappings([]);
+    setEnvMappingIds([]);
     setAgentScope("all");
     setAgentIds([]);
     setSkillSlugs([]);
@@ -197,6 +266,7 @@ function WorkersPageInner() {
     setEnvMappings(mappings.map((m) => ({ envVar: m.envVar ?? "", connectionId: m.connectionId ?? "", secretKey: m.secretKey ?? "" })));
     const scoped = (profile as WorkerProfile & { agentScope?: string }).agentScope === "selected";
     setAgentScope(scoped ? "selected" : "all");
+    setEnvMappingIds([]);
     setAgentIds(profile.agentIds);
     setSkillSlugs(profile.skillSlugs);
     const resources = ((profile as WorkerProfile & { resources?: Record<string, unknown> }).resources ?? {}) as {
@@ -423,6 +493,9 @@ function WorkersPageInner() {
                     >
                       {item.status}
                     </Badge>
+                    {(item as typeof item & { relaunchRequired?: boolean }).relaunchRequired ? (
+                      <Badge variant="warning">relaunch required</Badge>
+                    ) : null}
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2">
@@ -470,6 +543,43 @@ function WorkersPageInner() {
           <pre className="max-h-80 overflow-auto rounded-lg bg-muted/50 p-3 text-[10px] leading-relaxed">
             {logsLoading ? "Loading…" : logs}
           </pre>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmRelaunch} onOpenChange={setConfirmRelaunch}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Relaunch worker now?</DialogTitle>
+            <DialogDescription>
+              This profile has a running worker and the change needs a restart. Running agents
+              on this worker may be interrupted.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            {activeProfileLaunches.length} active launch(es) will be stopped and relaunched.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setConfirmRelaunch(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setConfirmRelaunch(false);
+                save.mutate(false);
+              }}
+            >
+              Save only
+            </Button>
+            <Button
+              onClick={() => {
+                setConfirmRelaunch(false);
+                save.mutate(true);
+              }}
+            >
+              Save &amp; relaunch
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -773,6 +883,42 @@ function WorkersPageInner() {
               </p>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
+              <Label>Reusable environment mappings</Label>
+              {envMappingLibrary.isLoading ? (
+                <Skeleton className="h-16" />
+              ) : !envMappingLibrary.data?.length ? (
+                <p className="text-[11px] text-muted-foreground">
+                  No reusable mappings yet. Create them with the env-mappings API; attached
+                  mappings are shared across profiles.
+                </p>
+              ) : (
+                <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border p-2">
+                  {envMappingLibrary.data.map((mapping) => (
+                    <label key={mapping.id} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="min-w-0">
+                        <span className="block truncate">{mapping.name}</span>
+                        {mapping.description ? (
+                          <span className="block truncate text-[10px] text-muted-foreground">
+                            {mapping.description}
+                          </span>
+                        ) : null}
+                      </span>
+                      <Switch
+                        checked={envMappingIds.includes(mapping.id)}
+                        onCheckedChange={(checked) =>
+                          setEnvMappingIds((current) =>
+                            checked
+                              ? [...current, mapping.id]
+                              : current.filter((id) => id !== mapping.id),
+                          )
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
               <div className="flex items-center justify-between">
                 <Label>Agents</Label>
                 <div className="flex gap-1">
@@ -859,7 +1005,7 @@ function WorkersPageInner() {
             <Button variant="ghost" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!name.trim()}>
+            <Button onClick={requestSave} loading={save.isPending} disabled={!name.trim()}>
               {editing ? "Save changes" : "Create profile"}
             </Button>
           </DialogFooter>

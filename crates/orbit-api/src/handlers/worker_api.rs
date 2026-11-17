@@ -971,9 +971,24 @@ pub async fn resolve_env(
         Some(id) => state.store.get_worker_profile(auth.org_id, id).await.ok(),
         None => None,
     };
-    let mappings: Vec<EnvMapping> = profile
-        .map(|p| serde_json::from_value(p.env_mappings).unwrap_or_default())
-        .unwrap_or_default();
+    let mut mappings: Vec<EnvMapping> = Vec::new();
+    if let Some(profile) = &profile {
+        // Reusable mappings first, then inline mappings (inline wins on duplicates).
+        if let Ok(attached) = state
+            .store
+            .list_worker_profile_env_mappings(profile.id)
+            .await
+        {
+            for mapping in attached {
+                if let Ok(items) = serde_json::from_value::<Vec<EnvMapping>>(mapping.mappings) {
+                    mappings.extend(items);
+                }
+            }
+        }
+        if let Ok(items) = serde_json::from_value::<Vec<EnvMapping>>(profile.env_mappings.clone()) {
+            mappings.extend(items);
+        }
+    }
 
     let mut resolved = Vec::new();
     for mapping in mappings {
@@ -995,7 +1010,8 @@ pub async fn resolve_env(
                 }
                 Err(_) => None,
             }
-        } else if let Some(ref secret_ref) = mapping.secret_ref {
+        } else if let Some(secret_ref) = mapping.secret_ref.as_ref().or(mapping.secret_key.as_ref())
+        {
             state
                 .store
                 .get_secret_value(secret_ref)
