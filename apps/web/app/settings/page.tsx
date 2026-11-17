@@ -33,7 +33,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { signOut } from "@/lib/session";
 import { createEnvMapping, deleteEnvMapping } from "@/lib/env-mappings";
@@ -43,6 +42,7 @@ import {
   unwrap,
   useApiTokens,
   useAuditLogs,
+  useConnections,
   useEnvMappings,
   useLicense,
   useMe,
@@ -56,22 +56,28 @@ export default function SettingsPage() {
   const meta = useMeta();
   const license = useLicense();
   const envMappings = useEnvMappings();
+  const connections = useConnections();
   const [envOpen, setEnvOpen] = useState(false);
   const [envName, setEnvName] = useState("");
   const [envDescription, setEnvDescription] = useState("");
-  const [envJson, setEnvJson] = useState(
-    '[\n  { "envVar": "EXAMPLE_TOKEN", "connectionId": null, "secretKey": "my-secret" }\n]',
-  );
+  const [envRows, setEnvRows] = useState<
+    Array<{ envVar: string; connectionId: string; secretKey: string }>
+  >([{ envVar: "", connectionId: "", secretKey: "" }]);
   const createEnv = useMutation({
     mutationFn: async () => {
-      const mappings = JSON.parse(envJson) as Array<{
-        envVar: string;
-        connectionId?: string | null;
-        secretKey?: string | null;
-      }>;
+      const mappings = envRows
+        .filter((row) => row.envVar.trim())
+        .map((row) => ({
+          envVar: row.envVar.trim(),
+          connectionId: row.connectionId || null,
+          secretKey: row.secretKey.trim() || null,
+        }));
+      if (!mappings.length) {
+        throw new Error("Add at least one mapping");
+      }
       return createEnvMapping({
-        name: envName,
-        description: envDescription,
+        name: envName.trim(),
+        description: envDescription.trim(),
         mappings,
       });
     },
@@ -80,6 +86,7 @@ export default function SettingsPage() {
       setEnvOpen(false);
       setEnvName("");
       setEnvDescription("");
+      setEnvRows([{ envVar: "", connectionId: "", secretKey: "" }]);
       void queryClient.invalidateQueries({ queryKey: ["env-mappings"] });
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -556,13 +563,85 @@ export default function SettingsPage() {
                 onChange={(event) => setEnvDescription(event.target.value)}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label>Mappings (JSON)</Label>
-              <Textarea
-                value={envJson}
-                onChange={(event) => setEnvJson(event.target.value)}
-                className="min-h-32 font-mono text-xs"
-              />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Mappings</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    setEnvRows((rows) => [
+                      ...rows,
+                      { envVar: "", connectionId: "", secretKey: "" },
+                    ])
+                  }
+                >
+                  <Plus /> Add mapping
+                </Button>
+              </div>
+              {envRows.map((row, index) => (
+                <div
+                  key={index}
+                  className="grid gap-2 rounded-lg border p-2 sm:grid-cols-[1fr_1fr_1fr_auto]"
+                >
+                  <Input
+                    value={row.envVar}
+                    placeholder="ENV_VAR_NAME"
+                    className="font-mono text-xs"
+                    onChange={(event) =>
+                      setEnvRows((rows) =>
+                        rows.map((item, i) =>
+                          i === index ? { ...item, envVar: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  />
+                  <select
+                    className="flex h-9 w-full rounded-lg border border-input bg-card px-2 text-xs"
+                    value={row.connectionId}
+                    onChange={(event) =>
+                      setEnvRows((rows) =>
+                        rows.map((item, i) =>
+                          i === index ? { ...item, connectionId: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="">No connection</option>
+                    {(connections.data ?? []).map((connection) => (
+                      <option key={connection.id} value={connection.id}>
+                        {connection.name} · {connection.connectorSlug}
+                      </option>
+                    ))}
+                  </select>
+                  <Input
+                    value={row.secretKey}
+                    placeholder="secret ref (optional)"
+                    className="text-xs"
+                    onChange={(event) =>
+                      setEnvRows((rows) =>
+                        rows.map((item, i) =>
+                          i === index ? { ...item, secretKey: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setEnvRows((rows) => rows.filter((_, i) => i !== index))}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+              <p className="text-[11px] text-muted-foreground">
+                Each mapping becomes an environment variable. Use a connection for its
+                credential, or reference a stored secret. Attach the mapping to any number of
+                worker profiles under Workers.
+              </p>
             </div>
           </div>
           <DialogFooter>
