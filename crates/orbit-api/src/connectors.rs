@@ -160,6 +160,39 @@ pub fn builtin_manifests() -> Vec<ConnectorManifest> {
             builtin: true,
         },
         ConnectorManifest {
+            slug: "kubernetes".into(),
+            name: "Kubernetes".into(),
+            version: "0.1.0".into(),
+            description: "Read-only Kubernetes inspection: namespaces, pods, logs, deployments and events.".into(),
+            auth: vec![AuthMethod::ApiToken],
+            webhooks: false,
+            capabilities: vec![
+                capability("namespaces.list", "List namespaces", "Lists namespaces allowed on the connection.", CapabilityEffect::Read),
+                capability("pods.list", "List pods", "Lists pods in a namespace with optional selectors.", CapabilityEffect::Read),
+                capability("pods.get", "Get pod", "Reads one pod.", CapabilityEffect::Read),
+                capability("pods.logs", "Pod logs", "Reads bounded pod logs (current or previous).", CapabilityEffect::Read),
+                capability("deployments.list", "List deployments", "Lists deployments in a namespace.", CapabilityEffect::Read),
+                capability("deployments.get", "Get deployment", "Reads one deployment.", CapabilityEffect::Read),
+                capability("events.list", "List events", "Lists namespace events.", CapabilityEffect::Read),
+            ],
+            config_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "authMode": { "type": "string", "default": "service_account", "description": "service_account (token) or kubeconfig" },
+                    "apiServer": { "type": "string", "default": "https://kubernetes.default.svc", "description": "Required for service_account; ignored for kubeconfig" },
+                    "context": { "type": "string", "description": "Kubeconfig context (defaults to current-context)" },
+                    "namespaces": { "type": "array", "items": { "type": "string" }, "description": "Namespace allowlist; empty denies everything except selected defaults" },
+                    "defaultNamespace": { "type": "string", "description": "Namespace used when a tool call omits it" },
+                    "allowedResources": { "type": "array", "items": { "type": "string" }, "description": "e.g. pods, pods/log, deployments, events, namespaces" },
+                    "caCert": { "type": "string", "description": "Public CA certificate PEM (optional)" },
+                    "timeoutSeconds": { "type": "integer", "default": 20 },
+                    "maxLogBytes": { "type": "integer", "default": 200000 }
+                }
+            }),
+            docs_url: Some("https://kubernetes.io/docs/reference/kubernetes-api/".into()),
+            builtin: true,
+        },
+        ConnectorManifest {
             slug: "x".into(),
             name: "X".into(),
             version: "0.1.0".into(),

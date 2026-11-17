@@ -28,6 +28,7 @@ use orbit_store::{Approval, Connection, ExecutionRecord};
 use crate::client::WorkerClient;
 use crate::github::{self, GitHubClientConfig};
 use crate::gitlab::{self, GitLabClientConfig};
+use crate::kubernetes::KubernetesClientConfig;
 
 #[derive(Debug, Clone)]
 struct ToolSpec {
@@ -57,6 +58,7 @@ struct BrokerState {
 enum ConnectorClient {
     Github(GitHubClientConfig),
     Gitlab(GitLabClientConfig),
+    Kubernetes(KubernetesClientConfig),
 }
 
 impl BrokerState {
@@ -282,6 +284,68 @@ fn github_tool_specs(
         .collect()
 }
 
+fn kubernetes_tool_specs(
+    capabilities: &[String],
+    effects: &std::collections::BTreeMap<String, CapabilityEffect>,
+) -> Vec<ToolSpec> {
+    capabilities
+        .iter()
+        .map(|capability| {
+            let effect = effects
+                .get(capability)
+                .copied()
+                .unwrap_or(CapabilityEffect::Read);
+            let input_schema = match capability.as_str() {
+                "namespaces.list" => json!({ "type": "object", "properties": {} }),
+                "pods.list" => json!({
+                    "type": "object",
+                    "properties": {
+                        "namespace": { "type": "string" },
+                        "labelSelector": { "type": "string" },
+                        "fieldSelector": { "type": "string" }
+                    }
+                }),
+                "pods.get" => json!({
+                    "type": "object",
+                    "properties": { "namespace": { "type": "string" }, "name": { "type": "string" } },
+                    "required": ["name"]
+                }),
+                "pods.logs" => json!({
+                    "type": "object",
+                    "properties": {
+                        "namespace": { "type": "string" },
+                        "name": { "type": "string" },
+                        "tailLines": { "type": "integer" },
+                        "previous": { "type": "boolean" }
+                    },
+                    "required": ["name"]
+                }),
+                "deployments.list" => json!({
+                    "type": "object",
+                    "properties": { "namespace": { "type": "string" } }
+                }),
+                "deployments.get" => json!({
+                    "type": "object",
+                    "properties": { "namespace": { "type": "string" }, "name": { "type": "string" } },
+                    "required": ["name"]
+                }),
+                "events.list" => json!({
+                    "type": "object",
+                    "properties": { "namespace": { "type": "string" }, "fieldSelector": { "type": "string" } }
+                }),
+                _ => json!({ "type": "object" }),
+            };
+            ToolSpec {
+                capability: capability.clone(),
+                name: format!("kubernetes_{}", capability.replace('.', "_")),
+                description: format!("Kubernetes read capability {capability}."),
+                effect,
+                input_schema,
+            }
+        })
+        .collect()
+}
+
 fn gitlab_tool_specs(
     capabilities: &[String],
     effects: &std::collections::BTreeMap<String, CapabilityEffect>,
@@ -479,7 +543,8 @@ pub async fn start(
     tool_policies: &[ToolPolicyRule],
 ) -> anyhow::Result<Option<BrokerHandle>> {
     let binding = spec.connectors.iter().find(|b| {
-        matches!(b.connector.as_str(), "github" | "gitlab") && !b.capabilities.is_empty()
+        matches!(b.connector.as_str(), "github" | "gitlab" | "kubernetes")
+            && !b.capabilities.is_empty()
     });
 
     let mut connection = None;
@@ -524,25 +589,28 @@ pub async fn start(
             .cloned()
             .collect();
         if !allowed.is_empty() {
-            tools = if connector_slug == "gitlab" {
-                gitlab_tool_specs(&allowed, &effects)
-            } else {
-                github_tool_specs(&allowed, &effects)
+            tools = match connector_slug.as_str() {
+                "gitlab" => gitlab_tool_specs(&allowed, &effects),
+                "kubernetes" => kubernetes_tool_specs(&allowed, &effects),
+                _ => github_tool_specs(&allowed, &effects),
             };
             let credential = worker_connection
                 .credential
                 .as_ref()
                 .map(|credential| credential.value.clone());
-            connector_client = Some(if connector_slug == "gitlab" {
-                ConnectorClient::Gitlab(GitLabClientConfig::from_connection(
+            connector_client = Some(match connector_slug.as_str() {
+                "gitlab" => ConnectorClient::Gitlab(GitLabClientConfig::from_connection(
                     &conn.config,
                     credential,
-                ))
-            } else {
-                ConnectorClient::Github(GitHubClientConfig::from_connection(
+                )),
+                "kubernetes" => ConnectorClient::Kubernetes(
+                    KubernetesClientConfig::from_connection(&conn.config, credential)
+                        .map_err(anyhow::Error::msg)?,
+                ),
+                _ => ConnectorClient::Github(GitHubClientConfig::from_connection(
                     &conn.config,
                     credential,
-                ))
+                )),
             });
         }
         connection = Some(conn);
@@ -759,6 +827,9 @@ async fn call_tool(
             }
             Some(ConnectorClient::Gitlab(config)) => {
                 gitlab::invoke(&state.http, config, &tool.capability, &call.arguments).await
+            }
+            Some(ConnectorClient::Kubernetes(config)) => {
+                config.invoke(&tool.capability, &call.arguments).await
             }
             None => Err("execution has no connector client".to_string()),
         }

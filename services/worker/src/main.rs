@@ -5,6 +5,7 @@ mod dispatch;
 mod git;
 mod github;
 mod gitlab;
+mod kubernetes;
 mod liveness;
 mod mcp_broker;
 mod runner;

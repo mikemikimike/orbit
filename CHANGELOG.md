@@ -8,6 +8,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- Read-only Kubernetes connector: ServiceAccount-token or strict static kubeconfig auth,
+  namespace/resource allowlists, namespaces/pods/deployments/events list/get and bounded pod
+  logs. Example reader RBAC and guide included. Cluster E2E and test-connection remain.
+
 ### Multi-team access model
 
 Enterprise (`teams` + `resource_permissions`): access teams, private/team/org visibility,

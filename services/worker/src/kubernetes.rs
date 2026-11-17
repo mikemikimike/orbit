@@ -1,0 +1,423 @@
+//! Read-only Kubernetes connector for the tool broker.
+//!
+//! Supports a ServiceAccount token or a static kubeconfig (token/client cert only). Auth
+//! plugins (`exec`) and insecure TLS are rejected; credentials never leave the worker.
+
+use base64::Engine;
+use serde_json::{json, Value};
+
+#[derive(Clone, Debug)]
+pub struct KubernetesClientConfig {
+    api_server: String,
+    token: Option<String>,
+    ca_pem: Option<Vec<u8>>,
+    namespaces: Vec<String>,
+    default_namespace: Option<String>,
+    allowed_resources: Vec<String>,
+    max_log_bytes: usize,
+    timeout: std::time::Duration,
+}
+
+impl KubernetesClientConfig {
+    pub fn from_connection(config: &Value, credential: Option<String>) -> Result<Self, String> {
+        let auth_mode = config
+            .get("authMode")
+            .and_then(Value::as_str)
+            .unwrap_or("service_account");
+        let mut api_server = config
+            .get("apiServer")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim_end_matches('/')
+            .to_string();
+        let mut token = None;
+        let mut ca_pem = config
+            .get("caCert")
+            .and_then(Value::as_str)
+            .map(|value| value.as_bytes().to_vec());
+
+        match auth_mode {
+            "service_account" => {
+                token = credential;
+                if api_server.is_empty() {
+                    api_server = "https://kubernetes.default.svc".into();
+                }
+            }
+            "kubeconfig" => {
+                let raw = credential.ok_or("kubeconfig credential is required")?;
+                let doc: Value = serde_yaml::from_str(&raw)
+                    .map_err(|error| format!("invalid kubeconfig YAML: {error}"))?;
+                let context_name = config
+                    .get("context")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| {
+                        doc.get("current-context")
+                            .and_then(Value::as_str)
+                            .map(str::to_string)
+                    })
+                    .ok_or("kubeconfig has no current-context; set config.context")?;
+                let context = find_named(doc.get("contexts"), &context_name)
+                    .and_then(|item| item.get("context"))
+                    .ok_or_else(|| format!("kubeconfig context '{context_name}' was not found"))?;
+                let cluster_name = context
+                    .get("cluster")
+                    .and_then(Value::as_str)
+                    .ok_or("kubeconfig context has no cluster")?;
+                let user_name = context.get("user").and_then(Value::as_str);
+                let cluster = find_named(doc.get("clusters"), cluster_name)
+                    .and_then(|item| item.get("cluster"))
+                    .ok_or_else(|| format!("kubeconfig cluster '{cluster_name}' was not found"))?;
+                if cluster
+                    .get("insecure-skip-tls-verify")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                {
+                    return Err("kubeconfig insecure-skip-tls-verify is not allowed".into());
+                }
+                api_server = cluster
+                    .get("server")
+                    .and_then(Value::as_str)
+                    .ok_or("kubeconfig cluster has no server")?
+                    .trim_end_matches('/')
+                    .to_string();
+                if let Some(encoded) = cluster
+                    .get("certificate-authority-data")
+                    .and_then(Value::as_str)
+                {
+                    ca_pem = Some(
+                        base64::engine::general_purpose::STANDARD
+                            .decode(encoded)
+                            .map_err(|error| {
+                                format!("invalid certificate-authority-data: {error}")
+                            })?,
+                    );
+                }
+                if let Some(user_name) = user_name {
+                    let user = find_named(doc.get("users"), user_name)
+                        .and_then(|item| item.get("user"))
+                        .ok_or_else(|| format!("kubeconfig user '{user_name}' was not found"))?;
+                    if user.get("exec").is_some() {
+                        return Err("kubeconfig exec authentication is not supported".into());
+                    }
+                    if let Some(value) = user.get("token").and_then(Value::as_str) {
+                        token = Some(value.to_string());
+                    } else if let (Some(cert), Some(key)) = (
+                        user.get("client-certificate-data").and_then(Value::as_str),
+                        user.get("client-key-data").and_then(Value::as_str),
+                    ) {
+                        let _ = (cert, key);
+                        return Err(
+                            "kubeconfig client-certificate authentication is not supported yet; use a token"
+                                .into(),
+                        );
+                    } else {
+                        return Err("kubeconfig user has no static token".into());
+                    }
+                }
+            }
+            other => return Err(format!("unknown Kubernetes authMode '{other}'")),
+        }
+        if api_server.is_empty() || !api_server.starts_with("https://") {
+            return Err("apiServer must be an https URL".into());
+        }
+
+        let namespaces = string_list(config.get("namespaces"));
+        let allowed_resources = string_list(config.get("allowedResources"));
+        let timeout = config
+            .get("timeoutSeconds")
+            .and_then(Value::as_u64)
+            .unwrap_or(20)
+            .clamp(1, 120);
+        let max_log_bytes = config
+            .get("maxLogBytes")
+            .and_then(Value::as_u64)
+            .unwrap_or(200_000)
+            .clamp(1_000, 2_000_000) as usize;
+        Ok(Self {
+            api_server,
+            token,
+            ca_pem,
+            namespaces,
+            default_namespace: config
+                .get("defaultNamespace")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            allowed_resources,
+            max_log_bytes,
+            timeout: std::time::Duration::from_secs(timeout),
+        })
+    }
+
+    fn namespace(&self, args: &Value) -> Result<String, String> {
+        let namespace = args
+            .get("namespace")
+            .and_then(Value::as_str)
+            .or(self.default_namespace.as_deref())
+            .ok_or("namespace is required (or set config.defaultNamespace)")?;
+        validate_segment(namespace, "namespace")?;
+        if !self.namespaces.is_empty() && !self.namespaces.iter().any(|ns| ns == namespace) {
+            return Err(format!(
+                "namespace '{namespace}' is not in the connection allowlist"
+            ));
+        }
+        Ok(namespace.to_string())
+    }
+
+    fn resource_allowed(&self, resource: &str) -> bool {
+        self.allowed_resources.is_empty()
+            || self
+                .allowed_resources
+                .iter()
+                .any(|item| item == resource || item == "*")
+    }
+
+    fn client(&self) -> Result<reqwest::Client, String> {
+        let mut builder = reqwest::Client::builder().timeout(self.timeout);
+        if let Some(pem) = &self.ca_pem {
+            let certificate = reqwest::Certificate::from_pem(pem)
+                .map_err(|error| format!("invalid caCert: {error}"))?;
+            builder = builder.add_root_certificate(certificate);
+        }
+        builder.build().map_err(|error| error.to_string())
+    }
+
+    async fn get(&self, path: &str, query: &[(&str, String)]) -> Result<reqwest::Response, String> {
+        let mut request = self.client()?.get(format!("{}{path}", self.api_server));
+        if let Some(token) = &self.token {
+            request = request.bearer_auth(token);
+        }
+        if !query.is_empty() {
+            request = request.query(query);
+        }
+        request.send().await.map_err(|error| error.to_string())
+    }
+
+    pub async fn invoke(&self, capability: &str, args: &Value) -> Result<Value, String> {
+        let resource = match capability {
+            "namespaces.list" => "namespaces",
+            "pods.list" | "pods.get" => "pods",
+            "pods.logs" => "pods/log",
+            "deployments.list" | "deployments.get" => "deployments",
+            "events.list" => "events",
+            other => return Err(format!("unsupported Kubernetes capability '{other}'")),
+        };
+        if !self.resource_allowed(resource) {
+            return Err(format!(
+                "resource '{resource}' is not allowed on this connection"
+            ));
+        }
+        let response = match capability {
+            "namespaces.list" => self.get("/api/v1/namespaces", &[]).await?,
+            "pods.list" => {
+                let namespace = self.namespace(args)?;
+                let mut query = Vec::new();
+                for (arg, param) in [
+                    ("labelSelector", "labelSelector"),
+                    ("fieldSelector", "fieldSelector"),
+                ] {
+                    if let Some(value) = args.get(arg).and_then(Value::as_str) {
+                        query.push((param, value.to_string()));
+                    }
+                }
+                self.get(&format!("/api/v1/namespaces/{namespace}/pods"), &query)
+                    .await?
+            }
+            "pods.get" => {
+                let namespace = self.namespace(args)?;
+                let name = required_name(args)?;
+                self.get(&format!("/api/v1/namespaces/{namespace}/pods/{name}"), &[])
+                    .await?
+            }
+            "pods.logs" => {
+                let namespace = self.namespace(args)?;
+                let name = required_name(args)?;
+                let mut query = Vec::new();
+                let tail = args
+                    .get("tailLines")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(200)
+                    .clamp(1, 5000)
+                    .to_string();
+                query.push(("tailLines", tail));
+                if args
+                    .get("previous")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                {
+                    query.push(("previous", "true".into()));
+                }
+                let response = self
+                    .get(
+                        &format!("/api/v1/namespaces/{namespace}/pods/{name}/log"),
+                        &query,
+                    )
+                    .await?;
+                let status = response.status();
+                if !status.is_success() {
+                    return Err(format!(
+                        "Kubernetes returned {status}: {}",
+                        response.text().await.unwrap_or_default()
+                    ));
+                }
+                let text = response.text().await.unwrap_or_default();
+                let truncated = text.len() > self.max_log_bytes;
+                let text = if truncated {
+                    text[text.len() - self.max_log_bytes..].to_string()
+                } else {
+                    text
+                };
+                return Ok(json!({ "logs": text, "truncated": truncated }));
+            }
+            "deployments.list" => {
+                let namespace = self.namespace(args)?;
+                self.get(
+                    &format!("/apis/apps/v1/namespaces/{namespace}/deployments"),
+                    &[],
+                )
+                .await?
+            }
+            "deployments.get" => {
+                let namespace = self.namespace(args)?;
+                let name = required_name(args)?;
+                self.get(
+                    &format!("/apis/apps/v1/namespaces/{namespace}/deployments/{name}"),
+                    &[],
+                )
+                .await?
+            }
+            "events.list" => {
+                let namespace = self.namespace(args)?;
+                let mut query = Vec::new();
+                if let Some(value) = args.get("fieldSelector").and_then(Value::as_str) {
+                    query.push(("fieldSelector", value.to_string()));
+                }
+                self.get(&format!("/api/v1/namespaces/{namespace}/events"), &query)
+                    .await?
+            }
+            _ => unreachable!(),
+        };
+        let status = response.status();
+        let mut data: Value = response
+            .json()
+            .await
+            .map_err(|error| format!("invalid Kubernetes response: {error}"))?;
+        if !status.is_success() {
+            return Err(format!("Kubernetes returned {status}: {data}"));
+        }
+        if capability == "namespaces.list" && !self.namespaces.is_empty() {
+            if let Some(items) = data.get_mut("items").and_then(Value::as_array_mut) {
+                items.retain(|item| {
+                    item.pointer("/metadata/name")
+                        .and_then(Value::as_str)
+                        .is_some_and(|name| self.namespaces.iter().any(|ns| ns == name))
+                });
+            }
+        }
+        Ok(data)
+    }
+}
+
+fn find_named<'a>(items: Option<&'a Value>, name: &str) -> Option<&'a Value> {
+    items?
+        .as_array()?
+        .iter()
+        .find(|item| item.get("name").and_then(Value::as_str) == Some(name))
+}
+
+fn string_list(value: Option<&Value>) -> Vec<String> {
+    value
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn required_name(args: &Value) -> Result<String, String> {
+    let name = args
+        .get("name")
+        .and_then(Value::as_str)
+        .ok_or("name is required")?;
+    validate_segment(name, "name")?;
+    Ok(name.to_string())
+}
+
+fn validate_segment(value: &str, field: &str) -> Result<(), String> {
+    if value.is_empty()
+        || value.len() > 253
+        || !value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '.' | '_'))
+    {
+        return Err(format!("{field} contains invalid characters"));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn service_account_requires_https_server() {
+        let config = json!({ "authMode": "service_account", "apiServer": "http://cluster" });
+        assert!(KubernetesClientConfig::from_connection(&config, Some("token".into())).is_err());
+    }
+
+    #[test]
+    fn kubeconfig_rejects_exec_and_insecure_tls() {
+        let exec = r#"
+current-context: c
+contexts:
+  - name: c
+    context: { cluster: k, user: u }
+clusters:
+  - name: k
+    cluster: { server: https://cluster }
+users:
+  - name: u
+    user: { exec: { command: aws } }
+"#;
+        assert!(KubernetesClientConfig::from_connection(
+            &json!({ "authMode": "kubeconfig" }),
+            Some(exec.into())
+        )
+        .is_err());
+
+        let insecure = exec
+            .replace("exec: { command: aws }", "token: abc")
+            .replace(
+                "cluster: { server: https://cluster }",
+                "cluster: { server: https://cluster, insecure-skip-tls-verify: true }",
+            );
+        assert!(KubernetesClientConfig::from_connection(
+            &json!({ "authMode": "kubeconfig" }),
+            Some(insecure)
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn namespace_and_resource_allowlists_are_enforced() {
+        let config = json!({
+            "authMode": "service_account",
+            "apiServer": "https://cluster",
+            "namespaces": ["payments"],
+            "defaultNamespace": "payments",
+            "allowedResources": ["pods"]
+        });
+        let parsed =
+            KubernetesClientConfig::from_connection(&config, Some("token".into())).unwrap();
+        assert!(parsed.namespace(&json!({})).is_ok());
+        assert!(parsed.namespace(&json!({ "namespace": "other" })).is_err());
+        assert!(parsed.resource_allowed("pods"));
+        assert!(!parsed.resource_allowed("events"));
+    }
+}
