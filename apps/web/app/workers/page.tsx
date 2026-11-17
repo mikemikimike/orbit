@@ -969,7 +969,7 @@ function WorkersPageInner() {
               <div className="flex items-center justify-between gap-2">
                 <Label>Reusable environment mappings</Label>
                 <Link
-                  href="/settings#environment-mappings"
+                  href="/environment-mappings"
                   className="text-[11px] text-primary hover:underline"
                 >
                   Manage mappings
@@ -979,7 +979,7 @@ function WorkersPageInner() {
                 <Skeleton className="h-16" />
               ) : !envMappingLibrary.data?.length ? (
                 <p className="text-[11px] text-muted-foreground">
-                  No reusable mappings yet. Create them under Settings → Environment mappings;
+                  No reusable mappings yet. Create them under Library → Environments;
                   attached mappings are shared across profiles.
                 </p>
               ) : (

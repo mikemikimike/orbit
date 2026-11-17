@@ -8,6 +8,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Changed
+
+- Environment mappings moved from Settings to a dedicated **Library → Environments** page,
+  with row-by-row creation and a direct link from the worker profile editor.
+
 ## [0.12.1] — 2026-11-16
 
 ### Added

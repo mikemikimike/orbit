@@ -16,6 +16,7 @@ import {
   Megaphone,
   Plus,
   Server,
+  Terminal,
   Settings,
   ShieldCheck,
   Users,
@@ -58,6 +59,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/connections", label: "Connectors", icon: Cable },
       { href: "/harnesses", label: "Harnesses", icon: Cpu },
       { href: "/models", label: "Providers", icon: Boxes },
+      { href: "/environment-mappings", label: "Environments", icon: Terminal },
     ],
   },
   {

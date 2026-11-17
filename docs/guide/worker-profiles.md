@@ -37,7 +37,7 @@ Docker driver. **Worker CPU/memory belong here, not in the agent definition.**
 
 ## Reusable environment mappings
 
-Environment mappings can be created once under **Settings → Environment mappings** and
+Environment mappings can be created once under **Library → Environments** and
 attached to many worker profiles. Inline mappings override attached mappings for the same
 env var. Changes to a mapping or to a profile require a worker relaunch; the Workers UI
 asks whether to relaunch now or save only (running agents may be interrupted).
