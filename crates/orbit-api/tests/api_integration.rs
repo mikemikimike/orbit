@@ -986,3 +986,117 @@ async fn private_resources_are_hidden_from_other_users() {
         .iter()
         .any(|item| item["id"] == bob_provider.id.to_string()));
 }
+
+#[tokio::test]
+async fn private_agent_teams_and_runs_are_hidden_from_other_users() {
+    let Some(app) = test_app(true).await else {
+        return;
+    };
+    let alice = app
+        .store
+        .ensure_user(
+            app.org_id,
+            "team-alice@test.local",
+            "Alice",
+            UserRole::Operator,
+        )
+        .await
+        .unwrap();
+    let bob = app
+        .store
+        .ensure_user(app.org_id, "team-bob@test.local", "Bob", UserRole::Operator)
+        .await
+        .unwrap();
+    let alice_token = token_for(&app.store, app.org_id, alice.id, "alice").await;
+    let bob_token = token_for(&app.store, app.org_id, bob.id, "bob").await;
+    let alice_team = app
+        .store
+        .create_agent_team(
+            app.org_id,
+            "Alice team",
+            "",
+            &json!({ "steps": [] }),
+            Some(alice.id),
+        )
+        .await
+        .unwrap();
+    let bob_team = app
+        .store
+        .create_agent_team(
+            app.org_id,
+            "Bob team",
+            "",
+            &json!({ "steps": [] }),
+            Some(bob.id),
+        )
+        .await
+        .unwrap();
+    make_private(
+        &app.store,
+        app.org_id,
+        "agent_teams",
+        alice_team.id,
+        alice.id,
+    )
+    .await;
+    make_private(&app.store, app.org_id, "agent_teams", bob_team.id, bob.id).await;
+    let bob_run = app
+        .store
+        .create_team_run(app.org_id, bob_team.id, &json!({}), Some(bob.id))
+        .await
+        .unwrap();
+
+    let (status, body) = send(&app.router, auth_get("/api/v1/agent-teams", &alice_token)).await;
+    assert_eq!(status, StatusCode::OK);
+    let items = body.as_array().unwrap();
+    assert!(items
+        .iter()
+        .any(|item| item["id"] == alice_team.id.to_string()));
+    assert!(items
+        .iter()
+        .all(|item| item["id"] != bob_team.id.to_string()));
+
+    let (status, _) = send(
+        &app.router,
+        auth_get(
+            &format!("/api/v1/agent-teams/{}", bob_team.id),
+            &alice_token,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (status, body) = send(&app.router, auth_get("/api/v1/team-runs", &alice_token)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|item| item["id"] != bob_run.id.to_string()));
+
+    let (status, _) = send(
+        &app.router,
+        auth_get(&format!("/api/v1/team-runs/{}", bob_run.id), &alice_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (status, _) = send(
+        &app.router,
+        auth_post(
+            &format!("/api/v1/agent-teams/{}/runs", bob_team.id),
+            &alice_token,
+            json!({}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // Bob still sees his own run.
+    let (status, _) = send(
+        &app.router,
+        auth_get(&format!("/api/v1/team-runs/{}", bob_run.id), &bob_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+}
