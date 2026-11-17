@@ -86,16 +86,16 @@ pub async fn materialize(input: &Value, workspace: &Path) -> anyhow::Result<Vec<
             .get("instructions")
             .and_then(Value::as_str)
             .unwrap_or("You are a specialist subagent.");
-        let model = subagent.get("model").and_then(Value::as_str);
+        // Native subagents inherit the primary agent's model/provider. Writing a
+        // per-subagent model here would point OpenCode at a provider whose credential was
+        // only resolved for the primary run, which fails with "provider not found" or a
+        // missing API key. Pipeline teams can still use per-step models.
         let mut document = String::from("---\n");
         document.push_str(&format!(
             "description: {}\n",
             serde_json::to_string(description).unwrap_or_else(|_| "\"subagent\"".into())
         ));
         document.push_str("mode: subagent\n");
-        if let Some(model) = model.filter(|value| !value.trim().is_empty()) {
-            document.push_str(&format!("model: {model}\n"));
-        }
         document.push_str("---\n\n");
         document.push_str(instructions);
         document.push('\n');

@@ -8,6 +8,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- Native Agent Team subagents no longer write a per-agent model into OpenCode agent
+  files. They inherit the primary agent's resolved provider/model, avoiding missing
+  provider API keys in subagents; pipeline teams keep per-step models.
+
 ### Added
 
 - Agent Team steps default to a 1-hour timeout (configurable per team via
