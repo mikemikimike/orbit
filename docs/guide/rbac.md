@@ -28,7 +28,27 @@ they are reassigned (403), rather than silently downgrading them.
 `roleClaim` + `groupRoles` map IdP groups to built-in roles; `syncRoles` re-evaluates on
 login. See [docs/development/oidc.md](../development/oidc.md).
 
+## Access teams and resource sharing (enterprise)
+
+Access teams (`/api/v1/teams`, sidebar **Teams**) are available with the `teams` license
+feature. Members have `lead`, `member` or `viewer` roles; the creator becomes lead. The
+**Default** team cannot be deleted. These are distinct from **Agent Teams** (workflows).
+
+Shareable resources — agents, skills, connections, providers, worker profiles, triggers
+and tool policies — carry `ownerUserId`, `ownerTeamId` and `visibility`:
+
+| Visibility | Visible to |
+|---|---|
+| `private` | owner and org owner/admin |
+| `team` | members of the owning access team, plus owner/admin |
+| `org` | every member of the organization |
+
+`GET/PATCH /api/v1/sharing/{resource}/{id}` reads and changes sharing; mutations require
+the `resource_permissions` feature and manage access, and are audited. Worker profiles
+with an owning team only claim executions whose agent is `org`-visible or owned by that
+team.
+
 ## Not implemented yet
 
-Resource-level permissions (per agent/connection/team), shared connections with scoped
-access, and marketplace entitlements. See #15.
+Per-resource grants to individual users, shared connections with scoped access, and
+marketplace entitlements. See #15.

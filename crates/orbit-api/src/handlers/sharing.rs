@@ -30,6 +30,7 @@ pub async fn share(
     crate::extract::ApiJson(body): crate::extract::ApiJson<ShareRequest>,
 ) -> Result<StatusCode, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    state.require_feature("resource_permissions")?;
     if !matches!(body.visibility.as_str(), "private" | "team" | "org") {
         return Err(ApiError::validation(vec![ValidationIssue::new(
             "visibility",

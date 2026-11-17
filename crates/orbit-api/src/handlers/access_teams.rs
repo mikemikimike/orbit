@@ -79,6 +79,7 @@ pub async fn create(
     crate::extract::ApiJson(body): crate::extract::ApiJson<TeamRequest>,
 ) -> Result<(StatusCode, Json<AccessTeam>), ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    state.require_feature("teams")?;
     let (name, slug) = validated(&body)?;
     let team = state
         .store
@@ -109,6 +110,7 @@ pub async fn update(
     crate::extract::ApiJson(body): crate::extract::ApiJson<TeamRequest>,
 ) -> Result<Json<AccessTeam>, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    state.require_feature("teams")?;
     state.store.get_access_team(auth.org_id, team_id).await?;
     let (name, slug) = validated(&body)?;
     let team = state
@@ -134,6 +136,7 @@ pub async fn delete(
     Path(team_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    state.require_feature("teams")?;
     let team = state.store.get_access_team(auth.org_id, team_id).await?;
     if team.slug == "default" {
         return Err(ApiError::conflict("the Default team cannot be deleted"));
@@ -172,6 +175,7 @@ pub async fn add_member(
     crate::extract::ApiJson(body): crate::extract::ApiJson<TeamMemberRequest>,
 ) -> Result<Json<TeamMember>, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    state.require_feature("teams")?;
     state.store.get_access_team(auth.org_id, team_id).await?;
     let member = state
         .store
@@ -196,6 +200,7 @@ pub async fn remove_member(
     Path((team_id, user_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    state.require_feature("teams")?;
     state.store.get_access_team(auth.org_id, team_id).await?;
     state.store.remove_team_member(team_id, user_id).await?;
     audit::record(

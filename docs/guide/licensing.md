@@ -15,7 +15,8 @@ no outbound request. The license is a signed file that ORBIT verifies locally.
 | OIDC / SSO and group mapping | Yes | Yes |
 | Audit log, exports, backups | Yes | Yes |
 | Custom roles | — | `custom_roles` |
-| Resource-level permissions | — | planned |
+| Multi-team access (teams, members, team ownership) | — | `teams` |
+| Resource sharing (private / team / organization visibility) | — | `resource_permissions` |
 | Shared connections | — | planned |
 | Quotas | — | planned |
 | Marketplace | — | planned |
