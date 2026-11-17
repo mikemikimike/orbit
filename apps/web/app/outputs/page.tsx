@@ -275,13 +275,24 @@ export default function OutputsPage() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>{form.kind === "webhook" ? "Webhook URL" : "Incoming webhook URL"}</Label>
+              <Label>
+                {form.kind === "slack"
+                  ? "Slack incoming webhook URL"
+                  : form.kind === "mattermost"
+                    ? "Mattermost incoming webhook URL"
+                    : "Webhook URL"}
+              </Label>
               <Input
                 type="password"
                 value={form.webhookUrl}
                 placeholder={editing?.hasWebhook ? "leave blank to keep the current URL" : "https://…"}
                 onChange={(event) => setForm({ ...form, webhookUrl: event.target.value })}
               />
+              <p className="text-[11px] text-muted-foreground">
+                {form.kind === "webhook"
+                  ? "ORBIT POSTs JSON with the event, execution and text."
+                  : "Use the incoming-webhook URL from your Slack/Mattermost integration."}
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Template (optional)</Label>
