@@ -102,6 +102,9 @@ export function AgentForm({
       return provider.name === selected || harnessName === selected;
     });
   }, [providers.data, definition.spec.model.provider]);
+  const runDefaults = (
+    definition.spec as unknown as { runDefaults?: { task?: string } }
+  ).runDefaults;
   const modelOptions = useMemo(() => {
     const settings = (selectedProviderRecord?.config as Record<string, unknown> | undefined)
       ?.settings as Record<string, unknown> | undefined;
@@ -596,6 +599,22 @@ export function AgentForm({
                 {issueFor("spec.instructions.system") ? (
                   <p className="text-[11px] text-destructive">{issueFor("spec.instructions.system")}</p>
                 ) : null}
+              </div>
+              <div className={fieldClass}>
+                <Label>Default task (optional)</Label>
+                <Textarea
+                  value={runDefaults?.task ?? ""}
+                  placeholder="Pre-filled when running this agent manually"
+                  onChange={(event) =>
+                    updateSpec({
+                      runDefaults: { task: event.target.value || undefined },
+                    } as unknown as Partial<AgentDefinition["spec"]>)
+                  }
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Used only to pre-fill manual runs. It never replaces the system
+                  instructions and can be edited per run.
+                </p>
               </div>
               <div className={fieldClass}>
                 <Label>Constraints (optional)</Label>

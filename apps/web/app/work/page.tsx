@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { Textarea } from "@/components/ui/textarea";
-import { useAgents, useAgentTeams, useConnectors, useHarnesses, useWorkerProfiles } from "@/lib/queries";
+import { useAgents, useAgentTeams, useConnectors, useHarnesses, useOutputs, useWorkerProfiles } from "@/lib/queries";
 import { api } from "@/lib/api";
 import { unwrap } from "@/lib/queries";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -55,6 +55,7 @@ export default function WorkPage() {
   const harnesses = useHarnesses();
   const workerProfiles = useWorkerProfiles();
   const connectors = useConnectors();
+  const outputs = useOutputs();
 
   const currentIndex = STEPS.findIndex((s) => s.key === step);
   const canNext = (() => {
@@ -149,6 +150,11 @@ export default function WorkPage() {
   }
 
   const selectedAgent = agents.data?.items.find((a) => a.id === who);
+  const visibleOutputs = (outputs.data ?? []).filter(
+    (output) =>
+      output.enabled &&
+      (!output.agentId || (whoType === "agent" && output.agentId === who)),
+  );
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -505,6 +511,34 @@ export default function WorkPage() {
                   </span>
                 </span>
               </label>
+
+              <div className="rounded-lg border p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">Outputs</span>
+                  <Link href="/outputs" className="text-[11px] text-primary hover:underline">
+                    Manage outputs
+                  </Link>
+                </div>
+                {outputs.isLoading ? (
+                  <p className="mt-2 text-[11px] text-muted-foreground">Loading outputs…</p>
+                ) : visibleOutputs.length ? (
+                  <ul className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+                    {visibleOutputs.map((output) => (
+                      <li key={output.id} className="flex items-center justify-between gap-2">
+                        <span className="truncate">{output.name}</span>
+                        <span className="shrink-0">
+                          {output.kind} · {output.events.join(", ")}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    No outputs configured for this {whoType === "agent" ? "agent" : "team"}.
+                    Add Slack, Mattermost or webhook outputs under Outputs.
+                  </p>
+                )}
+              </div>
             </div>
           ) : null}
 
@@ -516,7 +550,7 @@ export default function WorkPage() {
                 <SummaryRow icon={<MapPin className="h-4 w-4" />} label="Where" value={`${titleCase(where)}${harness ? ` · ${harness}` : ""}`} />
                 <SummaryRow icon={<Bot className="h-4 w-4" />} label="Who" value={whoType === "agent" ? (selectedAgent?.name ?? "—") : (teams.data?.find((t) => t.id === who)?.name ?? "—")} />
                 <SummaryRow icon={<Zap className="h-4 w-4" />} label="What" value={name.trim() || task.slice(0, 60) || "—"} />
-                <SummaryRow icon={<CheckCircle2 className="h-4 w-4" />} label="Then" value={`${autoApprove ? "Auto-approve writes" : "Require approval"}${longRunning ? " · 24/7 agent" : ""}`} />
+                <SummaryRow icon={<CheckCircle2 className="h-4 w-4" />} label="Then" value={`${autoApprove ? "Auto-approve writes" : "Require approval"}${longRunning ? " · 24/7 agent" : ""}${visibleOutputs.length ? ` · ${visibleOutputs.length} output(s)` : ""}`} />
               </div>
             </div>
           ) : null}

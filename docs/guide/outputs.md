@@ -5,6 +5,9 @@ Outputs deliver an execution result after it reaches a terminal state. Manage th
 
 ## UI
 
+The Work wizard's **Then** step lists outputs configured for the selected agent (and global
+outputs) before the run is created.
+
 **Outputs → New output**: name, kind, optional agent, events, incoming webhook URL,
 optional template and enabled toggle. **Test** sends a sample notification; edit leaves the
 URL blank to keep the existing one.

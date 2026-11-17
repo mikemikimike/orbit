@@ -136,12 +136,25 @@ pub async fn execute_agent(
     if agent.status == "archived" {
         return Err(ApiError::bad_request("archived agents cannot be executed"));
     }
-    if body.task.trim().is_empty() {
+    let version = state.store.get_current_version(auth.org_id, &agent).await?;
+    let spec = parse_spec(&version)?;
+    let task = if body.task.trim().is_empty() {
+        spec.run_defaults
+            .task
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("")
+            .to_string()
+    } else {
+        body.task.trim().to_string()
+    };
+    if task.is_empty() {
         return Err(ApiError::validation(vec![
             orbit_domain::ValidationIssue::new("task", "task must not be empty"),
         ]));
     }
-    if body.task.chars().count() > 200_000 {
+    if task.chars().count() > 200_000 {
         return Err(ApiError::validation(vec![
             orbit_domain::ValidationIssue::new("task", "task must be <= 200000 characters"),
         ]));
@@ -161,9 +174,6 @@ pub async fn execute_agent(
             ]));
         }
     }
-
-    let version = state.store.get_current_version(auth.org_id, &agent).await?;
-    let spec = parse_spec(&version)?;
 
     // Harness override: use the specified harness instead of the agent's stored one.
     let harness_kind = if let Some(override_kind) = &body.harness_override {
@@ -217,7 +227,7 @@ pub async fn execute_agent(
     }
 
     let input = serde_json::json!({
-        "task": body.task,
+        "task": task,
         "name": body.name,
         "payload": body.payload,
         "provenance": {

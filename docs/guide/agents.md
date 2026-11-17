@@ -11,6 +11,7 @@ contain an execution loop; a worker runs it through a harness adapter.
 | `spec.harness.kind` | Default harness (`mock`, `opencode`, `pi`, future `claude_code`) |
 | `spec.model` | Harness-managed provider/model or a platform `openai_compatible` provider |
 | `spec.instructions` | Trusted system prompt, kept separate from untrusted input |
+| `spec.runDefaults.task` | Optional task pre-filled for manual runs; never used as system instructions |
 | `spec.connectors` | Connector bindings and the capabilities the agent may request |
 | `spec.triggers` | Manual, schedule (cron), event or webhook |
 | `spec.autonomy` | Level 1–4, approval mode and per-hour quota |

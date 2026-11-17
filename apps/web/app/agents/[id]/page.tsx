@@ -187,7 +187,15 @@ export default function AgentDetailPage() {
                   <Zap /> Restore
                 </Button>
               )}
-              <RunAgentDialog agentId={data.id} agentName={data.name} disabled={!canRun} />
+              <RunAgentDialog
+                agentId={data.id}
+                agentName={data.name}
+                disabled={!canRun}
+                defaultTask={
+                  (data.spec as unknown as { runDefaults?: { task?: string } }).runDefaults
+                    ?.task
+                }
+              />
             </>
           }
         />

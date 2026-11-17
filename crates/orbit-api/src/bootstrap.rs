@@ -338,6 +338,7 @@ fn demo_definition(
                 ..Default::default()
             },
             memory: MemorySpec::default(),
+            run_defaults: Default::default(),
         },
     }
 }

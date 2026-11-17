@@ -69,6 +69,7 @@ fn definition(name: &str) -> AgentDefinition {
             },
             resources: ResourceLimits::default(),
             memory: MemorySpec::default(),
+            run_defaults: Default::default(),
         },
     }
 }

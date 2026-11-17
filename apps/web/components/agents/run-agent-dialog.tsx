@@ -26,14 +26,18 @@ export function RunAgentDialog({
   agentId,
   agentName,
   disabled,
+  defaultTask,
 }: {
   agentId: string;
   agentName: string;
   disabled?: boolean;
+  defaultTask?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [task, setTask] = useState("Summarize the current state and report anything important.");
+  const [task, setTask] = useState(
+    defaultTask?.trim() || "Follow your configured instructions.",
+  );
   const [payloadText, setPayloadText] = useState("{}");
   const [idempotencyKey, setIdempotencyKey] = useState(() => randomId());
   const [submitting, setSubmitting] = useState(false);
@@ -86,8 +90,9 @@ export function RunAgentDialog({
         <DialogHeader>
           <DialogTitle>Run {agentName}</DialogTitle>
           <DialogDescription>
-            The task is queued durably and executed by the harness worker. Live events appear on the
-            execution page.
+            The task is queued durably and executed by the harness worker. The system
+            instructions stay separate; this task can override the agent&apos;s default task
+            for this run.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">

@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, API_BASE_URL, getAccessToken } from "./api";
 import { listEnvMappings, workerProfileEnvMappings } from "./env-mappings";
+import { listOutputs } from "./outputs";
 import type {
   AgentDetail,
   AgentPage,
@@ -96,6 +97,14 @@ export interface LicenseOverview {
   };
   usage: { seats: number; agents: number; workers: number; executionsToday: number };
   warnings: string[];
+}
+
+export function useOutputs() {
+  return useQuery({
+    queryKey: ["outputs"],
+    queryFn: listOutputs,
+    staleTime: 30_000,
+  });
 }
 
 export function useEnvMappings() {

@@ -19,6 +19,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- Agents can define an optional **Default task** (`spec.runDefaults.task`). It pre-fills
+  manual runs and is used by the API when a run omits the task; system instructions remain
+  separate and are never copied into the task.
+- Work → **Then** shows the outputs configured for the selected agent/team, with a link to
+  manage them.
 - Reusable environment mappings (`/api/v1/env-mappings`) attachable to multiple worker
   profiles; Settings library + worker multi-select; inline mappings override attached ones.
 - Worker profile changes that need a restart mark the launch `relaunchRequired`. Saving

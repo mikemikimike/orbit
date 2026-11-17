@@ -53,6 +53,26 @@ pub struct AgentSpec {
     pub resources: ResourceLimits,
     #[serde(default)]
     pub memory: MemorySpec,
+    /// Defaults used when a manual run is created without an explicit task.
+    #[serde(default, skip_serializing_if = "RunDefaults::is_empty")]
+    pub run_defaults: RunDefaults,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RunDefaults {
+    /// Pre-filled task for manual runs. Never used as system instructions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+}
+
+impl RunDefaults {
+    pub fn is_empty(&self) -> bool {
+        self.task
+            .as_deref()
+            .map(str::trim)
+            .is_none_or(str::is_empty)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
@@ -386,6 +406,17 @@ impl AgentSpec {
         if self.instructions.constraints.len() > 50 {
             report.push("spec.instructions.constraints", "at most 50 constraints");
         }
+        if self
+            .run_defaults
+            .task
+            .as_deref()
+            .is_some_and(|task| task.chars().count() > 200_000)
+        {
+            report.push(
+                "spec.runDefaults.task",
+                "default task must be <= 200000 characters",
+            );
+        }
 
         // Model
         match self.model.management {
@@ -563,6 +594,7 @@ mod tests {
             autonomy: AutonomySpec::default(),
             resources: ResourceLimits::default(),
             memory: MemorySpec::default(),
+            run_defaults: RunDefaults::default(),
         }
     }
 
