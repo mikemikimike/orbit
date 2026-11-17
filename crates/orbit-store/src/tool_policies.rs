@@ -119,18 +119,25 @@ impl Store {
         &self,
         org_id: Uuid,
         agent_id: Option<Uuid>,
+        access: Option<&crate::access::ResourceAccess>,
     ) -> StoreResult<Vec<ToolPolicy>> {
+        let (privileged, user_id, team_ids) = crate::access::binds(access);
         let rows = match agent_id {
             Some(agent_id) => {
                 sqlx::query_as::<_, ToolPolicy>(
                     r#"
                     SELECT * FROM tool_policies
                     WHERE org_id = $1 AND (agent_id IS NULL OR agent_id = $2)
+                      AND ($3::bool OR visibility = 'org' OR owner_user_id = $4
+                           OR (visibility = 'team' AND owner_team_id = ANY($5)))
                     ORDER BY priority ASC, name ASC
                     "#,
                 )
                 .bind(org_id)
                 .bind(agent_id)
+                .bind(privileged)
+                .bind(user_id)
+                .bind(&team_ids)
                 .fetch_all(&self.pool)
                 .await?
             }
@@ -139,10 +146,15 @@ impl Store {
                     r#"
                     SELECT * FROM tool_policies
                     WHERE org_id = $1 AND agent_id IS NULL
+                      AND ($2::bool OR visibility = 'org' OR owner_user_id = $3
+                           OR (visibility = 'team' AND owner_team_id = ANY($4)))
                     ORDER BY priority ASC, name ASC
                     "#,
                 )
                 .bind(org_id)
+                .bind(privileged)
+                .bind(user_id)
+                .bind(&team_ids)
                 .fetch_all(&self.pool)
                 .await?
             }
@@ -158,7 +170,9 @@ impl Store {
         org_id: Uuid,
         agent_id: Uuid,
     ) -> StoreResult<Vec<ToolPolicyRule>> {
-        let rows = self.list_tool_policies(org_id, Some(agent_id)).await?;
+        let rows = self
+            .list_tool_policies(org_id, Some(agent_id), None)
+            .await?;
         Ok(rows.into_iter().filter_map(policy_into_rule).collect())
     }
 }

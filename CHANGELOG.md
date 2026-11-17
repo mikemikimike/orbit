@@ -8,6 +8,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Changed
+
+- List visibility is now enforced by repository SQL predicates for agents, skills,
+  providers, connections, worker profiles, triggers and tool policies. Handlers no longer
+  post-filter, and agent totals reflect the visible set.
+
 ### Fixed
 
 - Newly created skills, providers, triggers, tool policies and worker profiles now record

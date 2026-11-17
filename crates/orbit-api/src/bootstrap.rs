@@ -113,7 +113,7 @@ async fn seed_worker_profile(
     if config.launcher_url.is_none() {
         return Ok(());
     }
-    if !store.list_worker_profiles(org_id).await?.is_empty() {
+    if !store.list_worker_profiles(org_id, None).await?.is_empty() {
         return Ok(());
     }
 
@@ -149,7 +149,7 @@ async fn seed_worker_profile(
 }
 
 async fn seed_demo(store: &Store, org_id: Uuid, config: &ApiConfig) -> anyhow::Result<()> {
-    let (agents, _, _) = store.list_agents(org_id, 1, None, None, None).await?;
+    let (agents, _, _) = store.list_agents(org_id, 1, None, None, None, None).await?;
     if !agents.is_empty() {
         return Ok(());
     }
@@ -218,7 +218,7 @@ async fn seed_demo(store: &Store, org_id: Uuid, config: &ApiConfig) -> anyhow::R
 
     // One successful and one failed execution so the dashboard shows activity.
     let (agents, _, _) = store
-        .list_agents(org_id, 10, None, Some("active"), None)
+        .list_agents(org_id, 10, None, Some("active"), None, None)
         .await?;
     if let Some(row) = agents.first() {
         let agent = &row.agent;

@@ -320,17 +320,8 @@ pub async fn list_profiles(
     Ok(Json(
         state
             .store
-            .list_worker_profiles(auth.org_id)
-            .await?
-            .into_iter()
-            .filter(|profile| {
-                access.can_view(
-                    profile.owner_user_id,
-                    profile.owner_team_id,
-                    &profile.visibility,
-                )
-            })
-            .collect(),
+            .list_worker_profiles(auth.org_id, Some(&access.store_access()))
+            .await?,
     ))
 }
 

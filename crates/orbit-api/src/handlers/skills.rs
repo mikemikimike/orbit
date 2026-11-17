@@ -48,13 +48,8 @@ pub async fn list_skills(
     Ok(Json(
         state
             .store
-            .list_skills(auth.org_id)
-            .await?
-            .into_iter()
-            .filter(|skill| {
-                access.can_view(skill.owner_user_id, skill.owner_team_id, &skill.visibility)
-            })
-            .collect(),
+            .list_skills(auth.org_id, Some(&access.store_access()))
+            .await?,
     ))
 }
 

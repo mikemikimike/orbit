@@ -68,16 +68,23 @@ impl Store {
         &self,
         org_id: Uuid,
         agent_id: Option<Uuid>,
+        access: Option<&crate::access::ResourceAccess>,
     ) -> StoreResult<Vec<Trigger>> {
+        let (privileged, user_id, team_ids) = crate::access::binds(access);
         Ok(sqlx::query_as::<_, Trigger>(
             r#"
             SELECT * FROM triggers
             WHERE org_id = $1 AND ($2::uuid IS NULL OR agent_id = $2)
+              AND ($3::bool OR visibility = 'org' OR owner_user_id = $4
+                   OR (visibility = 'team' AND owner_team_id = ANY($5)))
             ORDER BY created_at DESC
             "#,
         )
         .bind(org_id)
         .bind(agent_id)
+        .bind(privileged)
+        .bind(user_id)
+        .bind(&team_ids)
         .fetch_all(&self.pool)
         .await?)
     }

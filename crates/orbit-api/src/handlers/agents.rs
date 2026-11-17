@@ -45,7 +45,7 @@ pub async fn list_agents(
         }
     }
     let access = crate::access::AccessScope::load(&state, &auth).await?;
-    let (rows, next_cursor, _total) = state
+    let (rows, next_cursor, total) = state
         .store
         .list_agents(
             auth.org_id,
@@ -53,25 +53,18 @@ pub async fn list_agents(
             query.cursor.as_deref(),
             query.status.as_deref(),
             query.q.as_deref(),
+            Some(&access.store_access()),
         )
         .await?;
 
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
-        if !access.can_view(
-            row.agent.owner_user_id,
-            row.agent.owner_team_id,
-            &row.agent.visibility,
-        ) {
-            continue;
-        }
         let spec = row
             .spec
             .as_ref()
             .and_then(|value| serde_json::from_value::<AgentSpec>(value.clone()).ok());
         items.push(AgentSummary::from_parts(&row.agent, spec.as_ref()));
     }
-    let total = items.len() as i64;
     Ok(Json(AgentPage {
         items,
         next_cursor,

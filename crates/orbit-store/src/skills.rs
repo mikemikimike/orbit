@@ -4,13 +4,27 @@ use crate::models::Skill;
 use crate::{Store, StoreError, StoreResult};
 
 impl Store {
-    pub async fn list_skills(&self, org_id: Uuid) -> StoreResult<Vec<Skill>> {
-        Ok(
-            sqlx::query_as::<_, Skill>("SELECT * FROM skills WHERE org_id = $1 ORDER BY name ASC")
-                .bind(org_id)
-                .fetch_all(&self.pool)
-                .await?,
+    pub async fn list_skills(
+        &self,
+        org_id: Uuid,
+        access: Option<&crate::access::ResourceAccess>,
+    ) -> StoreResult<Vec<Skill>> {
+        let (privileged, user_id, team_ids) = crate::access::binds(access);
+        Ok(sqlx::query_as::<_, Skill>(
+            r#"
+            SELECT * FROM skills
+            WHERE org_id = $1
+              AND ($2::bool OR visibility = 'org' OR owner_user_id = $3
+                   OR (visibility = 'team' AND owner_team_id = ANY($4)))
+            ORDER BY name ASC
+            "#,
         )
+        .bind(org_id)
+        .bind(privileged)
+        .bind(user_id)
+        .bind(&team_ids)
+        .fetch_all(&self.pool)
+        .await?)
     }
 
     pub async fn get_skill(&self, org_id: Uuid, skill_id: Uuid) -> StoreResult<Skill> {

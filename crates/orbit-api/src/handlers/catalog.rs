@@ -88,16 +88,9 @@ pub async fn list_providers(
     let access = crate::access::AccessScope::load(&state, &auth).await?;
     let providers = state
         .store
-        .list_providers(auth.org_id)
+        .list_providers(auth.org_id, Some(&access.store_access()))
         .await?
         .into_iter()
-        .filter(|provider| {
-            access.can_view(
-                provider.owner_user_id,
-                provider.owner_team_id,
-                &provider.visibility,
-            )
-        })
         .map(ProviderView::from_record)
         .collect();
     Ok(Json(providers))
@@ -501,16 +494,9 @@ pub async fn list_connections(
     let access = crate::access::AccessScope::load(&state, &auth).await?;
     let rows = state
         .store
-        .list_connections(auth.org_id)
+        .list_connections(auth.org_id, Some(&access.store_access()))
         .await?
         .into_iter()
-        .filter(|row| {
-            access.can_view(
-                row.connection.owner_user_id,
-                row.connection.owner_team_id,
-                &row.connection.visibility,
-            )
-        })
         .map(ConnectionView::from)
         .collect();
     Ok(Json(rows))

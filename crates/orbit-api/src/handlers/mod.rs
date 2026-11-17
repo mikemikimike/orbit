@@ -60,7 +60,7 @@ pub(crate) async fn load_agent_detail(
     let spec = parse_spec(&version)?;
     let triggers = state
         .store
-        .list_triggers(auth.org_id, Some(agent.id))
+        .list_triggers(auth.org_id, Some(agent.id), None)
         .await?;
     let (executions, _, _) = state
         .store

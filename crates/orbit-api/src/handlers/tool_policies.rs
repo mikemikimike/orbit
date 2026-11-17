@@ -130,17 +130,8 @@ pub async fn list(
     let access = crate::access::AccessScope::load(&state, &auth).await?;
     let rows = state
         .store
-        .list_tool_policies(auth.org_id, query.agent_id)
-        .await?
-        .into_iter()
-        .filter(|policy| {
-            access.can_view(
-                policy.owner_user_id,
-                policy.owner_team_id,
-                &policy.visibility,
-            )
-        })
-        .collect::<Vec<_>>();
+        .list_tool_policies(auth.org_id, query.agent_id, Some(&access.store_access()))
+        .await?;
     let mut views = Vec::with_capacity(rows.len());
     for row in rows {
         views.push(ToolPolicyView::try_from(row)?);

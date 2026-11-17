@@ -92,7 +92,10 @@ async fn agent_lifecycle_and_versions() {
     assert_eq!(agent.slug, "lifecycle-agent");
 
     // Schedule trigger was materialized from the spec.
-    let triggers = store.list_triggers(org, Some(agent.id)).await.unwrap();
+    let triggers = store
+        .list_triggers(org, Some(agent.id), None)
+        .await
+        .unwrap();
     assert_eq!(triggers.len(), 1);
     assert_eq!(triggers[0].kind, "schedule");
     assert!(triggers[0].next_run_at.is_some());
@@ -116,7 +119,7 @@ async fn agent_lifecycle_and_versions() {
     assert_eq!(agent.name, "Lifecycle Agent v2");
 
     let (rows, _, total) = store
-        .list_agents(org, 10, None, None, Some("Lifecycle"))
+        .list_agents(org, 10, None, None, Some("Lifecycle"), None)
         .await
         .unwrap();
     assert_eq!(total, 1);
@@ -373,7 +376,7 @@ async fn secrets_are_encrypted_and_org_scoped_entities_work() {
         .update_provider(org, provider.id, Some("Gateway 2"), None, None, Some(false))
         .await
         .unwrap();
-    let providers = store.list_providers(org).await.unwrap();
+    let providers = store.list_providers(org, None).await.unwrap();
     assert_eq!(providers.len(), 1);
     assert_eq!(providers[0].name, "Gateway 2");
     assert!(!providers[0].enabled);
@@ -420,12 +423,12 @@ async fn secrets_are_encrypted_and_org_scoped_entities_work() {
         )
         .await
         .unwrap();
-    let rows = store.list_connections(org).await.unwrap();
+    let rows = store.list_connections(org, None).await.unwrap();
     assert!(rows
         .iter()
         .any(|row| row.connection.id == connection.id && row.connector_slug == manifest.slug));
     store.delete_connection(org, connection.id).await.unwrap();
-    assert!(store.list_connections(org).await.unwrap().is_empty());
+    assert!(store.list_connections(org, None).await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -446,7 +449,7 @@ async fn org_scoping_is_enforced() {
         Err(orbit_store::StoreError::NotFound(_))
     ));
     assert!(!store
-        .list_triggers(org_b, Some(agent.id))
+        .list_triggers(org_b, Some(agent.id), None)
         .await
         .unwrap()
         .iter()
@@ -790,7 +793,7 @@ async fn tool_policies_are_scoped_and_ordered() {
         .expect("agent rule");
 
     // Org-level listing does not include agent rules.
-    let org_rules = store.list_tool_policies(org, None).await.unwrap();
+    let org_rules = store.list_tool_policies(org, None, None).await.unwrap();
     assert_eq!(org_rules.len(), 1);
     assert_eq!(org_rules[0].id, org_rule.id);
 

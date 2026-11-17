@@ -4,11 +4,25 @@ use crate::models::WorkerProfile;
 use crate::{Store, StoreError, StoreResult};
 
 impl Store {
-    pub async fn list_worker_profiles(&self, org_id: Uuid) -> StoreResult<Vec<WorkerProfile>> {
+    pub async fn list_worker_profiles(
+        &self,
+        org_id: Uuid,
+        access: Option<&crate::access::ResourceAccess>,
+    ) -> StoreResult<Vec<WorkerProfile>> {
+        let (privileged, user_id, team_ids) = crate::access::binds(access);
         Ok(sqlx::query_as::<_, WorkerProfile>(
-            "SELECT * FROM worker_profiles WHERE org_id = $1 ORDER BY name ASC",
+            r#"
+            SELECT * FROM worker_profiles
+            WHERE org_id = $1
+              AND ($2::bool OR visibility = 'org' OR owner_user_id = $3
+                   OR (visibility = 'team' AND owner_team_id = ANY($4)))
+            ORDER BY name ASC
+            "#,
         )
         .bind(org_id)
+        .bind(privileged)
+        .bind(user_id)
+        .bind(&team_ids)
         .fetch_all(&self.pool)
         .await?)
     }

@@ -37,6 +37,14 @@ impl AccessScope {
         matches!(self.role, UserRole::Owner | UserRole::Admin)
     }
 
+    pub fn store_access(&self) -> orbit_store::access::ResourceAccess {
+        orbit_store::access::ResourceAccess::new(
+            self.user_id,
+            self.is_privileged(),
+            self.teams.keys().copied().collect(),
+        )
+    }
+
     fn leads_team(&self, team_id: Option<Uuid>) -> bool {
         team_id
             .and_then(|id| self.teams.get(&id))

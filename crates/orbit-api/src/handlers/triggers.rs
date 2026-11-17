@@ -26,10 +26,11 @@ pub async fn list_triggers(
     Query(query): Query<TriggerListQuery>,
 ) -> Result<Json<Vec<Trigger>>, ApiError> {
     auth.require(Permission::AgentsRead)?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
     Ok(Json(
         state
             .store
-            .list_triggers(auth.org_id, query.agent_id)
+            .list_triggers(auth.org_id, query.agent_id, Some(&access.store_access()))
             .await?,
     ))
 }
