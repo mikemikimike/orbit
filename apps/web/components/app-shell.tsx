@@ -17,6 +17,7 @@ import {
   Plus,
   Server,
   Terminal,
+  UsersRound,
   Settings,
   ShieldCheck,
   Users,
@@ -60,6 +61,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/harnesses", label: "Harnesses", icon: Cpu },
       { href: "/models", label: "Providers", icon: Boxes },
       { href: "/environment-mappings", label: "Environments", icon: Terminal },
+      { href: "/teams", label: "Teams", icon: UsersRound },
     ],
   },
   {

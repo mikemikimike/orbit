@@ -10,6 +10,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- Access team management: `/api/v1/teams` CRUD, members/roles (lead/member/viewer), and a
+  Library → Teams UI. Default team protected; team creation makes the creator lead.
+
+### Added
+
 - Access scope for multi-team visibility: agents, skills, connections, providers, worker
   profiles, triggers and tool policies enforce `private | team | org` visibility on
   list/get/update/delete/export; agent execution requires access to the agent and its

@@ -261,6 +261,22 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/v1/license", get(handlers::license::overview))
         .route(
+            "/api/v1/teams",
+            get(handlers::access_teams::list).post(handlers::access_teams::create),
+        )
+        .route(
+            "/api/v1/teams/{team_id}",
+            patch(handlers::access_teams::update).delete(handlers::access_teams::delete),
+        )
+        .route(
+            "/api/v1/teams/{team_id}/members",
+            get(handlers::access_teams::list_members).post(handlers::access_teams::add_member),
+        )
+        .route(
+            "/api/v1/teams/{team_id}/members/{user_id}",
+            delete(handlers::access_teams::remove_member),
+        )
+        .route(
             "/api/v1/outputs",
             get(handlers::outputs::list).post(handlers::outputs::create),
         )
