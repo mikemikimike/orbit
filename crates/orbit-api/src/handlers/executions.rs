@@ -136,6 +136,13 @@ pub async fn execute_agent(
     if agent.status == "archived" {
         return Err(ApiError::bad_request("archived agents cannot be executed"));
     }
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_view(
+        "agent",
+        agent.owner_user_id,
+        agent.owner_team_id,
+        &agent.visibility,
+    )?;
     let version = state.store.get_current_version(auth.org_id, &agent).await?;
     let spec = parse_spec(&version)?;
     let task = if body.task.trim().is_empty() {

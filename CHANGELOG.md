@@ -10,6 +10,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- Access scope for multi-team visibility: agents and skills now enforce
+  `private | team | org` visibility for list/get/execute/update/delete/export, with org
+  owners/admins able to govern and team leads able to manage their team's resources.
+
+### Added
+
 - Multi-team schema foundation (ADR 0011): `access_teams`, `team_members`, and
   `owner_user_id`/`owner_team_id`/`visibility` on agents, skills, connections, providers,
   worker profiles, triggers and tool policies. Existing rows are backfilled to a Default

@@ -3,6 +3,7 @@
 //! The API is a thin, well-typed layer over `orbit-store` and the event bus. It never
 //! executes agent tasks; executions are queued durably and dispatched by `orbit-worker`.
 
+pub mod access;
 pub mod audit;
 pub mod auth;
 pub mod background;

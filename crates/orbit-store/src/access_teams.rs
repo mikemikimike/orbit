@@ -152,3 +152,25 @@ impl Store {
             .await
     }
 }
+
+impl Store {
+    pub async fn list_user_team_roles(
+        &self,
+        org_id: Uuid,
+        user_id: Uuid,
+    ) -> StoreResult<Vec<(Uuid, String)>> {
+        let rows: Vec<(Uuid, String)> = sqlx::query_as(
+            r#"
+            SELECT m.team_id, m.role
+            FROM team_members m
+            JOIN access_teams t ON t.id = m.team_id
+            WHERE t.org_id = $1 AND m.user_id = $2
+            "#,
+        )
+        .bind(org_id)
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+}

@@ -44,7 +44,18 @@ pub async fn list_skills(
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Json<Vec<Skill>>, ApiError> {
     auth.require(Permission::AgentsRead)?;
-    Ok(Json(state.store.list_skills(auth.org_id).await?))
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    Ok(Json(
+        state
+            .store
+            .list_skills(auth.org_id)
+            .await?
+            .into_iter()
+            .filter(|skill| {
+                access.can_view(skill.owner_user_id, skill.owner_team_id, &skill.visibility)
+            })
+            .collect(),
+    ))
 }
 
 #[utoipa::path(post, path = "/api/v1/skills", tag = "skills", request_body = CreateSkillRequest, responses((status = 201, body = Skill)))]
@@ -85,7 +96,15 @@ pub async fn get_skill(
     Path(skill_id): Path<Uuid>,
 ) -> Result<Json<Skill>, ApiError> {
     auth.require(Permission::AgentsRead)?;
-    Ok(Json(state.store.get_skill(auth.org_id, skill_id).await?))
+    let skill = state.store.get_skill(auth.org_id, skill_id).await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_view(
+        "skill",
+        skill.owner_user_id,
+        skill.owner_team_id,
+        &skill.visibility,
+    )?;
+    Ok(Json(skill))
 }
 
 #[utoipa::path(patch, path = "/api/v1/skills/{skill_id}", tag = "skills", request_body = UpdateSkillRequest, responses((status = 200, body = Skill)))]
@@ -96,6 +115,14 @@ pub async fn update_skill(
     crate::extract::ApiJson(body): crate::extract::ApiJson<UpdateSkillRequest>,
 ) -> Result<Json<Skill>, ApiError> {
     auth.require(Permission::AgentsWrite)?;
+    let existing = state.store.get_skill(auth.org_id, skill_id).await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_manage(
+        "skill",
+        existing.owner_user_id,
+        existing.owner_team_id,
+        &existing.visibility,
+    )?;
     if let Some(content) = &body.content {
         if content.trim().is_empty() {
             return Err(ApiError::validation(vec![ValidationIssue::new(
@@ -137,6 +164,14 @@ pub async fn delete_skill(
     Path(skill_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     auth.require(Permission::AgentsWrite)?;
+    let existing = state.store.get_skill(auth.org_id, skill_id).await?;
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_manage(
+        "skill",
+        existing.owner_user_id,
+        existing.owner_team_id,
+        &existing.visibility,
+    )?;
     state.store.delete_skill(auth.org_id, skill_id).await?;
     audit::record(
         &state,

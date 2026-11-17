@@ -17,6 +17,21 @@ use crate::error::ApiError;
 use crate::handlers::{limit, load_agent_detail, parse_spec};
 use crate::state::AppState;
 
+async fn require_agent_manage(
+    state: &AppState,
+    auth: &AuthContext,
+    agent_id: Uuid,
+) -> Result<(), ApiError> {
+    let agent = state.store.get_agent(auth.org_id, agent_id).await?;
+    let access = crate::access::AccessScope::load(state, auth).await?;
+    access.require_manage(
+        "agent",
+        agent.owner_user_id,
+        agent.owner_team_id,
+        &agent.visibility,
+    )
+}
+
 #[utoipa::path(get, path = "/api/v1/agents", tag = "agents", params(AgentListQuery), responses((status = 200, body = AgentPage)))]
 pub async fn list_agents(
     State(state): State<AppState>,
@@ -29,7 +44,8 @@ pub async fn list_agents(
             return Err(ApiError::bad_request(format!("unknown status '{status}'")));
         }
     }
-    let (rows, next_cursor, total) = state
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    let (rows, next_cursor, _total) = state
         .store
         .list_agents(
             auth.org_id,
@@ -42,12 +58,20 @@ pub async fn list_agents(
 
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
+        if !access.can_view(
+            row.agent.owner_user_id,
+            row.agent.owner_team_id,
+            &row.agent.visibility,
+        ) {
+            continue;
+        }
         let spec = row
             .spec
             .as_ref()
             .and_then(|value| serde_json::from_value::<AgentSpec>(value.clone()).ok());
         items.push(AgentSummary::from_parts(&row.agent, spec.as_ref()));
     }
+    let total = items.len() as i64;
     Ok(Json(AgentPage {
         items,
         next_cursor,
@@ -108,6 +132,7 @@ pub async fn update_agent(
     crate::extract::ApiJson(body): crate::extract::ApiJson<UpdateAgentRequest>,
 ) -> Result<Json<AgentDetail>, ApiError> {
     auth.require(Permission::AgentsWrite)?;
+    require_agent_manage(&state, &auth, agent_id).await?;
     if let Some(definition) = &body.definition {
         let report = state
             .store
@@ -177,6 +202,7 @@ pub async fn delete_agent(
     Query(query): Query<DeleteAgentQuery>,
 ) -> Result<Response, ApiError> {
     auth.require(Permission::AgentsWrite)?;
+    require_agent_manage(&state, &auth, agent_id).await?;
     if query.hard.unwrap_or(false) {
         state.store.delete_agent(auth.org_id, agent_id).await?;
         audit::record(
@@ -213,6 +239,7 @@ pub async fn activate_agent(
     Path(agent_id): Path<Uuid>,
 ) -> Result<Json<AgentDetail>, ApiError> {
     auth.require(Permission::AgentsWrite)?;
+    require_agent_manage(&state, &auth, agent_id).await?;
     state
         .store
         .set_agent_status(auth.org_id, agent_id, AgentStatus::Active)
@@ -236,6 +263,7 @@ pub async fn pause_agent(
     Path(agent_id): Path<Uuid>,
 ) -> Result<Json<AgentDetail>, ApiError> {
     auth.require(Permission::AgentsWrite)?;
+    require_agent_manage(&state, &auth, agent_id).await?;
     state
         .store
         .set_agent_status(auth.org_id, agent_id, AgentStatus::Paused)

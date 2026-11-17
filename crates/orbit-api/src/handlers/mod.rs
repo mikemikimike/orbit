@@ -47,6 +47,13 @@ pub(crate) async fn load_agent_detail(
     agent_id: Uuid,
 ) -> Result<AgentDetail, ApiError> {
     let agent = state.store.get_agent(auth.org_id, agent_id).await?;
+    let access = crate::access::AccessScope::load(state, auth).await?;
+    access.require_view(
+        "agent",
+        agent.owner_user_id,
+        agent.owner_team_id,
+        &agent.visibility,
+    )?;
     let version = state.store.get_current_version(auth.org_id, &agent).await?;
     let spec = parse_spec(&version)?;
     let triggers = state
