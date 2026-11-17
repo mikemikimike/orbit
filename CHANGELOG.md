@@ -8,6 +8,13 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- Agent Teams can attach connections and environment mappings directly
+  (`connectionIds`, `envMappingIds`). Team connections are merged into step grants with
+  visibility validation; team env mappings are resolved into the execution environment.
+  Both are editable in the Agent Team UI.
+
 ### Fixed
 
 - Native Agent Team subagents no longer write a per-agent model into OpenCode agent

@@ -397,6 +397,10 @@ pub async fn run_execution(
         }
         system_instructions.push_str(&extra);
     }
+    let mut extra_env = (*state.extra_env).clone();
+    for item in &context.env {
+        extra_env.insert(item.env_var.clone(), item.value.clone());
+    }
     let request = ExecutionRequest {
         execution_id,
         agent_id: execution.agent_id,
@@ -415,7 +419,7 @@ pub async fn run_execution(
             ..spec.resources.clone()
         },
         harness_config,
-        extra_env: (*state.extra_env).clone(),
+        extra_env,
         session: SessionRequest {
             session_ref: execution.session_ref.clone(),
             mode: spec.harness.execution_mode,

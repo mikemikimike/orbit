@@ -66,6 +66,15 @@ pub struct WorkerExecutionContext {
     pub skills: Vec<Skill>,
     #[serde(default)]
     pub tool_policies: Vec<orbit_domain::ToolPolicyRule>,
+    #[serde(default)]
+    pub env: Vec<WorkerEnv>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkerEnv {
+    pub env_var: String,
+    pub value: String,
 }
 
 #[derive(Debug, Deserialize)]

@@ -64,6 +64,10 @@ pub struct CreateTeamRequest {
     /// Skills materialized for every step in the team.
     #[serde(default)]
     pub skills: Vec<String>,
+    #[serde(default)]
+    pub connection_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub env_mapping_ids: Vec<Uuid>,
     /// Per-step wall-clock timeout; defaults to 1 hour for team runs.
     #[serde(default)]
     pub timeout_seconds: Option<u64>,
@@ -114,6 +118,10 @@ pub struct TeamDefinition {
     pub auto_launch: bool,
     #[serde(default)]
     pub skills: Vec<String>,
+    #[serde(default)]
+    pub connection_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub env_mapping_ids: Vec<Uuid>,
     #[serde(default)]
     pub model: Option<TeamModelOverride>,
     /// Wall-clock timeout for each step. Defaults to 1 hour for team runs.
@@ -346,6 +354,42 @@ pub async fn create_team(
     if let Some(source) = &body.work_source {
         validate_work_source_connection(&state, auth.org_id, source, &mut issues).await;
     }
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    for connection_id in &body.connection_ids {
+        match state
+            .store
+            .get_connection(auth.org_id, *connection_id)
+            .await
+        {
+            Ok(connection)
+                if access.can_view(
+                    connection.owner_user_id,
+                    connection.owner_team_id,
+                    &connection.visibility,
+                ) => {}
+            Ok(_) => issues.push(ValidationIssue::new(
+                "connectionIds",
+                format!("connection '{connection_id}' is not visible to you"),
+            )),
+            Err(_) => issues.push(ValidationIssue::new(
+                "connectionIds",
+                format!("unknown connection '{connection_id}'"),
+            )),
+        }
+    }
+    for mapping_id in &body.env_mapping_ids {
+        if state
+            .store
+            .get_env_mapping(auth.org_id, *mapping_id)
+            .await
+            .is_err()
+        {
+            issues.push(ValidationIssue::new(
+                "envMappingIds",
+                format!("unknown environment mapping '{mapping_id}'"),
+            ));
+        }
+    }
     validate_native_primary(&state, auth.org_id, &body.mode, &body.steps, &mut issues).await;
     if !issues.is_empty() {
         return Err(ApiError::validation(issues));
@@ -361,6 +405,8 @@ pub async fn create_team(
         "workerProfileId": body.worker_profile_id,
         "autoLaunch": body.auto_launch,
         "skills": body.skills,
+        "connectionIds": body.connection_ids,
+        "envMappingIds": body.env_mapping_ids,
         "timeoutSeconds": body.timeout_seconds,
         "steps": body.steps.iter().map(|step| serde_json::json!({
             "agentId": step.agent_id,
@@ -470,6 +516,42 @@ pub async fn update_team(
     if let Some(source) = &body.work_source {
         validate_work_source_connection(&state, auth.org_id, source, &mut issues).await;
     }
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    for connection_id in &body.connection_ids {
+        match state
+            .store
+            .get_connection(auth.org_id, *connection_id)
+            .await
+        {
+            Ok(connection)
+                if access.can_view(
+                    connection.owner_user_id,
+                    connection.owner_team_id,
+                    &connection.visibility,
+                ) => {}
+            Ok(_) => issues.push(ValidationIssue::new(
+                "connectionIds",
+                format!("connection '{connection_id}' is not visible to you"),
+            )),
+            Err(_) => issues.push(ValidationIssue::new(
+                "connectionIds",
+                format!("unknown connection '{connection_id}'"),
+            )),
+        }
+    }
+    for mapping_id in &body.env_mapping_ids {
+        if state
+            .store
+            .get_env_mapping(auth.org_id, *mapping_id)
+            .await
+            .is_err()
+        {
+            issues.push(ValidationIssue::new(
+                "envMappingIds",
+                format!("unknown environment mapping '{mapping_id}'"),
+            ));
+        }
+    }
     validate_native_primary(&state, auth.org_id, &body.mode, &body.steps, &mut issues).await;
     if !issues.is_empty() {
         return Err(ApiError::validation(issues));
@@ -485,6 +567,8 @@ pub async fn update_team(
         "workerProfileId": body.worker_profile_id,
         "autoLaunch": body.auto_launch,
         "skills": body.skills,
+        "connectionIds": body.connection_ids,
+        "envMappingIds": body.env_mapping_ids,
         "timeoutSeconds": body.timeout_seconds,
         "steps": body.steps.iter().map(|step| serde_json::json!({
             "agentId": step.agent_id,
@@ -680,6 +764,8 @@ pub(crate) async fn start_step(
         "goal": instructions,
         "agent": agent.name,
         "previous": previous,
+        "connectionIds": definition.connection_ids,
+        "envMappingIds": definition.env_mapping_ids,
     });
     if native {
         team_payload["subagents"] =

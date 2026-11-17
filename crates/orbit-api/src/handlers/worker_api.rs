@@ -68,6 +68,9 @@ pub struct WorkerExecutionContext {
     /// Effective tool policy rules (org defaults + agent rules), enforced by the worker
     /// broker and exposed to native harness hooks.
     pub tool_policies: Vec<ToolPolicyRule>,
+    /// Environment values from team-level environment mappings.
+    #[serde(default)]
+    pub env: Vec<ResolvedEnv>,
 }
 
 #[derive(Debug, Serialize)]
@@ -363,8 +366,9 @@ async fn build_context(
         .store
         .get_agent_version_by_id(org_id, execution.agent_version_id)
         .await?;
-    let spec: AgentSpec = serde_json::from_value(version.spec)
+    let mut spec: AgentSpec = serde_json::from_value(version.spec)
         .map_err(|error| ApiError::internal(format!("stored agent spec is invalid: {error}")))?;
+    merge_team_connections(state, org_id, execution, &mut spec).await;
     if let Some(record) = state
         .store
         .get_harness_by_kind(org_id, spec.harness.kind.as_str())
@@ -387,6 +391,7 @@ async fn build_context(
     slugs.sort();
     slugs.dedup();
     let skills = state.store.skills_by_slugs(org_id, &slugs).await?;
+    let env = resolve_team_env(&state.store, org_id, execution).await;
     let tool_policies = state
         .store
         .effective_tool_policy_rules(org_id, execution.agent_id)
@@ -402,7 +407,117 @@ async fn build_context(
         grants,
         skills,
         tool_policies,
+        env,
     })
+}
+
+fn team_ids(execution: &ExecutionRecord, key: &str) -> Vec<Uuid> {
+    execution
+        .input
+        .get("team")
+        .and_then(|team| team.get(key))
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().and_then(|id| id.parse().ok()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+async fn merge_team_connections(
+    state: &AppState,
+    org_id: Uuid,
+    execution: &ExecutionRecord,
+    spec: &mut AgentSpec,
+) {
+    for connection_id in team_ids(execution, "connectionIds") {
+        if spec
+            .connectors
+            .iter()
+            .any(|binding| binding.connection_id == Some(connection_id))
+        {
+            continue;
+        }
+        let Ok(row) = state
+            .store
+            .get_connection_with_connector(org_id, connection_id)
+            .await
+        else {
+            continue;
+        };
+        let mut capabilities = row.connection.scopes.clone();
+        if capabilities.is_empty() {
+            if let Ok(Some(connector)) = state
+                .store
+                .get_connector_by_slug(org_id, &row.connector_slug)
+                .await
+            {
+                if let Some(items) = connector.capabilities.as_array() {
+                    capabilities = items
+                        .iter()
+                        .filter(|item| item.get("effect").and_then(|e| e.as_str()) == Some("read"))
+                        .filter_map(|item| item.get("id").and_then(|id| id.as_str()))
+                        .map(str::to_string)
+                        .collect();
+                }
+            }
+        }
+        spec.connectors.push(orbit_domain::ConnectorBinding {
+            connector: row.connector_slug,
+            connection_id: Some(connection_id),
+            capabilities,
+        });
+    }
+}
+
+async fn resolve_team_env(
+    store: &Store,
+    org_id: Uuid,
+    execution: &ExecutionRecord,
+) -> Vec<ResolvedEnv> {
+    let mut resolved = Vec::new();
+    for mapping_id in team_ids(execution, "envMappingIds") {
+        let Ok(mapping) = store.get_env_mapping(org_id, mapping_id).await else {
+            continue;
+        };
+        let Ok(items) = serde_json::from_value::<Vec<EnvMapping>>(mapping.mappings) else {
+            continue;
+        };
+        for item in items {
+            let value = if let Some(connection_id) = item.connection_id {
+                match store.get_connection(org_id, connection_id).await {
+                    Ok(connection) => match connection.credential_ref {
+                        Some(reference) => store
+                            .get_secret_value(&reference)
+                            .await
+                            .ok()
+                            .flatten()
+                            .map(|value| value.expose().to_string()),
+                        None => None,
+                    },
+                    Err(_) => None,
+                }
+            } else if let Some(reference) = item.secret_ref.as_ref().or(item.secret_key.as_ref()) {
+                store
+                    .get_secret_value(reference)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|value| value.expose().to_string())
+            } else {
+                None
+            };
+            if let Some(value) = value {
+                resolved.push(ResolvedEnv {
+                    env_var: item.env_var,
+                    value,
+                });
+            }
+        }
+    }
+    resolved
 }
 
 async fn fail_claimed(state: &AppState, execution: &ExecutionRecord, message: &str) {
@@ -612,6 +727,7 @@ pub async fn connection(
         .connectors
         .iter()
         .any(|binding| binding.connection_id == Some(connection_id))
+        && !team_ids(&execution, "connectionIds").contains(&connection_id)
     {
         return Err(ApiError::forbidden(
             "connection is not bound to this execution",

@@ -34,6 +34,7 @@ import {
   useAgents,
   useAgentTeams,
   useConnections,
+  useEnvMappings,
   useSkills,
   useTeamRuns,
   useWorkerProfiles,
@@ -67,6 +68,7 @@ export default function AgentTeamsPage() {
   const skills = useSkills();
   const workerProfiles = useWorkerProfiles();
   const connections = useConnections();
+  const envMappings = useEnvMappings();
   const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
@@ -87,6 +89,8 @@ export default function AgentTeamsPage() {
   const [autoLaunch, setAutoLaunch] = useState(false);
   const [teamSkills, setTeamSkills] = useState<string[]>([]);
   const [teamTimeout, setTeamTimeout] = useState("");
+  const [teamConnectionIds, setTeamConnectionIds] = useState<string[]>([]);
+  const [teamEnvMappingIds, setTeamEnvMappingIds] = useState<string[]>([]);
   const [steps, setSteps] = useState<TeamStepInput[]>([
     { agentId: "" },
     { agentId: "" },
@@ -217,6 +221,8 @@ export default function AgentTeamsPage() {
         workerProfileId: workerProfileId || undefined,
         autoLaunch,
         skills: teamSkills,
+        connectionIds: teamConnectionIds,
+        envMappingIds: teamEnvMappingIds,
         timeoutSeconds: teamTimeout ? Number(teamTimeout) : undefined,
         steps,
       };
@@ -249,6 +255,8 @@ export default function AgentTeamsPage() {
     setAutoLaunch(false);
     setTeamSkills([]);
     setTeamTimeout("");
+    setTeamConnectionIds([]);
+    setTeamEnvMappingIds([]);
     setSteps([{ agentId: "" }, { agentId: "" }]);
     setOpen(true);
   }
@@ -268,6 +276,12 @@ export default function AgentTeamsPage() {
     setTeamSkills(team.definition.skills ?? []);
     setTeamTimeout(
       String((team.definition as unknown as { timeoutSeconds?: number }).timeoutSeconds ?? ""),
+    );
+    setTeamConnectionIds(
+      (team.definition as unknown as { connectionIds?: string[] }).connectionIds ?? [],
+    );
+    setTeamEnvMappingIds(
+      (team.definition as unknown as { envMappingIds?: string[] }).envMappingIds ?? [],
     );
     setSteps((team.definition.steps ?? []).map((step) => ({ agentId: step.agentId })));
     setOpen(true);
@@ -828,6 +842,60 @@ export default function AgentTeamsPage() {
                   </span>
                 </span>
               </label>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Team connections</Label>
+                <div className="max-h-32 space-y-1 overflow-y-auto rounded-lg border p-2 text-xs">
+                  {(connections.data ?? []).length ? (
+                    (connections.data ?? []).map((connection) => (
+                      <label key={connection.id} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={teamConnectionIds.includes(connection.id)}
+                          onChange={(event) =>
+                            setTeamConnectionIds((current) =>
+                              event.target.checked
+                                ? [...current, connection.id]
+                                : current.filter((id) => id !== connection.id),
+                            )
+                          }
+                        />
+                        <span className="truncate">
+                          {connection.name} · {connection.connectorSlug}
+                        </span>
+                      </label>
+                    ))
+                  ) : (
+                    <span className="text-muted-foreground">No connections.</span>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Team environment mappings</Label>
+                <div className="max-h-32 space-y-1 overflow-y-auto rounded-lg border p-2 text-xs">
+                  {(envMappings.data ?? []).length ? (
+                    (envMappings.data ?? []).map((mapping) => (
+                      <label key={mapping.id} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={teamEnvMappingIds.includes(mapping.id)}
+                          onChange={(event) =>
+                            setTeamEnvMappingIds((current) =>
+                              event.target.checked
+                                ? [...current, mapping.id]
+                                : current.filter((id) => id !== mapping.id),
+                            )
+                          }
+                        />
+                        <span className="truncate">{mapping.name}</span>
+                      </label>
+                    ))
+                  ) : (
+                    <span className="text-muted-foreground">No environment mappings.</span>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Execution mode</Label>

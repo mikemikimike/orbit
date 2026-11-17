@@ -76,6 +76,15 @@ impl Store {
         .ok_or_else(|| StoreError::NotFound("env mapping".into()))
     }
 
+    pub async fn get_env_mapping(&self, org_id: Uuid, id: Uuid) -> StoreResult<EnvMapping> {
+        sqlx::query_as::<_, EnvMapping>("SELECT * FROM env_mappings WHERE org_id = $1 AND id = $2")
+            .bind(org_id)
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| StoreError::NotFound("env mapping".into()))
+    }
+
     pub async fn delete_env_mapping(&self, org_id: Uuid, id: Uuid) -> StoreResult<()> {
         let result = sqlx::query("DELETE FROM env_mappings WHERE org_id = $1 AND id = $2")
             .bind(org_id)
