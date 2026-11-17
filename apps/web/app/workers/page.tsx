@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Boxes, Copy, Pencil, Plus, Rocket, ScrollText, Server, Square, Trash2 } from "lucide-react";
+import { Boxes, Copy, Pencil, Plus, RotateCw, Rocket, ScrollText, Server, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -295,6 +295,24 @@ function WorkersPageInner() {
     onError: (error) => toast.error(errorMessage(error)),
   });
 
+  const relaunch = useMutation({
+    mutationFn: async (profileId: string) => {
+      const active = (launches.data ?? []).filter(
+        (item) => item.profileId === profileId &&
+          ["pending", "starting", "running"].includes(item.status),
+      );
+      for (const item of active) {
+        await stopWorkerLaunch(item.id);
+      }
+      return launchWorkerProfile(profileId);
+    },
+    onSuccess: () => {
+      toast.success("Worker relaunch requested");
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workerLaunches });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
   const stop = useMutation({
     mutationFn: stopWorkerLaunch,
     onSuccess: () => {
@@ -426,6 +444,27 @@ function WorkersPageInner() {
                   >
                     <Rocket /> Launch
                   </Button>
+                  {launches.data?.some(
+                    (item) => item.profileId === profile.id &&
+                      ["pending", "starting", "running"].includes(item.status),
+                  ) ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      loading={relaunch.isPending && relaunch.variables === profile.id}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Relaunch ${profile.name}? Running agents on this worker may be interrupted.`,
+                          )
+                        ) {
+                          relaunch.mutate(profile.id);
+                        }
+                      }}
+                    >
+                      <RotateCw /> Relaunch
+                    </Button>
+                  ) : null}
                   <Button size="sm" onClick={() => setBootstrapProfile(profile)}>
                     <Boxes /> Bootstrap
                   </Button>
