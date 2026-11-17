@@ -702,7 +702,13 @@ async fn skills_profiles_and_agent_scoped_claims() {
         .unwrap();
 
     let claimed = store
-        .claim_next_queued("scoped-worker", &["mock".into()], "local", &[agent_a.id])
+        .claim_next_queued(
+            "scoped-worker",
+            &["mock".into()],
+            "local",
+            &[agent_a.id],
+            None,
+        )
         .await
         .unwrap()
         .expect("agent A execution should be claimable");

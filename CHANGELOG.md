@@ -10,6 +10,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- Worker claims are scoped by the worker profile's owning team: a team worker only claims
+  queued executions whose agent is org-visible or owned by that team. Profile-less worker
+  tokens keep the existing org-wide behavior.
+
+### Added
+
 - Generic resource sharing: `GET/PATCH /api/v1/sharing/{resource}/{id}` with
   private/team/org visibility, ownership validation and audit. Share dialog on the agent
   detail page (same API works for skills, connections, providers, workers, triggers and

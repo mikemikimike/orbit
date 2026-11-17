@@ -496,6 +496,7 @@ impl Store {
         harnesses: &[String],
         worker_target: &str,
         agent_ids: &[Uuid],
+        profile_team_id: Option<Uuid>,
     ) -> StoreResult<Option<ExecutionRecord>> {
         Ok(sqlx::query_as::<_, ExecutionRecord>(
             r#"
@@ -508,6 +509,14 @@ impl Store {
                   AND harness_kind = ANY($2)
                   AND (placement = 'auto' OR placement = $3)
                   AND (cardinality($4::uuid[]) = 0 OR agent_id = ANY($4))
+                  AND (
+                      $5::uuid IS NULL
+                      OR EXISTS (
+                          SELECT 1 FROM agents a
+                          WHERE a.id = executions.agent_id
+                            AND (a.visibility = 'org' OR a.owner_team_id = $5)
+                      )
+                  )
                 ORDER BY created_at ASC
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED
@@ -519,6 +528,7 @@ impl Store {
         .bind(harnesses)
         .bind(worker_target)
         .bind(agent_ids)
+        .bind(profile_team_id)
         .fetch_optional(&self.pool)
         .await?)
     }

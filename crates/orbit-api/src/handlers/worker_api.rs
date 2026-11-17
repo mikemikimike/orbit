@@ -316,7 +316,13 @@ pub async fn claim(
         .unwrap_or(body.agent_ids);
     let execution = match state
         .store
-        .claim_next_queued(&body.worker_id, &harnesses, &body.target, &agent_ids)
+        .claim_next_queued(
+            &body.worker_id,
+            &harnesses,
+            &body.target,
+            &agent_ids,
+            profile.as_ref().and_then(|profile| profile.owner_team_id),
+        )
         .await?
     {
         Some(execution) => execution,
