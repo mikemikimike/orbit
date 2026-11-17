@@ -19,6 +19,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
+import { ShareResourceDialog } from "@/components/share-resource-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { api, API_BASE_URL, getAccessToken } from "@/lib/api";
@@ -402,6 +403,11 @@ export default function ModelsPage() {
                         <Zap /> Test &amp; discover
                       </Button>
                     ) : null}
+                    <ShareResourceDialog
+                      resource="providers"
+                      resourceId={provider.id}
+                      resourceName={provider.name}
+                    />
                     <Button size="sm" variant="ghost" onClick={() => openEdit(provider)}>
                       <Pencil /> Edit
                     </Button>

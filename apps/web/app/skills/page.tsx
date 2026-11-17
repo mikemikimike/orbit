@@ -20,6 +20,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
+import { ShareResourceDialog } from "@/components/share-resource-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
@@ -175,7 +176,12 @@ export default function SkillsPage() {
                 <p className="line-clamp-2 text-sm text-muted-foreground">
                   {skill.description || "No description."}
                 </p>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <ShareResourceDialog
+                    resource="skills"
+                    resourceId={skill.id}
+                    resourceName={skill.name}
+                  />
                   <Button
                     size="sm"
                     variant="ghost"
