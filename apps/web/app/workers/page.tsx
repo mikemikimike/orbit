@@ -95,13 +95,16 @@ function WorkersPageInner() {
     setOpen(true);
   }
 
-  const harnessProviders = (providers.data ?? []).filter(
-    (candidate) => candidate.kind === "harness_managed",
-  );
-  const selectedProvider = harnessProviders.find((candidate) => {
+  const providerOptionValue = (candidate: NonNullable<typeof providers.data>[number]) => {
     const config = (candidate.config ?? {}) as Record<string, unknown>;
-    return String(config.provider ?? "") === provider;
-  });
+    return candidate.kind === "harness_managed"
+      ? String(config.provider ?? candidate.name)
+      : candidate.name;
+  };
+  const workerProviders = providers.data ?? [];
+  const selectedProvider = workerProviders.find(
+    (candidate) => providerOptionValue(candidate) === provider,
+  );
   const providerModels = (() => {
     const settings = (selectedProvider?.config as Record<string, unknown> | undefined)?.settings as
       | Record<string, unknown>
@@ -572,7 +575,7 @@ function WorkersPageInner() {
             </div>
             <div className="space-y-1.5">
               <Label>Provider</Label>
-              {harnessProviders.length ? (
+              {workerProviders.length ? (
                 <>
                   <select
                     className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
@@ -583,37 +586,61 @@ function WorkersPageInner() {
                         setModel("");
                         return;
                       }
-                      const next = harnessProviders.find((candidate) => {
-                        const config = (candidate.config ?? {}) as Record<string, unknown>;
-                        return String(config.provider ?? "") === event.target.value;
-                      });
+                      const next = workerProviders.find(
+                        (candidate) => providerOptionValue(candidate) === event.target.value,
+                      );
                       const config = (next?.config ?? {}) as Record<string, unknown>;
-                      const providerHarness = String(config.harness ?? "");
-                      if (providerHarness) {
-                        setHarness(providerHarness);
-                        setImage(DEFAULT_IMAGES[providerHarness] ?? image);
+                      const settings = config.settings as Record<string, unknown> | undefined;
+                      const catalog = Array.isArray(settings?.models)
+                        ? (settings.models as unknown[]).filter(
+                            (value): value is string => typeof value === "string",
+                          )
+                        : [];
+                      if (next?.kind === "harness_managed") {
+                        const providerHarness = String(config.harness ?? "");
+                        if (providerHarness) {
+                          setHarness(providerHarness);
+                          setImage(DEFAULT_IMAGES[providerHarness] ?? image);
+                        }
                       }
                       setProvider(event.target.value);
-                      setModel(String(config.model ?? ""));
+                      setModel(String(config.model ?? "") || catalog[0] || "");
                     }}
                   >
                     <option value="__custom">Custom provider…</option>
-                    {harnessProviders.map((candidate) => {
-                      const config = (candidate.config ?? {}) as Record<string, unknown>;
-                      const name = String(config.provider ?? candidate.name);
-                      const providerHarness = String(config.harness ?? "");
-                      return (
-                        <option key={candidate.id} value={name}>
-                          {candidate.name} · {name}
-                          {providerHarness ? ` (${providerHarness})` : ""}
-                        </option>
-                      );
-                    })}
+                    {workerProviders.some((candidate) => candidate.kind === "harness_managed") ? (
+                      <optgroup label="Harness-authenticated (worker handles auth)">
+                        {workerProviders
+                          .filter((candidate) => candidate.kind === "harness_managed")
+                          .map((candidate) => {
+                            const config = (candidate.config ?? {}) as Record<string, unknown>;
+                            const name = providerOptionValue(candidate);
+                            const providerHarness = String(config.harness ?? "");
+                            return (
+                              <option key={candidate.id} value={name}>
+                                {candidate.name} · {name}
+                                {providerHarness ? ` (${providerHarness})` : ""}
+                              </option>
+                            );
+                          })}
+                      </optgroup>
+                    ) : null}
+                    {workerProviders.some((candidate) => candidate.kind === "openai_compatible") ? (
+                      <optgroup label="ORBIT-managed (API key stored in ORBIT)">
+                        {workerProviders
+                          .filter((candidate) => candidate.kind === "openai_compatible")
+                          .map((candidate) => (
+                            <option key={candidate.id} value={providerOptionValue(candidate)}>
+                              {candidate.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ) : null}
                   </select>
                   {selectedProvider ? null : (
                     <Input
                       value={provider}
-                      placeholder="harness provider name, e.g. opencode-go"
+                      placeholder="custom provider name"
                       onChange={(event) => setProvider(event.target.value)}
                     />
                   )}
@@ -625,6 +652,10 @@ function WorkersPageInner() {
                   onChange={(event) => setProvider(event.target.value)}
                 />
               )}
+              <p className="text-[11px] text-muted-foreground">
+                Providers and model catalogs come from Models. Harness-managed providers
+                use the harness auth secret; ORBIT-managed providers inject credentials.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Model</Label>
@@ -634,9 +665,10 @@ function WorkersPageInner() {
                   value={model}
                   onChange={(event) => setModel(event.target.value)}
                 >
-                  {providerModels.includes(model) ? null : (
-                    <option value={model}>{model || "Provider default"}</option>
-                  )}
+                  <option value="">Provider default</option>
+                  {model && !providerModels.includes(model) ? (
+                    <option value={model}>{model} (custom)</option>
+                  ) : null}
                   {providerModels.map((candidate) => (
                     <option key={candidate} value={candidate}>
                       {candidate}

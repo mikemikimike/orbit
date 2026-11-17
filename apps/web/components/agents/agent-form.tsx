@@ -93,6 +93,22 @@ export function AgentForm({
     () => providers.data?.filter((p) => p.kind === "harness_managed") ?? [],
     [providers.data],
   );
+  const selectedProviderRecord = useMemo(() => {
+    const selected = definition.spec.model.provider;
+    if (!selected) return undefined;
+    return (providers.data ?? []).find((provider) => {
+      const config = (provider.config ?? {}) as Record<string, unknown>;
+      const harnessName = String(config.provider ?? provider.name);
+      return provider.name === selected || harnessName === selected;
+    });
+  }, [providers.data, definition.spec.model.provider]);
+  const modelOptions = useMemo(() => {
+    const settings = (selectedProviderRecord?.config as Record<string, unknown> | undefined)
+      ?.settings as Record<string, unknown> | undefined;
+    return Array.isArray(settings?.models)
+      ? (settings.models as unknown[]).filter((value): value is string => typeof value === "string")
+      : [];
+  }, [selectedProviderRecord]);
 
   function updateSpec(patch: Partial<AgentDefinition["spec"]>) {
     setDefinition((current) => ({
@@ -395,10 +411,22 @@ export function AgentForm({
                           return name === event.target.value || p.name === event.target.value;
                         });
                         const kind = selected?.kind;
+                        const settings = (selected?.config as Record<string, unknown> | undefined)
+                          ?.settings as Record<string, unknown> | undefined;
+                        const catalog = Array.isArray(settings?.models)
+                          ? (settings.models as unknown[]).filter(
+                              (value): value is string => typeof value === "string",
+                            )
+                          : [];
+                        const defaultModel =
+                          String((selected?.config as Record<string, unknown> | undefined)?.model ?? "") ||
+                          catalog[0] ||
+                          "";
                         updateSpec({
                           model: {
                             ...definition.spec.model,
                             provider: event.target.value || undefined,
+                            model: defaultModel || undefined,
                             management:
                               kind === "harness_managed"
                                 ? "harness"
@@ -446,19 +474,44 @@ export function AgentForm({
                 </div>
                 <div className={fieldClass}>
                   <Label>Model</Label>
-                  <Input
-                    value={definition.spec.model.model ?? ""}
-                    placeholder={
-                      definition.spec.model.management === "platform"
-                        ? "model id at the provider"
-                        : "optional; harness default"
-                    }
-                    onChange={(event) =>
-                      updateSpec({
-                        model: { ...definition.spec.model, model: event.target.value || undefined },
-                      })
-                    }
-                  />
+                  {modelOptions.length ? (
+                    <select
+                      className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+                      value={definition.spec.model.model ?? ""}
+                      onChange={(event) =>
+                        updateSpec({
+                          model: { ...definition.spec.model, model: event.target.value || undefined },
+                        })
+                      }
+                    >
+                      <option value="">Provider default</option>
+                      {definition.spec.model.model &&
+                      !modelOptions.includes(definition.spec.model.model) ? (
+                        <option value={definition.spec.model.model}>
+                          {definition.spec.model.model} (custom)
+                        </option>
+                      ) : null}
+                      {modelOptions.map((candidate) => (
+                        <option key={candidate} value={candidate}>
+                          {candidate}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      value={definition.spec.model.model ?? ""}
+                      placeholder={
+                        definition.spec.model.management === "platform"
+                          ? "model id at the provider"
+                          : "optional; harness default"
+                      }
+                      onChange={(event) =>
+                        updateSpec({
+                          model: { ...definition.spec.model, model: event.target.value || undefined },
+                        })
+                      }
+                    />
+                  )}
                   {definition.spec.model.management === "platform" && platformProviders.length === 0 ? (
                     <p className="text-[11px] text-[hsl(var(--warning))]">
                       No OpenAI-compatible providers configured yet. Add one under Models.
