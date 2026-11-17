@@ -99,6 +99,10 @@ pub async fn create_agent(
         .store
         .create_agent(auth.org_id, Some(auth.user_id), &definition)
         .await?;
+    state
+        .store
+        .assign_resource_owner(auth.org_id, "agents", agent.id, auth.user_id)
+        .await?;
     state.metrics.inc_agents();
     audit::record(
         &state,

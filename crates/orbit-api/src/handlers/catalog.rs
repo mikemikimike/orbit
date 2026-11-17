@@ -577,6 +577,10 @@ pub async fn create_connection(
         }
     };
 
+    state
+        .store
+        .assign_resource_owner(auth.org_id, "connections", connection.id, auth.user_id)
+        .await?;
     let row = state
         .store
         .get_connection_with_connector(auth.org_id, connection.id)
