@@ -134,3 +134,28 @@ echo done
 - Native tools with no matching rule default to `require_approval`, not allow. Approval
   decisions are bound to the execution, expire with it, and default-deny on timeout.
 - Rule management requires `settings:write` (owner) and is audited.
+
+### 9. Cross-team object access (IDOR)
+
+**Threat:** an authenticated member guesses an object ID and reads or mutates another
+team's agent, connection, provider, worker profile, trigger, tool policy, execution or
+approval.
+
+**Mitigations:**
+
+- Every shareable row carries `owner_user_id`, `owner_team_id` and `visibility`
+  (`private | team | org`); legacy rows are `org` in the Default team.
+- `AccessScope` is loaded from the caller's role and team memberships. List endpoints
+  filter rows; get/update/delete/export use `require_view`/`require_manage`, returning
+  `404` for invisible rows to avoid confirming existence.
+- Executions, events, SSE streams, cancellation and approvals are checked against the
+  parent agent's visibility, not just org membership.
+- Worker claims are constrained to the worker profile's owning team; a team worker cannot
+  claim another team's private agent.
+- Sharing changes require manage access plus the `resource_permissions` license feature;
+  team writes require `teams`. Both are audited.
+- Integration tests create two operator users with API tokens and assert list/get/delete
+  isolation.
+
+**Residual risk:** org owners/admins intentionally see all resources. Team-run objects
+follow their agent team and are not yet independently shareable; see issue #37.

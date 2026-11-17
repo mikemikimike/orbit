@@ -10,6 +10,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- Access teams (`teams`) and resource sharing (`resource_permissions`) are license-gated
+  premium features. Documented the enterprise access model, the IDOR matrix and the
+  cross-team threat.
+
+### Added
+
 - Execution visibility follows the agent's access scope for list/get/events/SSE/cancel and
   approvals. Team workers claim only org-visible or owning-team agents.
 
