@@ -1,8 +1,8 @@
 # CI: tests, lint, security scans and container image builds.
 #
-# Runs on every push/PR to main and on `v*` tags (which also publish images and the
-# release binaries/chart). Superseded runs on the same ref are cancelled automatically,
-# except for tags.
+# Runs on every push/PR to main and on `v*` tags. Container images are built only on
+# `v*` tags (the release path) or manual dispatch with push_images=true, so normal main
+# pushes stay fast. Superseded runs on the same ref are cancelled, except tags.
 
 name: CI
 
@@ -138,7 +138,7 @@ jobs:
     name: Build container images
     runs-on: ubuntu-latest
     needs: [rust, web]
-    if: ${{ github.event.inputs.push_images == 'true' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ github.event.inputs.push_images == 'true' || startsWith(github.ref, 'refs/tags/v') }}
     permissions:
       contents: read
       packages: write
@@ -164,7 +164,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
-        if: ${{ github.event.inputs.push_images == 'true' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ github.event.inputs.push_images == 'true' || startsWith(github.ref, 'refs/tags/v') }}
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -188,7 +188,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
-          push: ${{ github.event.inputs.push_images == 'true' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+          push: ${{ github.event.inputs.push_images == 'true' || startsWith(github.ref, 'refs/tags/v') }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
