@@ -1051,6 +1051,10 @@ async fn team_worker_cannot_claim_another_teams_execution() {
 
     assert_eq!(exec_a.agent_id, agent_a.id);
     assert_eq!(exec_b.agent_id, agent_b.id);
+    let after_a = store.get_agent(org, agent_a.id).await.unwrap();
+    let after_b = store.get_agent(org, agent_b.id).await.unwrap();
+    assert_eq!(after_a.visibility, "team");
+    assert_eq!(after_b.visibility, "team");
 
     // A random team must not claim anything.
     let none = store
