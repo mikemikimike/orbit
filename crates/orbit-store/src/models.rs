@@ -537,6 +537,7 @@ pub struct Output {
     pub name: String,
     pub kind: String,
     pub agent_id: Option<Uuid>,
+    pub team_id: Option<Uuid>,
     pub events: Vec<String>,
     pub secret_ref: String,
     pub template: Option<String>,
@@ -550,6 +551,7 @@ pub struct OutputDeliveryJob {
     pub id: Uuid,
     pub org_id: Uuid,
     pub output_id: Uuid,
-    pub execution_id: Uuid,
+    pub execution_id: Option<Uuid>,
+    pub team_run_id: Option<Uuid>,
     pub attempts: i32,
 }

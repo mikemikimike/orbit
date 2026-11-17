@@ -3,7 +3,7 @@
 use chrono::{DateTime, Duration, Utc};
 use uuid::Uuid;
 
-use crate::models::{ExecutionRecord, Output, OutputDeliveryJob};
+use crate::models::{ExecutionRecord, Output, OutputDeliveryJob, TeamRun};
 use crate::{Store, StoreError, StoreResult};
 
 impl Store {
@@ -25,14 +25,15 @@ impl Store {
         name: &str,
         kind: &str,
         agent_id: Option<Uuid>,
+        team_id: Option<Uuid>,
         events: &[String],
         secret_ref: &str,
         template: Option<&str>,
     ) -> StoreResult<Output> {
         sqlx::query_as::<_, Output>(
             r#"
-            INSERT INTO outputs (id, org_id, name, kind, agent_id, events, secret_ref, template)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO outputs (id, org_id, name, kind, agent_id, team_id, events, secret_ref, template)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING *
             "#,
         )
@@ -41,6 +42,7 @@ impl Store {
         .bind(name)
         .bind(kind)
         .bind(agent_id)
+        .bind(team_id)
         .bind(events)
         .bind(secret_ref)
         .bind(template)
@@ -67,6 +69,7 @@ impl Store {
         name: &str,
         kind: &str,
         agent_id: Option<Uuid>,
+        team_id: Option<Uuid>,
         events: &[String],
         secret_ref: Option<&str>,
         template: Option<&str>,
@@ -75,8 +78,8 @@ impl Store {
         sqlx::query_as::<_, Output>(
             r#"
             UPDATE outputs
-            SET name = $3, kind = $4, agent_id = $5, events = $6,
-                secret_ref = COALESCE($7, secret_ref), template = $8, enabled = $9,
+            SET name = $3, kind = $4, agent_id = $5, team_id = $6, events = $7,
+                secret_ref = COALESCE($8, secret_ref), template = $9, enabled = $10,
                 updated_at = now()
             WHERE org_id = $1 AND id = $2
             RETURNING *
@@ -87,6 +90,7 @@ impl Store {
         .bind(name)
         .bind(kind)
         .bind(agent_id)
+        .bind(team_id)
         .bind(events)
         .bind(secret_ref)
         .bind(template)
@@ -129,8 +133,30 @@ impl Store {
              AND (o.agent_id IS NULL OR o.agent_id = e.agent_id)
              AND e.status = ANY(o.events)
              AND e.updated_at >= $1
-            WHERE o.enabled
+            WHERE o.enabled AND o.team_id IS NULL
             ON CONFLICT (output_id, execution_id) DO NOTHING
+            "#,
+        )
+        .bind(since)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
+    /// Enqueue team-run outputs. Global/agent outputs keep executing per execution.
+    pub async fn enqueue_team_output_deliveries(&self, since: DateTime<Utc>) -> StoreResult<u64> {
+        let result = sqlx::query(
+            r#"
+            INSERT INTO output_deliveries (id, org_id, output_id, team_run_id)
+            SELECT gen_random_uuid(), o.org_id, o.id, t.id
+            FROM outputs o
+            JOIN team_runs t
+              ON t.org_id = o.org_id
+             AND o.team_id = t.team_id
+             AND t.status = ANY(o.events)
+             AND t.updated_at >= $1
+            WHERE o.enabled AND o.team_id IS NOT NULL
+            ON CONFLICT (output_id, team_run_id) DO NOTHING
             "#,
         )
         .bind(since)
@@ -142,7 +168,7 @@ impl Store {
     pub async fn due_output_deliveries(&self, limit: i64) -> StoreResult<Vec<OutputDeliveryJob>> {
         Ok(sqlx::query_as::<_, OutputDeliveryJob>(
             r#"
-            SELECT id, org_id, output_id, execution_id, attempts
+            SELECT id, org_id, output_id, execution_id, team_run_id, attempts
             FROM output_deliveries
             WHERE status = 'pending' AND next_attempt_at <= now()
             ORDER BY next_attempt_at ASC
@@ -152,6 +178,14 @@ impl Store {
         .bind(limit)
         .fetch_all(&self.pool)
         .await?)
+    }
+
+    pub async fn get_team_run_any_org(&self, id: Uuid) -> StoreResult<TeamRun> {
+        sqlx::query_as::<_, TeamRun>("SELECT * FROM team_runs WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| StoreError::NotFound("team run".into()))
     }
 
     pub async fn get_execution_by_id_any_org(&self, id: Uuid) -> StoreResult<ExecutionRecord> {

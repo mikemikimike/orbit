@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use orbit_domain::ValidationIssue;
 use orbit_security::{new_secret_ref, AuthContext, Permission, SecretValue};
-use orbit_store::{ExecutionRecord, Output};
+use orbit_store::{ExecutionRecord, Output, TeamRun};
 
 use crate::audit;
 use crate::error::ApiError;
@@ -22,6 +22,8 @@ pub struct OutputRequest {
     pub kind: String,
     #[serde(default)]
     pub agent_id: Option<Uuid>,
+    #[serde(default)]
+    pub team_id: Option<Uuid>,
     #[serde(default)]
     pub events: Vec<String>,
     /// Incoming webhook / target URL. Write-only; never returned.
@@ -44,6 +46,7 @@ pub struct OutputView {
     pub name: String,
     pub kind: String,
     pub agent_id: Option<Uuid>,
+    pub team_id: Option<Uuid>,
     pub events: Vec<String>,
     pub template: Option<String>,
     pub enabled: bool,
@@ -59,6 +62,7 @@ impl From<Output> for OutputView {
             name: output.name,
             kind: output.kind,
             agent_id: output.agent_id,
+            team_id: output.team_id,
             events: output.events,
             template: output.template,
             enabled: output.enabled,
@@ -72,6 +76,12 @@ impl From<Output> for OutputView {
 fn validated(body: &OutputRequest) -> Result<(String, Vec<String>), ApiError> {
     let mut issues = Vec::new();
     let name = body.name.trim().to_string();
+    if body.agent_id.is_some() && body.team_id.is_some() {
+        issues.push(ValidationIssue::new(
+            "target",
+            "choose an agent or a team, not both",
+        ));
+    }
     if name.is_empty() {
         issues.push(ValidationIssue::new("name", "name is required"));
     }
@@ -161,6 +171,7 @@ pub async fn create(
             &name,
             &body.kind,
             body.agent_id,
+            body.team_id,
             &events,
             &secret_ref,
             body.template.as_deref(),
@@ -217,6 +228,7 @@ pub async fn update(
             &name,
             &body.kind,
             body.agent_id,
+            body.team_id,
             &events,
             secret_ref.as_deref(),
             body.template.as_deref(),
@@ -264,7 +276,7 @@ pub async fn test_output(
     auth.require(Permission::SettingsWrite)?;
     let output = state.store.get_output(auth.org_id, output_id).await?;
     let text = "ORBIT test notification — your output is configured correctly.";
-    deliver(&state, &output, text, None).await?;
+    deliver(&state, &output, text, None, None).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -274,6 +286,7 @@ pub async fn deliver(
     output: &Output,
     text: &str,
     execution: Option<&ExecutionRecord>,
+    team_run: Option<&TeamRun>,
 ) -> Result<(), ApiError> {
     let url = state
         .store
@@ -289,6 +302,10 @@ pub async fn deliver(
             "execution": execution.map(|e| serde_json::json!({
                 "id": e.id, "agentName": e.agent_name, "status": e.status,
                 "output": e.output, "error": e.error,
+            })),
+            "teamRun": team_run.map(|run| serde_json::json!({
+                "id": run.id, "teamId": run.team_id, "status": run.status,
+                "output": run.output, "error": run.error,
             })),
         })
     } else {
@@ -320,6 +337,7 @@ pub async fn deliver(
 pub async fn deliver_pending(state: &AppState) {
     let since = chrono::Utc::now() - chrono::Duration::minutes(30);
     let _ = state.store.enqueue_output_deliveries(since).await;
+    let _ = state.store.enqueue_team_output_deliveries(since).await;
     let Ok(jobs) = state.store.due_output_deliveries(25).await else {
         return;
     };
@@ -328,16 +346,20 @@ pub async fn deliver_pending(state: &AppState) {
             Ok(output) => output,
             Err(_) => continue,
         };
-        let execution = state
-            .store
-            .get_execution_by_id_any_org(job.execution_id)
-            .await
-            .ok();
+        let execution = match job.execution_id {
+            Some(id) => state.store.get_execution_by_id_any_org(id).await.ok(),
+            None => None,
+        };
+        let team_run = match job.team_run_id {
+            Some(id) => state.store.get_team_run_any_org(id).await.ok(),
+            None => None,
+        };
         let text = execution
             .as_ref()
             .map(summary)
-            .unwrap_or_else(|| "ORBIT execution finished".into());
-        let result = deliver(state, &output, &text, execution.as_ref()).await;
+            .or_else(|| team_run.as_ref().map(team_summary))
+            .unwrap_or_else(|| "ORBIT run finished".into());
+        let result = deliver(state, &output, &text, execution.as_ref(), team_run.as_ref()).await;
         let attempts = job.attempts + 1;
         let (success, status, error) = match &result {
             Ok(()) => (true, None, None),
@@ -348,6 +370,32 @@ pub async fn deliver_pending(state: &AppState) {
             .finish_output_delivery(job.id, success, status, error.as_deref(), attempts)
             .await;
     }
+}
+
+fn team_summary(run: &TeamRun) -> String {
+    let output = run
+        .output
+        .as_ref()
+        .map(|value| {
+            value
+                .get("text")
+                .or_else(|| value.get("summary"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .unwrap_or_else(|| value.to_string())
+        })
+        .or_else(|| run.error.clone())
+        .unwrap_or_else(|| "completed".into());
+    let output: String = output.chars().take(3000).collect();
+    format!(
+        "Agent team run {} — {}\n{}",
+        run.status,
+        run.input
+            .get("task")
+            .and_then(|v| v.as_str())
+            .unwrap_or("task"),
+        output
+    )
 }
 
 fn summary(execution: &ExecutionRecord) -> String {

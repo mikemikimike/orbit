@@ -23,7 +23,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { useAgents } from "@/lib/queries";
+import { useAgents, useAgentTeams } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 import {
   createOutput,
@@ -42,6 +42,7 @@ type Form = {
   name: string;
   kind: OutputInput["kind"];
   agentId: string;
+  teamId: string;
   events: string[];
   webhookUrl: string;
   template: string;
@@ -52,6 +53,7 @@ const EMPTY: Form = {
   name: "",
   kind: "slack",
   agentId: "",
+  teamId: "",
   events: [...EVENTS],
   webhookUrl: "",
   template: "",
@@ -62,6 +64,7 @@ export default function OutputsPage() {
   const queryClient = useQueryClient();
   const outputs = useQuery({ queryKey: ["outputs"], queryFn: listOutputs, staleTime: 15_000 });
   const agents = useAgents({ limit: 100 });
+  const teams = useAgentTeams();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<OutputView | null>(null);
   const [form, setForm] = useState<Form>(EMPTY);
@@ -72,6 +75,7 @@ export default function OutputsPage() {
         name: form.name.trim(),
         kind: form.kind,
         agentId: form.agentId || null,
+        teamId: form.teamId || null,
         events: form.events,
         webhookUrl: form.webhookUrl.trim() || undefined,
         template: form.template.trim() || null,
@@ -115,6 +119,7 @@ export default function OutputsPage() {
       name: output.name,
       kind: output.kind,
       agentId: output.agentId ?? "",
+      teamId: output.teamId ?? "",
       events: output.events,
       webhookUrl: "",
       template: output.template ?? "",
@@ -123,8 +128,12 @@ export default function OutputsPage() {
     setOpen(true);
   }
 
-  const agentName = (id?: string | null) =>
-    agents.data?.items.find((agent) => agent.id === id)?.name ?? "All agents";
+  const targetName = (output: OutputView) =>
+    output.teamId
+      ? (teams.data?.find((team) => team.id === output.teamId)?.name ?? "Team")
+      : output.agentId
+        ? (agents.data?.items.find((agent) => agent.id === output.agentId)?.name ?? "Agent")
+        : "All agents";
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -165,7 +174,7 @@ export default function OutputsPage() {
                   </Badge>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  {output.kind} · {agentName(output.agentId)} · {output.events.join(", ")}
+                  {output.kind} · {targetName(output)} · {output.events.join(", ")}
                 </p>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -238,19 +247,43 @@ export default function OutputsPage() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Agent</Label>
+              <Label>Target</Label>
               <select
                 className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                value={form.agentId}
-                onChange={(event) => setForm({ ...form, agentId: event.target.value })}
+                value={
+                  form.teamId ? `team:${form.teamId}` : form.agentId ? `agent:${form.agentId}` : ""
+                }
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value.startsWith("team:")) {
+                    setForm({ ...form, teamId: value.slice(5), agentId: "" });
+                  } else if (value.startsWith("agent:")) {
+                    setForm({ ...form, agentId: value.slice(6), teamId: "" });
+                  } else {
+                    setForm({ ...form, agentId: "", teamId: "" });
+                  }
+                }}
               >
-                <option value="">All agents</option>
-                {(agents.data?.items ?? []).map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </option>
-                ))}
+                <option value="">All agents (executions)</option>
+                <optgroup label="Agents">
+                  {(agents.data?.items ?? []).map((agent) => (
+                    <option key={agent.id} value={`agent:${agent.id}`}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Agent teams (team runs)">
+                  {(teams.data ?? []).map((team) => (
+                    <option key={team.id} value={`team:${team.id}`}>
+                      {team.name}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
+              <p className="text-[11px] text-muted-foreground">
+                Agent targets fire per execution; team targets fire once when a team run
+                finishes.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Send on</Label>

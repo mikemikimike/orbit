@@ -900,6 +900,7 @@ async fn env_mappings_and_outputs_round_trip() {
             "Slack release",
             "slack",
             None,
+            None,
             &["succeeded".to_string(), "failed".to_string()],
             "secret://output/test",
             Some("release finished"),

@@ -7,6 +7,7 @@ export interface OutputView {
   name: string;
   kind: "slack" | "mattermost" | "webhook";
   agentId?: string | null;
+  teamId?: string | null;
   events: string[];
   template?: string | null;
   enabled: boolean;
@@ -19,6 +20,7 @@ export interface OutputInput {
   name: string;
   kind: "slack" | "mattermost" | "webhook";
   agentId?: string | null;
+  teamId?: string | null;
   events: string[];
   webhookUrl?: string;
   template?: string | null;

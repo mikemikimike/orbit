@@ -5,8 +5,8 @@ Outputs deliver an execution result after it reaches a terminal state. Manage th
 
 ## UI
 
-The Work wizard's **Then** step lists outputs configured for the selected agent (and global
-outputs) before the run is created.
+The Work wizard's **Then** step lists outputs configured for the selected agent/team before
+the run is created.
 
 **Outputs → New output**: name, kind, optional agent, events, incoming webhook URL,
 optional template and enabled toggle. **Test** sends a sample notification; edit leaves the
@@ -29,7 +29,8 @@ curl -X POST "$API/api/v1/outputs" \
 ```
 
 - `kind`: `slack`, `mattermost` or `webhook`
-- `agentId`: `null` for every agent, or one agent
+- `agentId`: one agent, or `null` together with `teamId` for all executions
+- `teamId`: one Agent Team; fires once when the team run finishes (not per child execution)
 - `events`: `succeeded`, `failed`, `cancelled` (default: all three)
 - `webhookUrl`: write-only; encrypted at rest and never returned
 

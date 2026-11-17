@@ -150,11 +150,11 @@ export default function WorkPage() {
   }
 
   const selectedAgent = agents.data?.items.find((a) => a.id === who);
-  const visibleOutputs = (outputs.data ?? []).filter(
-    (output) =>
-      output.enabled &&
-      (!output.agentId || (whoType === "agent" && output.agentId === who)),
-  );
+  const visibleOutputs = (outputs.data ?? []).filter((output) => {
+    if (!output.enabled) return false;
+    if (whoType === "team") return output.teamId === who;
+    return !output.teamId && (!output.agentId || output.agentId === who);
+  });
 
   return (
     <div className="space-y-5 animate-fade-in">
