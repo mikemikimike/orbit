@@ -515,3 +515,100 @@ async fn connections_are_org_scoped_and_credentials_hidden() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 }
+
+fn auth_get(path: &str, token: &str) -> Request<Body> {
+    Request::builder()
+        .uri(path)
+        .header("authorization", format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap()
+}
+
+fn auth_delete(path: &str, token: &str) -> Request<Body> {
+    Request::builder()
+        .method("DELETE")
+        .uri(path)
+        .header("authorization", format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap()
+}
+
+async fn token_for(store: &Store, org_id: Uuid, user_id: Uuid, name: &str) -> String {
+    let issued = orbit_security::issue_api_token();
+    store
+        .create_api_token(
+            org_id,
+            user_id,
+            name,
+            &issued.prefix,
+            &issued.hash,
+            &[],
+            None,
+        )
+        .await
+        .expect("api token");
+    issued.token
+}
+
+#[tokio::test]
+async fn private_agents_are_hidden_from_other_users() {
+    let Some(app) = test_app(true).await else {
+        return;
+    };
+    let alice = app
+        .store
+        .ensure_user(app.org_id, "alice@test.local", "Alice", UserRole::Operator)
+        .await
+        .unwrap();
+    let bob = app
+        .store
+        .ensure_user(app.org_id, "bob@test.local", "Bob", UserRole::Operator)
+        .await
+        .unwrap();
+    let alice_agent = create_demo_agent(&app.store, app.org_id, alice.id).await;
+    let bob_agent = create_demo_agent(&app.store, app.org_id, bob.id).await;
+    for agent in [alice_agent, bob_agent] {
+        app.store
+            .set_resource_visibility(app.org_id, "agents", agent, "private", None)
+            .await
+            .unwrap();
+    }
+    let alice_token = token_for(&app.store, app.org_id, alice.id, "alice").await;
+    let bob_token = token_for(&app.store, app.org_id, bob.id, "bob").await;
+
+    let (status, body) = send(&app.router, auth_get("/api/v1/agents", &alice_token)).await;
+    assert_eq!(status, StatusCode::OK);
+    let items = body["items"].as_array().unwrap();
+    assert!(items.iter().all(|item| item["id"] != bob_agent.to_string()));
+    assert!(items
+        .iter()
+        .any(|item| item["id"] == alice_agent.to_string()));
+
+    let (status, _) = send(
+        &app.router,
+        auth_get(&format!("/api/v1/agents/{bob_agent}"), &alice_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (status, _) = send(
+        &app.router,
+        auth_get(&format!("/api/v1/agents/{alice_agent}"), &bob_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (status, _) = send(
+        &app.router,
+        auth_get(&format!("/api/v1/agents/{alice_agent}"), &alice_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, _) = send(
+        &app.router,
+        auth_delete(&format!("/api/v1/agents/{alice_agent}"), &bob_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
