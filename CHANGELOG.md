@@ -10,6 +10,14 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- Multi-team schema foundation (ADR 0011): `access_teams`, `team_members`, and
+  `owner_user_id`/`owner_team_id`/`visibility` on agents, skills, connections, providers,
+  worker profiles, triggers and tool policies. Existing rows are backfilled to a Default
+  team with `org` visibility; new organizations get a Default team. Behaviour remains
+  org-wide until enforcement lands.
+
+### Added
+
 - Connection dialog exposes a first-class **GitLab URL** (deriving `/api/v4` and clone
   URL) and **Webhook URL** instead of requiring raw JSON; advanced JSON remains for the
   other connector fields.

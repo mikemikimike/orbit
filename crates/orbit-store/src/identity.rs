@@ -36,6 +36,7 @@ impl Store {
                 e.into()
             }
         })?;
+        self.ensure_default_access_team(org.id).await?;
         Ok(org)
     }
 

@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use orbit_security::SecretCipher;
 
+pub mod access_teams;
 pub mod agent_memory;
 pub mod agent_teams;
 pub mod agents;

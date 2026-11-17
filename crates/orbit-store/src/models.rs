@@ -78,6 +78,12 @@ impl From<ApiTokenRecord> for ApiTokenView {
 pub struct Agent {
     pub id: Uuid,
     pub org_id: Uuid,
+    #[sqlx(default)]
+    pub owner_user_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub owner_team_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub visibility: String,
     pub slug: String,
     pub name: String,
     pub description: String,
@@ -140,6 +146,12 @@ pub struct HarnessRecord {
 pub struct Provider {
     pub id: Uuid,
     pub org_id: Uuid,
+    #[sqlx(default)]
+    pub owner_user_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub owner_team_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub visibility: String,
     pub name: String,
     pub kind: String,
     pub config: serde_json::Value,
@@ -173,6 +185,12 @@ pub struct ConnectorRecord {
 pub struct Connection {
     pub id: Uuid,
     pub org_id: Uuid,
+    #[sqlx(default)]
+    pub owner_user_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub owner_team_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub visibility: String,
     pub connector_id: Uuid,
     pub name: String,
     pub status: String,
@@ -191,6 +209,12 @@ pub struct Connection {
 pub struct Trigger {
     pub id: Uuid,
     pub org_id: Uuid,
+    #[sqlx(default)]
+    pub owner_user_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub owner_team_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub visibility: String,
     pub agent_id: Uuid,
     pub kind: String,
     pub enabled: bool,
@@ -356,6 +380,12 @@ pub struct ExecutionWithAgent {
 pub struct Skill {
     pub id: Uuid,
     pub org_id: Uuid,
+    #[sqlx(default)]
+    pub owner_user_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub owner_team_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub visibility: String,
     pub slug: String,
     pub name: String,
     pub description: String,
@@ -465,6 +495,12 @@ pub struct WorkerLaunch {
 pub struct WorkerProfile {
     pub id: Uuid,
     pub org_id: Uuid,
+    #[sqlx(default)]
+    pub owner_user_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub owner_team_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub visibility: String,
     pub name: String,
     pub harness_kind: String,
     pub target: String,
@@ -494,6 +530,12 @@ pub struct WorkerProfile {
 pub struct ToolPolicy {
     pub id: Uuid,
     pub org_id: Uuid,
+    #[sqlx(default)]
+    pub owner_user_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub owner_team_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub visibility: String,
     pub agent_id: Option<Uuid>,
     pub name: String,
     pub priority: i32,
@@ -554,4 +596,25 @@ pub struct OutputDeliveryJob {
     pub execution_id: Option<Uuid>,
     pub team_run_id: Option<Uuid>,
     pub attempts: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessTeam {
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub name: String,
+    pub slug: String,
+    pub created_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamMember {
+    pub team_id: Uuid,
+    pub user_id: Uuid,
+    pub role: String,
+    pub created_at: DateTime<Utc>,
 }

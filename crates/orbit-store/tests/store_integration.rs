@@ -914,3 +914,44 @@ async fn env_mappings_and_outputs_round_trip() {
     );
     store.delete_output(org, output.id).await.unwrap();
 }
+
+#[tokio::test]
+async fn access_teams_and_ownership_defaults() {
+    let Some(store) = test_store().await else {
+        return;
+    };
+    let (org, user) = seed_org(&store).await;
+
+    let teams = store.list_access_teams(org).await.unwrap();
+    assert_eq!(teams.len(), 1);
+    assert_eq!(teams[0].slug, "default");
+
+    let team = store
+        .create_access_team(org, "Payments", "payments", Some(user))
+        .await
+        .expect("team");
+    let member = store
+        .upsert_team_member(team.id, user, "lead")
+        .await
+        .expect("member");
+    assert_eq!(member.role, "lead");
+    assert_eq!(store.list_team_members(team.id).await.unwrap().len(), 1);
+
+    let updated = store
+        .update_access_team(org, team.id, "Payments team", "payments-team")
+        .await
+        .expect("update");
+    assert_eq!(updated.slug, "payments-team");
+
+    let agent = store
+        .create_agent(org, Some(user), &definition("Owned agent"))
+        .await
+        .expect("agent")
+        .0;
+    let loaded = store.get_agent(org, agent.id).await.unwrap();
+    assert_eq!(loaded.visibility, "org");
+    assert!(loaded.owner_team_id.is_some());
+
+    store.remove_team_member(team.id, user).await.unwrap();
+    store.delete_access_team(org, team.id).await.unwrap();
+}
