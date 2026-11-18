@@ -273,6 +273,10 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/v1/license", get(handlers::license::overview))
         .route(
+            "/api/v1/export/{resource}/{resource_id}",
+            get(handlers::export::export_resource),
+        )
+        .route(
             "/api/v1/sharing/{resource}/{resource_id}",
             get(handlers::sharing::get).patch(handlers::sharing::share),
         )

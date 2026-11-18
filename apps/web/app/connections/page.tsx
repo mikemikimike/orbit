@@ -20,6 +20,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
+import { ExportResourceButton } from "@/components/export-resource-button";
 import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
@@ -308,6 +309,11 @@ export default function ConnectionsPage() {
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                     <span>created {formatDate(connection.createdAt)}</span>
                     <div className="flex flex-wrap items-center gap-1">
+                    <ExportResourceButton
+                      resource="connections"
+                      resourceId={connection.id}
+                      name={connection.name}
+                    />
                     <Button
                       size="sm"
                       variant="ghost"

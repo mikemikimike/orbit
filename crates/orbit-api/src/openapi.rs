@@ -109,6 +109,7 @@ use crate::handlers;
         handlers::settings::get_oidc,
         handlers::settings::update_oidc,
         handlers::license::overview,
+        handlers::export::export_resource,
         handlers::sharing::get,
         handlers::sharing::share,
         handlers::access_teams::list,
