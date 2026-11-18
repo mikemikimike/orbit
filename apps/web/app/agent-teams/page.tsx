@@ -516,7 +516,7 @@ export default function AgentTeamsPage() {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit agent team" : "New agent team"}</DialogTitle>
             <DialogDescription>
@@ -525,6 +525,9 @@ export default function AgentTeamsPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            <div className="border-b pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Basics
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Name</Label>
@@ -534,6 +537,9 @@ export default function AgentTeamsPage() {
                 <Label>Description</Label>
                 <Input value={description} onChange={(event) => setDescription(event.target.value)} />
               </div>
+            </div>
+            <div className="border-b pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Workspace
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -816,6 +822,9 @@ export default function AgentTeamsPage() {
                 </div>
               ))}
             </div>
+            <div className="border-b pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Runtime
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Worker profile (optional)</Label>
@@ -849,6 +858,9 @@ export default function AgentTeamsPage() {
               </label>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
+              <div className="border-b pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:col-span-2">
+                Capabilities
+              </div>
               <div className="space-y-1.5">
                 <Label>Team connections</Label>
                 <div className="max-h-32 space-y-1 overflow-y-auto rounded-lg border p-2 text-xs">
@@ -979,6 +991,9 @@ export default function AgentTeamsPage() {
                 }) : <span className="text-[11px] text-muted-foreground">No skills configured.</span>}
               </div>
             </div>
+            <div className="border-b pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Agents
+            </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Agents in order</Label>
@@ -1027,7 +1042,7 @@ export default function AgentTeamsPage() {
               ))}
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 -mx-6 border-t bg-background/95 px-6 py-3 backdrop-blur">
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
             <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!canCreate}>
               {editing ? "Save changes" : "Create agent team"}
