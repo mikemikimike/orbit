@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 import { AgentForm } from "@/components/agents/agent-form";
+import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -102,6 +103,9 @@ export default function EditAgentPage() {
           title="Agent Studio"
           description="Saving creates an immutable version. Historical executions keep their original configuration."
         />
+      </div>
+      <div className="max-w-3xl">
+        <ResourceAccessFields resource="agents" resourceId={agentId} />
       </div>
       <AgentForm
         initial={initial}

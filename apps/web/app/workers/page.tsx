@@ -22,7 +22,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
-import { ShareResourceDialog } from "@/components/share-resource-dialog";
+import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -498,11 +498,6 @@ function WorkersPageInner() {
                   <Button size="sm" onClick={() => setBootstrapProfile(profile)}>
                     <Boxes /> Bootstrap
                   </Button>
-                  <ShareResourceDialog
-                    resource="worker_profiles"
-                    resourceId={profile.id}
-                    resourceName={profile.name}
-                  />
                   <Button
                     size="sm"
                     variant="ghost"
@@ -1184,6 +1179,10 @@ function WorkersPageInner() {
               </div>
             </div>
           </div>
+          <ResourceAccessFields
+            resource="worker_profiles"
+            resourceId={editing?.id}
+          />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>
               Cancel

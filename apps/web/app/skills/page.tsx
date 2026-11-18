@@ -20,7 +20,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
-import { ShareResourceDialog } from "@/components/share-resource-dialog";
+import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
@@ -177,11 +177,6 @@ export default function SkillsPage() {
                   {skill.description || "No description."}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <ShareResourceDialog
-                    resource="skills"
-                    resourceId={skill.id}
-                    resourceName={skill.name}
-                  />
                   <Button
                     size="sm"
                     variant="ghost"
@@ -300,6 +295,10 @@ export default function SkillsPage() {
               .sh, .bash, .py, .js, .ts, .rb, .pl, .go.
             </p>
           </div>
+          <ResourceAccessFields
+            resource="skills"
+            resourceId={editing?.id}
+          />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>
               Cancel

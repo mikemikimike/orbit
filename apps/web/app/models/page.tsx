@@ -19,7 +19,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
-import { ShareResourceDialog } from "@/components/share-resource-dialog";
+import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { api, API_BASE_URL, getAccessToken } from "@/lib/api";
@@ -403,11 +403,6 @@ export default function ModelsPage() {
                         <Zap /> Test &amp; discover
                       </Button>
                     ) : null}
-                    <ShareResourceDialog
-                      resource="providers"
-                      resourceId={provider.id}
-                      resourceName={provider.name}
-                    />
                     <Button size="sm" variant="ghost" onClick={() => openEdit(provider)}>
                       <Pencil /> Edit
                     </Button>
@@ -656,6 +651,10 @@ export default function ModelsPage() {
             </div>
           </div>
 
+          <ResourceAccessFields
+            resource="providers"
+            resourceId={editing?.id}
+          />
           <DialogFooter className="gap-2 sm:justify-between">
             <div>
               {form.kind === "openai_compatible" ? (

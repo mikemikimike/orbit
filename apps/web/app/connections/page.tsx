@@ -20,7 +20,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
-import { ShareResourceDialog } from "@/components/share-resource-dialog";
+import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { request } from "@/lib/http";
@@ -316,11 +316,6 @@ export default function ConnectionsPage() {
                     >
                       <PlugZap /> Test
                     </Button>
-                    <ShareResourceDialog
-                      resource="connections"
-                      resourceId={connection.id}
-                      resourceName={connection.name}
-                    />
                     <Button
                       size="sm"
                       variant="ghost"
@@ -539,6 +534,10 @@ export default function ConnectionsPage() {
               />
             </details>
           </div>
+          <ResourceAccessFields
+            resource="connections"
+            resourceId={editing?.id}
+          />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>
               Cancel
