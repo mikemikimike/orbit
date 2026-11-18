@@ -8,6 +8,7 @@ import { ChevronRight, ListTodo, Pencil, Plus, Play, Trash2, Users, X } from "lu
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
+import { ExportResourceButton } from "@/components/export-resource-button";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -435,16 +436,26 @@ export default function AgentTeamsPage() {
                     <Button size="sm" variant="ghost" onClick={() => openEdit(team)}>
                       <Pencil /> Edit
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive"
-                      onClick={() => {
-                        if (window.confirm(`Delete agent team ${team.name}?`)) remove.mutate(team.id);
-                      }}
-                    >
-                      <Trash2 /> Delete
-                    </Button>
+                    <details className="relative">
+                      <summary className="cursor-pointer list-none rounded-md border px-3 py-1.5 text-xs hover:bg-muted">
+                        More
+                      </summary>
+                      <div className="absolute right-0 z-20 mt-1 w-44 space-y-1 rounded-lg border bg-card p-1 shadow-lg">
+                        <ExportResourceButton
+                          resource="agent_teams"
+                          resourceId={team.id}
+                          name={team.name}
+                        />
+                        <div
+                          className="cursor-pointer rounded px-2 py-1.5 text-xs text-destructive hover:bg-muted"
+                          onClick={() => {
+                            if (window.confirm(`Delete agent team ${team.name}?`)) remove.mutate(team.id);
+                          }}
+                        >
+                          Delete
+                        </div>
+                      </div>
+                    </details>
                   </div>
                 </CardContent>
               </Card>
