@@ -24,7 +24,7 @@ import {
   emptyAgentDefinition,
 } from "@orbit/contracts";
 import { cn, titleCase } from "@/lib/utils";
-import { cronDescription, effectLabel } from "@/lib/presentation";
+import { brandName, cronDescription, effectLabel } from "@/lib/presentation";
 
 type Trigger = AgentDefinition["spec"]["triggers"][number];
 type SectionId =
@@ -138,7 +138,6 @@ export function AgentForm({
   // Harness config is validated on submit but never stored on the agent.
   const [harnessConfigText] = useState(JSON.stringify(initial?.spec.harness?.config ?? {}, null, 2));
   const [issues, setIssues] = useState<Array<{ path: string; message: string }>>([]);
-  const [routingOpen, setRoutingOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
   const meta = useMeta();
   const webhooksEnabled = Boolean((meta.data?.features as { webhookTriggers?: boolean } | undefined)?.webhookTriggers);
@@ -153,9 +152,6 @@ export function AgentForm({
     issuesRef.current?.focus({ preventScroll: true });
   }, [failedSubmits]);
 
-  const formHarness =
-    definition.spec.harness ??
-    { type: "mock" as const, executionMode: "on_demand" as const, placement: "auto" as const, config: {} };
   const platformProviders = useMemo(
     () => providers.data?.filter((p) => p.kind === "openai_compatible") ?? [],
     [providers.data],
@@ -247,7 +243,6 @@ export function AgentForm({
 
   function revealIssues(next: Array<{ path: string; message: string }>) {
     setIssues(next);
-    if (next.some((issue) => sectionForPath(issue.path) === "model")) setRoutingOpen(true);
     if (
       next.some(
         (issue) =>
@@ -697,61 +692,16 @@ export function AgentForm({
               </Callout>
             ) : null}
 
-            <Disclosure
-              title="Advanced routing"
-              summary="Where runs are placed and how long the harness lives"
-              open={routingOpen}
-              onOpenChange={setRoutingOpen}
-            >
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="Worker placement"
-                  htmlFor="agent-placement"
-                  hint="Only workers of this kind claim the run."
-                >
-                  <Select
-                    id="agent-placement"
-                    value={formHarness.placement}
-                    onChange={(event) =>
-                      updateSpec({
-                        harness: {
-                          ...formHarness,
-                          placement: event.target
-                            .value as NonNullable<AgentDefinition["spec"]["harness"]>["placement"],
-                        },
-                      })
-                    }
-                  >
-                    <option value="auto">Any matching worker</option>
-                    <option value="local">Local host worker</option>
-                    <option value="docker">Docker worker</option>
-                    <option value="kubernetes">Kubernetes worker</option>
-                  </Select>
-                </Field>
-                <Field
-                  label="Execution mode"
-                  htmlFor="agent-exec-mode"
-                  hint="Long running keeps the harness alive between runs and needs a harness that supports instances."
-                >
-                  <Select
-                    id="agent-exec-mode"
-                    value={formHarness.executionMode}
-                    onChange={(event) =>
-                      updateSpec({
-                        harness: {
-                          ...formHarness,
-                          executionMode: event.target
-                            .value as NonNullable<AgentDefinition["spec"]["harness"]>["executionMode"],
-                        },
-                      })
-                    }
-                  >
-                    <option value="on_demand">On demand, one harness per run</option>
-                    <option value="long_running">Long running, always on</option>
-                  </Select>
-                </Field>
-              </div>
-            </Disclosure>
+            <p className="text-[13px] text-muted-foreground">
+              The harness, where a run is placed and whether it stays running are chosen when work
+              starts (Start work or Run agent), not stored on the agent.
+            </p>
+            {initial?.spec.harness ? (
+              <Callout tone="warning" title={`This agent is still set to ${brandName(initial.spec.harness.type)}`}>
+                Agents no longer carry a harness, so saving removes this setting. Afterwards each run
+                uses the harness picked when it starts, or the organization default under Settings.
+              </Callout>
+            ) : null}
           </FormSection>
 
           <FormSection
