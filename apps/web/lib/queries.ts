@@ -268,6 +268,12 @@ export function useExecution(id: string | undefined) {
     queryFn: async () =>
       unwrap(await api.GET("/api/v1/executions/{execution_id}", { params: { path: { execution_id: id! } } })),
     enabled: Boolean(id),
+    // Some status changes (picked up, cancel requested) arrive without an event on the
+    // stream, so keep polling while the run is still going.
+    refetchInterval: (query) =>
+      ["queued", "dispatched", "running", "awaiting_approval"].includes(query.state.data?.status ?? "")
+        ? 5_000
+        : false,
   });
 }
 

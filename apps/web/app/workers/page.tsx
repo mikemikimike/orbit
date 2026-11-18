@@ -283,6 +283,9 @@ function WorkersPageInner() {
   const [allowGh, setAllowGh] = useState(false);
   const [nativeToolsText, setNativeToolsText] = useState("{}");
   const [confirmRelaunch, setConfirmRelaunch] = useState(false);
+  /** A reusable mapping to tick when the dialog opens (from Environments → Attach). */
+  const [attachMappingId, setAttachMappingId] = useState<string | null>(null);
+  const [deepLinked, setDeepLinked] = useState(false);
 
   // Pre-fill from Work wizard query params.
   if (searchParams.get("create") === "1" && !prefilled) {
@@ -315,9 +318,39 @@ function WorkersPageInner() {
   const profileEnvMappings = useWorkerProfileEnvMappings(editing?.id);
   useEffect(() => {
     if (editing && profileEnvMappings.data) {
-      setEnvMappingIds(profileEnvMappings.data.map((mapping) => mapping.id));
+      const attached = profileEnvMappings.data.map((mapping) => mapping.id);
+      setEnvMappingIds(
+        attachMappingId && !attached.includes(attachMappingId) ? [...attached, attachMappingId] : attached,
+      );
     }
-  }, [editing, profileEnvMappings.data]);
+  }, [editing, profileEnvMappings.data, attachMappingId]);
+
+  // `?edit=<profile>&attach=<mapping>` opens that profile with the mapping ticked, at the
+  // section where it is attached. Used by the Environments page.
+  useEffect(() => {
+    if (deepLinked || !profiles.data) return;
+    const editId = searchParams.get("edit");
+    if (!editId) return;
+    setDeepLinked(true);
+    // Consume the link so a reload or Back does not reopen the dialog.
+    window.history.replaceState(null, "", window.location.pathname);
+    const profile = profiles.data.find((candidate) => candidate.id === editId);
+    if (!profile) {
+      toast.error("That worker profile no longer exists");
+      return;
+    }
+    const attach = searchParams.get("attach");
+    openEdit(profile);
+    if (attach) {
+      setAttachMappingId(attach);
+      setShowAdvanced(true);
+      window.setTimeout(() => {
+        document.getElementById("wp-reusable-mappings")?.scrollIntoView({ block: "center" });
+      }, 300);
+    }
+    // openEdit is a plain function recreated every render; running once is the point.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinked, profiles.data, searchParams]);
 
   const activeProfileLaunches = (launches.data ?? []).filter(
     (item) => editing && item.profileId === editing.id && isActive(item),
@@ -430,6 +463,8 @@ function WorkersPageInner() {
       setEditing(null);
       void queryClient.invalidateQueries({ queryKey: queryKeys.workerProfiles });
       void queryClient.invalidateQueries({ queryKey: queryKeys.workerLaunches });
+      void queryClient.invalidateQueries({ queryKey: ["worker-profile-env-mappings"] });
+      setAttachMappingId(null);
       if (!editing) setBootstrapProfile(profile as WorkerProfile);
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -437,6 +472,7 @@ function WorkersPageInner() {
 
   function openCreate() {
     setEditing(null);
+    setAttachMappingId(null);
     setName("OpenCode production");
     setHarness("opencode");
     setTarget("docker");
@@ -476,8 +512,14 @@ function WorkersPageInner() {
     setProvider(profile.provider ?? "");
     setModel(profile.model ?? "");
     setAuthSecret(profile.authSecretName ?? "");
-    const mappings = (profile as { envMappings?: Array<{ envVar: string; connectionId?: string; secretKey?: string }> }).envMappings ?? [];
-    setEnvMappings(mappings.map((m) => ({ envVar: m.envVar ?? "", connectionId: m.connectionId ?? "", secretKey: m.secretKey ?? "" })));
+    // Older installs stored `{}` here instead of a list; treat anything but a list as empty.
+    const rawMappings: unknown = (profile as { envMappings?: unknown }).envMappings;
+    const mappings = Array.isArray(rawMappings)
+      ? (rawMappings as Array<{ envVar?: string; connectionId?: string | null; secretKey?: string | null }>)
+      : [];
+    setEnvMappings(
+      mappings.map((m) => ({ envVar: m.envVar ?? "", connectionId: m.connectionId ?? "", secretKey: m.secretKey ?? "" })),
+    );
     const scoped = (profile as WorkerProfile & { agentScope?: string }).agentScope === "selected";
     setAgentScope(scoped ? "selected" : "all");
     setEnvMappingIds([]);
@@ -499,6 +541,7 @@ function WorkersPageInner() {
     setMemoryLimit(resources.limits?.memory ?? "1Gi");
     setWorkspaceSize(resources.workspace?.sizeLimit ?? "1Gi");
     setShowAdvanced(false);
+    setAttachMappingId(null);
     setOpen(true);
   }
 
@@ -554,7 +597,12 @@ function WorkersPageInner() {
       const result = await workerLaunchLogs(launchId);
       setLogs(result.logs || "No log output yet.");
     } catch (error) {
-      setLogs(errorMessage(error));
+      const message = errorMessage(error);
+      setLogs(
+        /worker launcher request failed|launcher.*error sending request|no worker launcher/i.test(message)
+          ? "No logs: ORBIT could not reach the worker launcher, which keeps them. Logs from a worker you started yourself are in its own container or process output."
+          : message,
+      );
     } finally {
       setLogsLoading(false);
     }
@@ -1502,7 +1550,7 @@ function WorkersPageInner() {
                                     <option value="">Select a connection</option>
                                     {(connections.data ?? []).map((c) => (
                                       <option key={c.id} value={c.id}>
-                                        {c.name} ({c.connectorSlug})
+                                        {c.name} ({brandName(c.connectorSlug)})
                                       </option>
                                     ))}
                                   </Select>
@@ -1538,7 +1586,9 @@ function WorkersPageInner() {
 
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-medium">Reusable mappings</p>
+                        <p id="wp-reusable-mappings" className="text-sm font-medium">
+                          Reusable mappings
+                        </p>
                         <Link href="/environment-mappings" className="text-[13px] text-primary hover:underline">
                           Manage mappings
                         </Link>
@@ -1547,8 +1597,8 @@ function WorkersPageInner() {
                         <Skeleton className="h-16" />
                       ) : !envMappingLibrary.data?.length ? (
                         <p className="rounded-lg border border-dashed p-3 text-[13px] text-muted-foreground">
-                          No reusable mappings yet. Create them under Environment mappings and attach
-                          them to any profile.
+                          No reusable mappings yet. Create them under Environments and attach them to
+                          any profile.
                         </p>
                       ) : (
                         <PickList

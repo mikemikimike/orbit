@@ -34,6 +34,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -430,12 +431,18 @@ export default function ConnectionsPage() {
                     <Button
                       size="sm"
                       variant="outline"
+                      aria-label={`Test ${connection.name}`}
                       onClick={() => test.mutate(connection.id)}
                       loading={test.isPending && test.variables === connection.id}
                     >
                       <PlugZap /> Test
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => openEdit(connection)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`Edit ${connection.name}`}
+                      onClick={() => openEdit(connection)}
+                    >
                       <Pencil /> Edit
                     </Button>
                     <DropdownMenu>
@@ -452,6 +459,7 @@ export default function ConnectionsPage() {
                         <DropdownMenuItem onSelect={() => void exportResource("connections", connection.id, connection.name)}>
                           <Download /> Export as JSON
                         </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem destructive onSelect={() => void removeConnection(connection)}>
                           <Trash2 /> Remove connection
                         </DropdownMenuItem>

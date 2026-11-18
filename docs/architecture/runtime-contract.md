@@ -71,6 +71,15 @@ Events are forwarded by the worker to `execution_events` (with a monotonic `seq`
 `orbit.execution.updated` for subscribers. Adapters should emit events incrementally,
 not only at completion.
 
+## Version skew between API and workers
+
+Workers decode the context the API sends with strict types (`deny_unknown_fields` on the
+agent spec). A field added to a type workers decode breaks every older worker that
+receives it, so the API leaves out fields the execution plane never reads (for example the
+schedule trigger's `task`, see `omit_fields_workers_ignore` in
+`crates/orbit-api/src/handlers/worker_api.rs`). A worker that fails to decode a claim
+leaves the execution `dispatched` (and counting against the agent's concurrency) until that worker stops heartbeating; cancelling does not end it.
+
 ## Inputs
 
 `ExecutionRequest` carries:

@@ -71,7 +71,14 @@ export default function ExecutionDetailPage() {
   // Follow keeps a live run pinned to its newest line; a finished run opens at the start.
   const liveNow = useRef(false);
 
-  const execution = live.execution ?? executionQuery.data;
+  // The stream's snapshot is only sent on connect and at the end; the polled record
+  // catches changes in between. Show whichever is newer.
+  const execution =
+    live.execution && executionQuery.data
+      ? Date.parse(executionQuery.data.updatedAt) > Date.parse(live.execution.updatedAt)
+        ? executionQuery.data
+        : live.execution
+      : (live.execution ?? executionQuery.data);
   const events = useMemo(() => {
     const merged = new Map<number, ExecutionEventRecord>();
     for (const event of eventsQuery.data?.items ?? []) merged.set(event.seq, event);
@@ -248,7 +255,11 @@ export default function ExecutionDetailPage() {
           <StatusGlyph shape={pendingApproval ? "paused" : "orbiting"} tone={pendingApproval ? "warning" : "info"} />
           {pendingApproval
             ? "Paused until someone approves or rejects the action above."
-            : `The agent is working. Last activity ${relativeTime(events.at(-1)!.createdAt)}.`}
+            : execution.status === "queued"
+              ? "Waiting for a worker to pick it up."
+              : execution.status === "dispatched"
+                ? `A worker picked it up and is starting the harness. Last activity ${relativeTime(events.at(-1)!.createdAt)}.`
+                : `The agent is working. Last activity ${relativeTime(events.at(-1)!.createdAt)}.`}
         </div>
       ) : !showAll && hiddenCount > 0 ? (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t bg-subtle px-4 py-2.5 text-[13px] text-muted-foreground sm:px-5">
@@ -382,6 +393,21 @@ export default function ExecutionDetailPage() {
           }
         >
           {queuedHint(execution, workers.data ?? [], workers.isLoading)}
+        </Callout>
+      ) : null}
+
+      {execution.status === "dispatched" && silentSince(execution, events) ? (
+        <Callout
+          tone="warning"
+          title="Picked up, but not started"
+          action={
+            <Button asChild size="sm" variant="outline">
+              <Link href="/workers">Workers</Link>
+            </Button>
+          }
+        >
+          A worker took this run {relativeTime(silentSince(execution, events)!)} and has not reported since.
+          Its logs in Workers usually say why, for example a worker older than the platform.
         </Callout>
       ) : null}
 
@@ -545,6 +571,13 @@ function DataPanel({
       </CardContent>
     </>
   );
+}
+
+/** When a dispatched run has gone quiet for over two minutes, the time it went quiet. */
+function silentSince(execution: ExecutionRecord, events: ExecutionEventRecord[]): string | null {
+  const last = events.at(-1)?.createdAt ?? execution.startedAt ?? execution.createdAt;
+  if (!last) return null;
+  return Date.now() - Date.parse(last) > 120_000 ? last : null;
 }
 
 function queuedHint(

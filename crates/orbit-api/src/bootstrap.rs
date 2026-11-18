@@ -135,7 +135,8 @@ async fn seed_worker_profile(
             None,
             None,
             &json!({}),
-            &json!({}),
+            // Inline env mappings are a list; an object here broke clients reading it.
+            &json!([]),
             &json!({}),
             false,
             false,

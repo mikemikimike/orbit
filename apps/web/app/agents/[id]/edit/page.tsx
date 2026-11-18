@@ -73,14 +73,18 @@ export default function EditAgentPage() {
   async function handleSubmit(definition: AgentDefinition) {
     setSubmitting(true);
     try {
-      unwrap(
+      const updated = unwrap(
         await api.PATCH("/api/v1/agents/{agent_id}", {
           params: { path: { agent_id: agentId } },
           body: { definition: toAgentDefinitionBody(definition) },
         }),
       );
       await queryClient.invalidateQueries({ queryKey: queryKeys.agent(agentId) });
-      toast.success("New version created");
+      // Name, description and labels are saved in place; only a changed spec is a new version.
+      const version = (updated as { currentVersion?: number }).currentVersion;
+      toast.success(
+        version && version > agent.data!.currentVersion ? `Version ${version} created` : "Agent saved",
+      );
       router.push(`/agents/${agentId}`);
     } catch (error) {
       toast.error(errorMessage(error));
@@ -101,7 +105,7 @@ export default function EditAgentPage() {
       </div>
       <AgentForm
         initial={initial}
-        submitLabel="Save new version"
+        submitLabel="Save changes"
         cancelHref={`/agents/${agentId}`}
         submitting={submitting}
         onSubmit={handleSubmit}

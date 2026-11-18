@@ -49,6 +49,19 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Fixed
 
+- **Workers → Edit** crashed on a fresh install: the seeded platform profile stored its
+  inline environment mappings as `{}` instead of a list. The seed now writes `[]` and the
+  editor treats anything but a list as empty.
+- Workers older than the schedule `task` field could not claim runs of an agent with a
+  scheduled task (their `TriggerSpec` refuses unknown fields), leaving the run stuck in
+  `dispatched`. The worker context now leaves that field out; workers never read triggers.
+- Execution detail kept showing the status from when the page opened: status changes
+  that come without an event (picked up, cancel requested) now arrive by polling while a
+  run is active. A run a worker took but never started is flagged after two minutes.
+- Saving an agent whose spec did not change said "New version created"; it now says
+  "Agent saved", or names the version that was created.
+- Environments: "Attach to a worker" opens that worker profile with the mapping already
+  ticked; "Used by" links open the profile.
 - The agent **Executions** tab listed every agent's executions: the web client sent the
   filter as `agent_id` while the API expects `agentId`.
 - Agent YAML export pointed at `http://localhost:8080` when no public API URL was set; it

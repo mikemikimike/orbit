@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   Cable,
+  ChevronDown,
   Copy,
   Ellipsis,
   KeyRound,
@@ -123,10 +124,10 @@ export default function EnvironmentMappingsPage() {
   const usageKnown = profiles.isSuccess && usageQueries.every((query) => query.isSuccess);
   const usageStamp = usageQueries.map((query) => query.dataUpdatedAt).join(",");
   const usedBy = useMemo(() => {
-    const result = new Map<string, string[]>();
+    const result = new Map<string, Array<{ id: string; name: string }>>();
     (profiles.data ?? []).forEach((profile, index) => {
       for (const mapping of usageQueries[index]?.data ?? []) {
-        result.set(mapping.id, [...(result.get(mapping.id) ?? []), profile.name]);
+        result.set(mapping.id, [...(result.get(mapping.id) ?? []), { id: profile.id, name: profile.name }]);
       }
     });
     return result;
@@ -212,7 +213,7 @@ export default function EnvironmentMappingsPage() {
   }
 
   async function confirmDelete(mapping: EnvMappingRecord) {
-    const users = usedBy.get(mapping.id) ?? [];
+    const users = (usedBy.get(mapping.id) ?? []).map((profile) => profile.name);
     const confirmed = await confirm({
       title: `Delete ${mapping.name}?`,
       description: users.length
@@ -389,26 +390,12 @@ export default function EnvironmentMappingsPage() {
                   <div className="mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-1 p-4 pt-3 text-[13px] text-muted-foreground sm:p-5 sm:pt-3">
                     {!usageKnown ? (
                       <span>Checking which workers use it</span>
-                    ) : users.length ? (
-                      <span>
-                        Used by{" "}
-                        <Link
-                          href="/workers"
-                          className="font-medium text-foreground underline-offset-4 hover:underline"
-                        >
-                          {users.join(", ")}
-                        </Link>
-                      </span>
                     ) : (
-                      <span>
-                        Not attached to a worker yet.{" "}
-                        <Link
-                          href="/workers"
-                          className="font-medium text-primary underline-offset-4 hover:underline"
-                        >
-                          Attach it in Workers
-                        </Link>
-                      </span>
+                      <AttachedWorkers
+                        mappingId={mapping.id}
+                        users={users}
+                        profiles={(profiles.data ?? []).map((profile) => ({ id: profile.id, name: profile.name }))}
+                      />
                     )}
                     <span className="tabular">Updated {relativeTime(mapping.updatedAt)}</span>
                   </div>
@@ -633,6 +620,68 @@ function VariableSource({
       <span className="min-w-0 truncate font-mono text-xs text-foreground">
         {entry.secretKey ?? entry.secretRef ?? ""}
       </span>
+    </span>
+  );
+}
+
+/** Which worker profiles use a mapping, and a way to attach it to another one. */
+function AttachedWorkers({
+  mappingId,
+  users,
+  profiles,
+}: {
+  mappingId: string;
+  users: Array<{ id: string; name: string }>;
+  profiles: Array<{ id: string; name: string }>;
+}) {
+  const available = profiles.filter((profile) => !users.some((user) => user.id === profile.id));
+  const linkClass = "font-medium text-foreground underline-offset-4 hover:underline";
+
+  if (!profiles.length) {
+    return (
+      <span>
+        No worker profiles yet.{" "}
+        <Link href="/workers?create=1" className="font-medium text-primary underline-offset-4 hover:underline">
+          Create one in Workers
+        </Link>
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      {users.length ? (
+        <span>
+          Used by{" "}
+          {users.map((user, index) => (
+            <span key={user.id}>
+              {index ? ", " : null}
+              <Link href={`/workers?edit=${user.id}`} className={linkClass}>
+                {user.name}
+              </Link>
+            </span>
+          ))}
+        </span>
+      ) : (
+        <span>Not attached to a worker yet.</span>
+      )}
+      {available.length ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="link" className="h-auto p-0 text-[13px]">
+              {users.length ? "Attach to another" : "Attach to a worker"}
+              <ChevronDown />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {available.map((profile) => (
+              <DropdownMenuItem key={profile.id} asChild>
+                <Link href={`/workers?edit=${profile.id}&attach=${mappingId}`}>{profile.name}</Link>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </span>
   );
 }
