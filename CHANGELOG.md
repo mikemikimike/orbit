@@ -8,6 +8,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Documentation
+
+- ADR 0012: agents become harness-agnostic; harness is selected per execution/team step.
+
+
 ### Added
 
 - Worker-profile `nativeToolPermissions` JSON map (OpenCode `permission`), e.g. `bash:
