@@ -10,6 +10,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- OIDC `emailClaim` / `ORBIT_OIDC_EMAIL_CLAIM` selects the unique identity/email claim
+  (default `email`); use `name` when multiple IdP accounts share an email.
+
+
+### Added
+
 - OIDC `autoCreateTeams` / `ORBIT_OIDC_AUTO_CREATE_TEAMS`: create missing access teams
   from `teamGroups` mappings (Helm: `auth.oidc.autoCreateTeams`).
 

@@ -121,6 +121,9 @@ auth:
     defaultRole: viewer
     # Optional group → role mapping (Dex/Keycloak must return the claim).
     roleClaim: groups
+    # Claim used as the unique OIDC identity/email (default email). Use `name` when
+    # multiple IdP accounts share the same email.
+    emailClaim: email
     groupRoles: {}
     # Optional IdP group -> "access-team-slug:role" mapping (lead/member/viewer).
     teamGroups: {}

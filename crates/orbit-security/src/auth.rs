@@ -69,6 +69,9 @@ pub struct OidcConfig {
     pub default_role: UserRole,
     /// Claim that carries IdP groups/roles (default `groups`).
     pub role_claim: String,
+    /// Claim used as the unique OIDC identity/email (default `email`). Set to `name`
+    /// when multiple IdP accounts share an email address.
+    pub email_claim: String,
     /// Claim values mapped to ORBIT roles. Order is irrelevant; the most privileged
     /// matching role wins.
     pub group_roles: Vec<(String, UserRole)>,
@@ -151,6 +154,7 @@ impl AuthConfig {
                     default_role: UserRole::from_str(&env_or("ORBIT_OIDC_DEFAULT_ROLE", "viewer"))
                         .map_err(SecurityError::Config)?,
                     role_claim: env_or("ORBIT_OIDC_ROLE_CLAIM", "groups"),
+                    email_claim: env_or("ORBIT_OIDC_EMAIL_CLAIM", "email"),
                     group_roles: parse_group_roles(&env_or("ORBIT_OIDC_GROUP_ROLES", ""))?,
                     team_groups: parse_team_groups(&env_or("ORBIT_OIDC_TEAM_GROUPS", ""))?,
                     auto_create_teams: env_bool("ORBIT_OIDC_AUTO_CREATE_TEAMS", false),
@@ -357,6 +361,7 @@ pub struct JwtValidator {
     issuer: String,
     audience: String,
     role_claim: String,
+    email_claim: String,
     clock_skew: u64,
     keys: KeySource,
 }
@@ -377,6 +382,7 @@ impl JwtValidator {
             issuer: config.issuer.clone(),
             audience: config.audience.clone(),
             role_claim: config.role_claim.clone(),
+            email_claim: config.email_claim.clone(),
             clock_skew: config.clock_skew_seconds,
             keys: KeySource::Jwks {
                 url: config.jwks_url.clone(),
@@ -393,6 +399,7 @@ impl JwtValidator {
             issuer: issuer.to_string(),
             audience: audience.to_string(),
             role_claim: "groups".into(),
+            email_claim: "email".into(),
             clock_skew: 5,
             keys: KeySource::Hmac(secret.to_vec()),
         }
@@ -415,10 +422,17 @@ impl JwtValidator {
             .map_err(|_| SecurityError::Unauthorized)?;
         let claims = data.claims;
         let groups = claim_values(claims.extra.get(&self.role_claim));
+        let email = match self.email_claim.as_str() {
+            "email" => claims.email.clone(),
+            "name" => claims.name.clone(),
+            "preferred_username" => claims.preferred_username.clone(),
+            other => claim_values(claims.extra.get(other)).into_iter().next(),
+        }
+        .or(claims.email);
         Ok(OidcIdentity {
             subject: claims.sub,
             issuer: claims.iss,
-            email: claims.email,
+            email,
             name: claims.name.or(claims.preferred_username),
             groups,
         })

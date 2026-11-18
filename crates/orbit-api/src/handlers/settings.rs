@@ -32,6 +32,9 @@ pub struct OidcSettings {
     /// Claim carrying IdP groups/roles (default `groups`).
     #[serde(default)]
     pub role_claim: String,
+    /// Claim used as the unique OIDC identity/email (default `email`).
+    #[serde(default)]
+    pub email_claim: String,
     /// IdP group/claim value -> ORBIT role name.
     #[serde(default)]
     pub group_roles: std::collections::BTreeMap<String, String>,
@@ -73,6 +76,7 @@ pub async fn get_oidc(
         auto_provision: true,
         default_role: "viewer".into(),
         role_claim: "groups".into(),
+        email_claim: "email".into(),
         group_roles: Default::default(),
         team_groups: Default::default(),
         auto_create_teams: false,
@@ -128,6 +132,7 @@ pub async fn apply_stored_oidc(
         auto_provision: true,
         default_role: orbit_domain::UserRole::Viewer,
         role_claim: "groups".into(),
+        email_claim: "email".into(),
         group_roles: Vec::new(),
         team_groups: Vec::new(),
         auto_create_teams: false,
@@ -173,6 +178,9 @@ pub async fn apply_stored_oidc(
         .unwrap_or(orbit_domain::UserRole::Viewer);
     if !stored.role_claim.trim().is_empty() {
         oidc.role_claim = stored.role_claim.trim().to_string();
+    }
+    if !stored.email_claim.trim().is_empty() {
+        oidc.email_claim = stored.email_claim.trim().to_string();
     }
     if !stored.group_roles.is_empty() {
         let mut mappings = Vec::new();

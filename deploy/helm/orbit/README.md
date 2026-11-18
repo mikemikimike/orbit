@@ -216,6 +216,7 @@ Mount at `/etc/orbit-license.jwt`; the API hot-reloads it (~60s) and exposes the
 | `auth.oidc.scopes` | `openid profile email` | |
 | `auth.oidc.autoProvision` / `.defaultRole` | `true` / `viewer` | |
 | `auth.oidc.roleClaim` | `groups` | IdP claim with group/role values |
+| `auth.oidc.emailClaim` | `email` | unique identity claim; use `name` for shared emails |
 | `auth.oidc.groupRoles` | `{}` | group → role mapping, e.g. `orbit-admins: admin` |
 | `auth.oidc.teamGroups` | `{}` | group → `team-slug:role`, e.g. `platform: platform:member` |
 | `auth.oidc.autoCreateTeams` | `false` | create missing access teams for mapped group slugs |

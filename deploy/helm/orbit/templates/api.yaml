@@ -194,6 +194,8 @@ spec:
               value: {{ .Values.auth.oidc.defaultRole | quote }}
             - name: ORBIT_OIDC_ROLE_CLAIM
               value: {{ .Values.auth.oidc.roleClaim | quote }}
+            - name: ORBIT_OIDC_EMAIL_CLAIM
+              value: {{ .Values.auth.oidc.emailClaim | quote }}
             - name: ORBIT_OIDC_GROUP_ROLES
               value: {{ .Values.auth.oidc.groupRoles | toJson | quote }}
             - name: ORBIT_OIDC_TEAM_GROUPS

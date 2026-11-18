@@ -16,6 +16,7 @@ provider-specific code is required beyond the issuer URL and client registration
 | Scopes | `ORBIT_OIDC_SCOPES` | `openid profile email groups` |
 | JWKS | `ORBIT_OIDC_JWKS_URL` | issuer keys URL |
 | Role claim | `ORBIT_OIDC_ROLE_CLAIM` | `groups` |
+| Identity/email claim | `ORBIT_OIDC_EMAIL_CLAIM` | `email` (or `name`) |
 | Group mappings | `ORBIT_OIDC_GROUP_ROLES` | `orbit-admins=admin,orbit-operators=operator` (or JSON) |
 | Sync roles | `ORBIT_OIDC_SYNC_ROLES` | `false` |
 

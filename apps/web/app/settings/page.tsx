@@ -466,6 +466,7 @@ function OidcSettingsForm() {
   const [jwksUrl, setJwksUrl] = useState("");
   const [autoProvision, setAutoProvision] = useState(true);
   const [defaultRole, setDefaultRole] = useState("viewer");
+  const [emailClaim, setEmailClaim] = useState("email");
   const [loaded, setLoaded] = useState(false);
 
   const load = async () => {
@@ -480,6 +481,7 @@ function OidcSettingsForm() {
         setJwksUrl(data.jwksUrl ?? "");
         setAutoProvision(data.autoProvision ?? true);
         setDefaultRole(data.defaultRole || "viewer");
+        setEmailClaim((data as { emailClaim?: string }).emailClaim || "email");
       }
     } catch (error) {
       toast.error(errorMessage(error));
@@ -506,6 +508,7 @@ function OidcSettingsForm() {
             jwksUrl,
             autoProvision,
             defaultRole,
+            emailClaim,
           },
         },
       });
@@ -544,6 +547,13 @@ function OidcSettingsForm() {
       <div className="space-y-1.5">
         <Label>Default role</Label>
         <Input value={defaultRole} onChange={(e) => setDefaultRole(e.target.value)} placeholder="viewer" />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Identity claim</Label>
+        <Input value={emailClaim} onChange={(e) => setEmailClaim(e.target.value)} placeholder="email or name" />
+        <p className="text-[11px] text-muted-foreground">
+          Use name when multiple IdP accounts share the same email address.
+        </p>
       </div>
       <label className="flex items-start gap-2 rounded-lg border p-3 text-xs sm:col-span-2">
         <input
