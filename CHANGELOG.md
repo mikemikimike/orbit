@@ -6,7 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
-## [Unreleased]
+## [0.17.0] - 2026-11-18
+
+### Breaking
+
+- Agents no longer store `spec.harness`. Harness is selected per execution/Agent Team
+  step/trigger, with an organization default fallback. Legacy versions remain readable.
+- Harness-specific options move to `harnessConfig.<kind>`; run dialogs expose the harness
+  override.
 
 ### Fixed
 
