@@ -62,10 +62,11 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 - Execution detail kept showing the status from when the page opened: status changes
   that come without an event (picked up, cancel requested) now arrive by polling while a
   run is active. A run a worker took but never started is flagged after two minutes.
-- Agent Studio offered placement and execution-mode settings that were discarded on save
-  (agents no longer store a harness), and saving an older agent that still had one removed
-  it without a word. The settings are replaced by a note, and such agents show a warning
-  before saving.
+- Saving an agent in Agent Studio silently removed its harness, and the placement and
+  execution-mode settings were discarded. Studio now has an optional **Harness** choice:
+  "Choose per run" (each run picks one, or the organization default) or a specific harness
+  with its placement and execution mode, and saving keeps it. New agents start on "Choose
+  per run" instead of the mock harness.
 - Saving an agent whose spec did not change said "New version created"; it now says
   "Agent saved", or names the version that was created.
 - Environments: "Attach to a worker" opens that worker profile with the mapping already

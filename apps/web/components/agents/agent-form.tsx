@@ -16,7 +16,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useConnections, useConnectors, useProviders, useSkills, useMeta } from "@/lib/queries";
+import { useConnections, useConnectors, useHarnesses, useProviders, useSkills, useMeta } from "@/lib/queries";
 import type { AgentDefinition } from "@orbit/contracts";
 import {
   AUTONOMY_LEVELS,
@@ -128,6 +128,7 @@ export function AgentForm({
   cancelHref?: string;
 }) {
   const providers = useProviders();
+  const harnesses = useHarnesses();
   const connectors = useConnectors();
   const connections = useConnections();
   const skills = useSkills();
@@ -179,6 +180,8 @@ export function AgentForm({
       ? (settings.models as unknown[]).filter((value): value is string => typeof value === "string")
       : [];
   }, [selectedProviderRecord]);
+
+  const harness = definition.spec.harness;
 
   function updateSpec(patch: Partial<AgentDefinition["spec"]>) {
     setDefinition((current) => ({
@@ -262,18 +265,15 @@ export function AgentForm({
   }
 
   function buildCandidate() {
-    const { harness: _legacyHarness, ...portableSpec } = definition.spec;
+    // The harness is optional: without one, each run picks it when it starts. When the
+    // agent has one it is kept as is, config included.
     const candidate = {
       ...definition,
       metadata: {
         ...definition.metadata,
         name: definition.metadata.name.trim(),
       },
-      spec: {
-        ...portableSpec,
-        // Harness config is selected per run/worker; never stored on the agent.
-      },
-    } as unknown as AgentDefinition;
+    } as AgentDefinition;
     return candidate;
   }
 
@@ -692,16 +692,98 @@ export function AgentForm({
               </Callout>
             ) : null}
 
-            <p className="text-[13px] text-muted-foreground">
-              The harness, where a run is placed and whether it stays running are chosen when work
-              starts (Start work or Run agent), not stored on the agent.
-            </p>
-            {initial?.spec.harness ? (
-              <Callout tone="warning" title={`This agent is still set to ${brandName(initial.spec.harness.type)}`}>
-                Agents no longer carry a harness, so saving removes this setting. Afterwards each run
-                uses the harness picked when it starts, or the organization default under Settings.
-              </Callout>
-            ) : null}
+            <div className="space-y-4 border-t pt-4">
+              <Field
+                label="Harness"
+                htmlFor="agent-harness"
+                hint={
+                  harness
+                    ? "Runs use this harness unless a run picks another."
+                    : "Each run picks the harness when it starts, or uses the organization default from Settings."
+                }
+              >
+                <Select
+                  id="agent-harness"
+                  value={harness?.type ?? ""}
+                  onChange={(event) => {
+                    const type = event.target.value;
+                    updateSpec({
+                      harness: type
+                        ? {
+                            executionMode: "on_demand",
+                            placement: "auto",
+                            config: {},
+                            ...harness,
+                            type: type as NonNullable<AgentDefinition["spec"]["harness"]>["type"],
+                          }
+                        : undefined,
+                    });
+                  }}
+                >
+                  <option value="">Choose per run</option>
+                  {(harnesses.data ?? []).map((item) => (
+                    <option
+                      key={item.kind}
+                      value={item.kind}
+                      disabled={item.implementationStatus !== "available" && item.kind !== harness?.type}
+                    >
+                      {item.name}
+                      {item.implementationStatus !== "available" ? ` (${item.implementationStatus})` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              {harness ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field
+                    label="Worker placement"
+                    htmlFor="agent-placement"
+                    hint="Only workers of this kind claim the run."
+                  >
+                    <Select
+                      id="agent-placement"
+                      value={harness.placement}
+                      onChange={(event) =>
+                        updateSpec({
+                          harness: {
+                            ...harness,
+                            placement: event.target
+                              .value as NonNullable<AgentDefinition["spec"]["harness"]>["placement"],
+                          },
+                        })
+                      }
+                    >
+                      <option value="auto">Any matching worker</option>
+                      <option value="local">Local host worker</option>
+                      <option value="docker">Docker worker</option>
+                      <option value="kubernetes">Kubernetes worker</option>
+                    </Select>
+                  </Field>
+                  <Field
+                    label="Execution mode"
+                    htmlFor="agent-exec-mode"
+                    hint="Long running keeps the harness alive between runs and needs a harness that supports instances."
+                  >
+                    <Select
+                      id="agent-exec-mode"
+                      value={harness.executionMode}
+                      onChange={(event) =>
+                        updateSpec({
+                          harness: {
+                            ...harness,
+                            executionMode: event.target
+                              .value as NonNullable<AgentDefinition["spec"]["harness"]>["executionMode"],
+                          },
+                        })
+                      }
+                    >
+                      <option value="on_demand">On demand, one harness per run</option>
+                      <option value="long_running">Long running, always on</option>
+                    </Select>
+                  </Field>
+                </div>
+              ) : null}
+            </div>
           </FormSection>
 
           <FormSection

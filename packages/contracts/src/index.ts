@@ -173,7 +173,6 @@ export function emptyAgentDefinition(): AgentDefinition {
     kind: "Agent",
     metadata: { name: "", description: "", labels: {} },
     spec: {
-      harness: { type: "mock", executionMode: "on_demand", placement: "auto", config: {} },
       model: { management: "harness", params: {} },
       instructions: { system: "", constraints: [] },
       connectors: [],
