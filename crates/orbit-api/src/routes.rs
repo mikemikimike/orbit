@@ -94,6 +94,10 @@ pub fn build_router(state: AppState) -> Router {
             post(handlers::executions::cancel_execution),
         )
         .route(
+            "/api/v1/executions/{execution_id}/rerun",
+            post(handlers::executions::rerun_execution),
+        )
+        .route(
             "/api/v1/agent-teams",
             get(handlers::teams::list_teams).post(handlers::teams::create_team),
         )
@@ -268,6 +272,10 @@ pub fn build_router(state: AppState) -> Router {
             get(handlers::settings::get_oidc).put(handlers::settings::update_oidc),
         )
         .route("/api/v1/license", get(handlers::license::overview))
+        .route(
+            "/api/v1/export/{resource}/{resource_id}",
+            get(handlers::export::export_resource),
+        )
         .route(
             "/api/v1/sharing/{resource}/{resource_id}",
             get(handlers::sharing::get).patch(handlers::sharing::share),

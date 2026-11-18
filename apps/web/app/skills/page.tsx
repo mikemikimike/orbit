@@ -2,9 +2,20 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, ChevronDown, Ellipsis, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
+import {
+  BookOpen,
+  ChevronDown,
+  Download,
+  Ellipsis,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
 
+import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -28,7 +39,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
-import { ShareResourceDialog } from "@/components/share-resource-dialog";
+import { exportResource } from "@/components/export-resource-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
@@ -300,7 +311,6 @@ export default function SkillsPage() {
                       <Button size="sm" variant="outline" onClick={() => openEdit(skill)}>
                         <Pencil /> Edit
                       </Button>
-                      <ShareResourceDialog size="sm" variant="outline" resource="skills" resourceId={skill.id} resourceName={skill.name} />
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button size="icon-sm" variant="ghost" aria-label={`More actions for ${skill.name}`}>
@@ -308,6 +318,9 @@ export default function SkillsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => void exportResource("skills", skill.id, skill.name)}>
+                            <Download /> Export as JSON
+                          </DropdownMenuItem>
                           <DropdownMenuItem destructive onSelect={() => void deleteSkill(skill)}>
                             <Trash2 /> Delete skill
                           </DropdownMenuItem>
@@ -494,6 +507,7 @@ export default function SkillsPage() {
               ) : null}
             </div>
           </div>
+          {editing ? <ResourceAccessFields resource="skills" resourceId={editing.id} /> : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel

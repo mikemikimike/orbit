@@ -309,7 +309,7 @@ export default function WorkPage() {
                     key={h.kind}
                     selected={harness === h.kind}
                     onSelect={() => setHarness(h.kind)}
-                    disabled={h.implementationStatus === "planned"}
+                    disabled={h.implementationStatus !== "available"}
                     title={h.name}
                     trailing={<ImplementationBadge status={h.implementationStatus} />}
                   />

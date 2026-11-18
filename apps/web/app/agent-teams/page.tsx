@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
+  Download,
   Ellipsis,
   ListTodo,
   Pencil,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { exportResource } from "@/components/export-resource-button";
 import { Badge } from "@/components/ui/badge";
 import { Disclosure } from "@/components/ui/disclosure";
 import { Button } from "@/components/ui/button";
@@ -38,6 +40,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuSeparator,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -521,6 +524,10 @@ export default function AgentTeamsPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => void exportResource("agent_teams", team.id, team.name)}>
+                              <Download /> Export as JSON
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem destructive onSelect={() => void deleteTeam(team)}>
                               <Trash2 /> Delete agent team
                             </DropdownMenuItem>
@@ -1294,9 +1301,9 @@ export default function AgentTeamsPage() {
                 >
                   <option value="">Team or agent default</option>
                   {(harnesses.data ?? [])
-                    .filter((item) => item.enabled)
+                    .filter((item) => item.enabled && item.implementationStatus === "available")
                     .map((item) => (
-                      <option key={item.kind} value={item.kind} disabled={item.implementationStatus === "planned"}>
+                      <option key={item.kind} value={item.kind}>
                         {item.name}
                       </option>
                     ))}

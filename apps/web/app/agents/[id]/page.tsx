@@ -21,7 +21,7 @@ import { toast } from "sonner";
 
 import { RunAgentDialog } from "@/components/agents/run-agent-dialog";
 import { ExecutionListHeader, ExecutionRow } from "@/components/executions/execution-row";
-import { ShareResourceDialog } from "@/components/share-resource-dialog";
+import { exportResource } from "@/components/export-resource-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -239,7 +239,6 @@ export default function AgentDetailPage() {
                 <Zap /> Resume
               </Button>
             ) : null}
-            <ShareResourceDialog resource="agents" resourceId={data.id} resourceName={data.name} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon" aria-label="More actions">
@@ -247,6 +246,9 @@ export default function AgentDetailPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => void exportResource("agents", data.id, data.name)}>
+                  <Download /> Export as JSON
+                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => void downloadYaml()}>
                   <Download /> Export as YAML
                 </DropdownMenuItem>

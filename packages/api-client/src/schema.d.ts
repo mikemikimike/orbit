@@ -389,6 +389,22 @@ export interface paths {
         patch: operations["update_connection"];
         trace?: never;
     };
+    "/api/v1/connections/{connection_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["test_connection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/connectors": {
         parameters: {
             query?: never;
@@ -419,6 +435,38 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/env-mappings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/env-mappings/{mapping_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete"];
+        options?: never;
+        head?: never;
+        patch: operations["update"];
         trace?: never;
     };
     "/api/v1/executions": {
@@ -502,6 +550,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/executions/{execution_id}/rerun": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rerun_execution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/export/{resource}/{resource_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["export_resource"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/harnesses": {
         parameters: {
             query?: never;
@@ -510,6 +590,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["list_harnesses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/license": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["overview"];
         put?: never;
         post?: never;
         delete?: never;
@@ -566,6 +662,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/outputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/outputs/{output_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete"];
+        options?: never;
+        head?: never;
+        patch: operations["update"];
+        trace?: never;
+    };
+    "/api/v1/outputs/{output_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["test_output"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/providers": {
         parameters: {
             query?: never;
@@ -576,6 +720,23 @@ export interface paths {
         get: operations["list_providers"];
         put?: never;
         post: operations["create_provider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/providers/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Probe an unsaved provider config (create dialog). */
+        post: operations["probe_unsaved"];
         delete?: never;
         options?: never;
         head?: never;
@@ -615,6 +776,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/roles/{role_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete"];
+        options?: never;
+        head?: never;
+        patch: operations["update"];
+        trace?: never;
+    };
+    "/api/v1/settings/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_access"];
+        put: operations["update_access"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/harness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_harness"];
+        put: operations["update_harness"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/oidc": {
         parameters: {
             query?: never;
@@ -629,6 +854,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sharing/{resource}/{resource_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["share"];
         trace?: never;
     };
     "/api/v1/skills": {
@@ -693,6 +934,102 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete"];
+        options?: never;
+        head?: never;
+        patch: operations["update"];
+        trace?: never;
+    };
+    "/api/v1/teams/{team_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_members"];
+        put?: never;
+        post: operations["add_member"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team_id}/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["remove_member"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tool-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tool-policies/{policy_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete"];
+        options?: never;
+        head?: never;
+        patch: operations["update"];
         trace?: never;
     };
     "/api/v1/triggers": {
@@ -919,6 +1256,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/worker-profiles/{profile_id}/env-mappings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["profile_mappings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/worker-profiles/{profile_id}/launch": {
         parameters: {
             query?: never;
@@ -1003,6 +1356,24 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AccessSettings: {
+            /** @description Non-admins only see resources owned by their access teams. */
+            teamIsolation: boolean;
+        };
+        AccessTeam: {
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            createdBy?: string | null;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: uuid */
+            orgId: string;
+            slug: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
         Agent: {
             /** Format: date-time */
             archivedAt?: string | null;
@@ -1019,10 +1390,15 @@ export interface components {
             name: string;
             /** Format: uuid */
             orgId: string;
+            /** Format: uuid */
+            ownerTeamId?: string | null;
+            /** Format: uuid */
+            ownerUserId?: string | null;
             slug: string;
             status: string;
             /** Format: date-time */
             updatedAt: string;
+            visibility: string;
         };
         /**
          * @description Portable, versioned agent definition (`orbit.io/v1`).
@@ -1106,11 +1482,17 @@ export interface components {
         AgentSpec: {
             autonomy?: components["schemas"]["AutonomySpec"];
             connectors?: components["schemas"]["ConnectorBinding"][];
-            harness: components["schemas"]["HarnessSpec"];
+            harness?: null | components["schemas"]["HarnessSpec"];
+            /** @description Harness-specific options keyed by harness kind (`opencode`, `pi`, …). */
+            harnessConfig?: {
+                [key: string]: unknown;
+            };
             instructions: components["schemas"]["Instructions"];
             memory?: components["schemas"]["MemorySpec"];
             model?: components["schemas"]["ModelSpec"];
             resources?: components["schemas"]["ResourceLimits"];
+            /** @description Defaults used when a manual run is created without an explicit task. */
+            runDefaults?: components["schemas"]["RunDefaults"];
             /** @description Slugs from the organization's skill library to materialize in the workspace. */
             skills?: string[];
             triggers?: components["schemas"]["TriggerSpec"][];
@@ -1155,8 +1537,13 @@ export interface components {
             name: string;
             /** Format: uuid */
             orgId: string;
+            /** Format: uuid */
+            ownerTeamId?: string | null;
+            /** Format: uuid */
+            ownerUserId?: string | null;
             /** Format: date-time */
             updatedAt: string;
+            visibility: string;
         };
         AgentVersion: {
             /** Format: uuid */
@@ -1278,6 +1665,8 @@ export interface components {
             /** Format: int32 */
             maxExecutionsPerHour?: number | null;
         };
+        /** @enum {string} */
+        CapabilityEffect: "read" | "write" | "external_side_effect";
         Connection: {
             config: unknown;
             /** Format: uuid */
@@ -1293,10 +1682,23 @@ export interface components {
             name: string;
             /** Format: uuid */
             orgId: string;
+            /** Format: uuid */
+            ownerTeamId?: string | null;
+            /** Format: uuid */
+            ownerUserId?: string | null;
             scopes: string[];
             status: string;
             /** Format: date-time */
             updatedAt: string;
+            visibility: string;
+        };
+        ConnectionTestResponse: {
+            /** Format: int64 */
+            latencyMs: number;
+            message: string;
+            ok: boolean;
+            /** Format: int32 */
+            status?: number | null;
         };
         ConnectionView: {
             config: unknown;
@@ -1358,7 +1760,8 @@ export interface components {
             scopes?: string[];
         };
         CreateExecutionRequest: {
-            /** @description Override the agent's stored harness for this execution. */
+            /** @description Harness for this execution. `harnessOverride` is accepted as a legacy alias. */
+            harness?: string | null;
             harnessOverride?: string | null;
             idempotencyKey?: string | null;
             name?: string | null;
@@ -1387,7 +1790,11 @@ export interface components {
             autoLaunch?: boolean;
             /** @description Optional base/working branch for repository checkout. */
             branch?: string | null;
+            connectionIds?: string[];
             description?: string;
+            envMappingIds?: string[];
+            /** @description Harness for team steps. Falls back to the legacy agent harness or org default. */
+            harness?: string | null;
             /**
              * @description Shared goal/instruction for the team. The first step receives it as its task;
              *     later steps receive it together with the previous step output.
@@ -1410,6 +1817,11 @@ export interface components {
             /** @description Skills materialized for every step in the team. */
             skills?: string[];
             steps: components["schemas"]["TeamStepInput"][];
+            /**
+             * Format: int64
+             * @description Per-step wall-clock timeout; defaults to 1 hour for team runs.
+             */
+            timeoutSeconds?: number | null;
             workSource?: null | components["schemas"]["WorkSourceDefinition"];
             /**
              * Format: uuid
@@ -1431,12 +1843,24 @@ export interface components {
             agentId: string;
             config?: unknown;
             enabled?: boolean | null;
+            /** @description Optional harness for executions fired by this trigger. */
+            harness?: string | null;
             kind: string;
         };
         CreateWorkerProfileRequest: {
             agentIds?: string[];
+            /** @description `all` (dynamic) or `selected`; omitted derives from agentIds for compatibility. */
+            agentScope?: string | null;
+            allowGh?: boolean;
+            allowGlab?: boolean;
+            /** @description Allow OpenCode's built-in WebFetch tool. Default false for headless runs. */
+            allowWebFetch?: boolean;
+            /** @description Allow OpenCode's built-in Web Search tool. Default false for headless runs. */
+            allowWebSearch?: boolean;
             authSecretName?: string | null;
             env?: unknown;
+            /** @description Reusable environment mapping IDs attached to this profile. */
+            envMappingIds?: string[];
             envMappings?: unknown;
             executionDriver?: string;
             harnessKind: string;
@@ -1444,6 +1868,8 @@ export interface components {
             imageTag?: string;
             model?: string | null;
             name: string;
+            /** @description Native harness tool name -> allow|ask|deny (OpenCode permission map). */
+            nativeToolPermissions?: unknown;
             provider?: string | null;
             resources?: unknown;
             skillSlugs?: string[];
@@ -1459,6 +1885,18 @@ export interface components {
             /** @description Plaintext token, shown exactly once. */
             token: string;
             tokenPrefix: string;
+        };
+        CustomRole: {
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: uuid */
+            orgId: string;
+            permissions: string[];
+            /** Format: date-time */
+            updatedAt: string;
         };
         DashboardResponse: {
             summary: components["schemas"]["DashboardSummary"];
@@ -1491,6 +1929,24 @@ export interface components {
         EgressMode: "default" | "allowlist" | "denied";
         EnqueueRequest: {
             items: components["schemas"]["QueueItemInput"][];
+        };
+        EnvMapping: {
+            /** Format: date-time */
+            createdAt: string;
+            description: string;
+            /** Format: uuid */
+            id: string;
+            mappings: unknown;
+            name: string;
+            /** Format: uuid */
+            orgId: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        EnvMappingRequest: {
+            description?: string;
+            mappings?: unknown;
+            name: string;
         };
         ErrorBody: {
             code: string;
@@ -1624,6 +2080,10 @@ export interface components {
          * @enum {string}
          */
         HarnessKind: "mock" | "opencode" | "claude_code" | "pi" | "generic";
+        HarnessSettings: {
+            /** @description Harness used when an execution/trigger does not select one. */
+            defaultHarness?: string | null;
+        };
         HarnessSpec: {
             /** @description Harness-specific configuration. Validated by the adapter, opaque to the core. */
             config?: unknown;
@@ -1658,6 +2118,65 @@ export interface components {
         LaunchLogs: {
             logs: string;
         };
+        LicenseLimits: {
+            /**
+             * Format: int64
+             * @default null
+             */
+            agents: number | null;
+            /**
+             * Format: int64
+             * @default null
+             */
+            executionsPerDay: number | null;
+            /**
+             * Format: int64
+             * @default null
+             */
+            seats: number | null;
+            /**
+             * Format: int64
+             * @default null
+             */
+            workers: number | null;
+        };
+        LicenseOverview: {
+            license: components["schemas"]["LicenseStatus"];
+            usage: components["schemas"]["LicenseUsage"];
+            warnings: string[];
+        };
+        LicenseStatus: {
+            customer?: string | null;
+            /** Format: int64 */
+            daysRemaining?: number | null;
+            error?: string | null;
+            /** Format: date-time */
+            expiresAt?: string | null;
+            features?: string[];
+            /** @description True while inside the post-expiry grace window. */
+            grace?: boolean;
+            /** Format: date-time */
+            issuedAt?: string | null;
+            licenseId?: string | null;
+            limits?: components["schemas"]["LicenseLimits"];
+            orgSlug?: string | null;
+            plan?: string | null;
+            /** @description `community`, `enterprise`, … (the plan while the license is usable). */
+            tier: string;
+            trial?: boolean;
+            /** @description False for community, invalid, or fully expired licenses. */
+            valid?: boolean;
+        };
+        LicenseUsage: {
+            /** Format: int64 */
+            agents: number;
+            /** Format: int64 */
+            executionsToday: number;
+            /** Format: int64 */
+            seats: number;
+            /** Format: int64 */
+            workers: number;
+        };
         /** @enum {string} */
         LogLevel: "debug" | "info" | "warn" | "error";
         MeResponse: {
@@ -1690,6 +2209,7 @@ export interface components {
             environment: string;
             eventsDriver: string;
             features: components["schemas"]["MetaFeatures"];
+            license: components["schemas"]["LicenseStatus"];
             version: string;
         };
         /** @enum {string} */
@@ -1709,13 +2229,29 @@ export interface components {
         };
         OidcSettings: {
             audience?: string;
+            /** @description Create missing access teams for mapped groups. */
+            autoCreateTeams?: boolean;
             autoProvision?: boolean;
             clientId?: string;
             defaultRole?: string;
+            /** @description Claim used as the unique OIDC identity/email (default `email`). */
+            emailClaim?: string;
+            /** @description IdP group/claim value -> ORBIT role name. */
+            groupRoles?: {
+                [key: string]: string;
+            };
             issuer?: string;
             jwksUrl?: string;
             redirectUri?: string;
+            /** @description Claim carrying IdP groups/roles (default `groups`). */
+            roleClaim?: string;
             scopes?: string;
+            /** @description Re-evaluate the stored role on every login when a mapping matches. */
+            syncRoles?: boolean;
+            /** @description IdP group -> `team-slug:role` (access team membership). */
+            teamGroups?: {
+                [key: string]: string;
+            };
         };
         Organization: {
             /** Format: date-time */
@@ -1728,12 +2264,48 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        OutputRequest: {
+            /** Format: uuid */
+            agentId?: string | null;
+            enabled?: boolean;
+            events?: string[];
+            kind: string;
+            name: string;
+            /** Format: uuid */
+            teamId?: string | null;
+            template?: string | null;
+            /** @description Incoming webhook / target URL. Write-only; never returned. */
+            webhookUrl?: string | null;
+        };
+        OutputView: {
+            /** Format: uuid */
+            agentId?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            enabled: boolean;
+            events: string[];
+            hasWebhook: boolean;
+            /** Format: uuid */
+            id: string;
+            kind: string;
+            name: string;
+            /** Format: uuid */
+            teamId?: string | null;
+            template?: string | null;
+            /** Format: date-time */
+            updatedAt: string;
+        };
         /**
          * @description Where an agent is allowed to execute. This is a routing constraint, not a guarantee
          *     of process isolation; isolation depends on the worker's execution driver.
          * @enum {string}
          */
         PlacementTarget: "auto" | "local" | "docker" | "kubernetes";
+        ProbeProviderRequest: {
+            config: unknown;
+            credential?: string | null;
+            kind: string;
+        };
         Provider: {
             config: unknown;
             /** Format: date-time */
@@ -1745,8 +2317,13 @@ export interface components {
             name: string;
             /** Format: uuid */
             orgId: string;
+            /** Format: uuid */
+            ownerTeamId?: string | null;
+            /** Format: uuid */
+            ownerUserId?: string | null;
             /** Format: date-time */
             updatedAt: string;
+            visibility: string;
         };
         /** @description Explicit endpoint feature flags. "OpenAI-compatible" is not a guarantee. */
         ProviderCompat: {
@@ -1813,6 +2390,19 @@ export interface components {
             /** Format: int64 */
             timeoutSeconds?: number;
         };
+        RoleRequest: {
+            name: string;
+            permissions?: string[];
+        };
+        RunDefaults: {
+            /** @description Pre-filled task for manual runs. Never used as system instructions. */
+            task?: string | null;
+        };
+        ShareRequest: {
+            /** Format: uuid */
+            ownerTeamId?: string | null;
+            visibility: string;
+        };
         Skill: {
             content: string;
             /** Format: date-time */
@@ -1824,11 +2414,30 @@ export interface components {
             name: string;
             /** Format: uuid */
             orgId: string;
+            /** Format: uuid */
+            ownerTeamId?: string | null;
+            /** Format: uuid */
+            ownerUserId?: string | null;
             slug: string;
             /** Format: date-time */
             updatedAt: string;
             /** Format: int32 */
             version: number;
+            visibility: string;
+        };
+        TeamMember: {
+            /** Format: date-time */
+            createdAt: string;
+            role: string;
+            /** Format: uuid */
+            teamId: string;
+            /** Format: uuid */
+            userId: string;
+        };
+        TeamMemberRequest: {
+            role?: string;
+            /** Format: uuid */
+            userId: string;
         };
         TeamModelOverride: {
             management?: string | null;
@@ -1857,6 +2466,10 @@ export interface components {
             teamRunId?: string | null;
             /** Format: date-time */
             updatedAt: string;
+        };
+        TeamRequest: {
+            name: string;
+            slug: string;
         };
         TeamRun: {
             /** Format: date-time */
@@ -1919,6 +2532,71 @@ export interface components {
             agentId: string;
             model?: null | components["schemas"]["TeamModelOverride"];
         };
+        /**
+         * @description Fields a rule can match on. Every configured field must match (AND). An empty matcher
+         *     matches every tool call and is useful for a default `require_approval` policy.
+         */
+        ToolPolicyMatcher: {
+            /**
+             * @description Glob against the connector capability, e.g. `issues.*`.
+             * @default null
+             */
+            capability: string | null;
+            /**
+             * @description Regular expression against shell commands (`command`, `cmd`).
+             * @default null
+             */
+            commandRegex: string | null;
+            /**
+             * @description Glob against the connection name/slug.
+             * @default null
+             */
+            connection: string | null;
+            /** @default null */
+            effect: null | components["schemas"]["CapabilityEffect"];
+            /**
+             * @description Glob against path-like arguments (`path`, `file_path`, `paths`, …).
+             * @default null
+             */
+            pathGlob: string | null;
+            /**
+             * @description Glob against the tool name (`*` and `?` are wildcards).
+             * @default null
+             */
+            tool: string | null;
+        };
+        ToolPolicyRequest: {
+            action: string;
+            /** Format: uuid */
+            agentId?: string | null;
+            enabled?: boolean;
+            impact?: string | null;
+            matcher?: components["schemas"]["ToolPolicyMatcher"];
+            name: string;
+            /** Format: int32 */
+            priority?: number;
+            reason?: string | null;
+        };
+        ToolPolicyView: {
+            action: string;
+            /** Format: uuid */
+            agentId?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            enabled: boolean;
+            /** Format: uuid */
+            id: string;
+            impact?: string | null;
+            matcher: components["schemas"]["ToolPolicyMatcher"];
+            name: string;
+            /** Format: uuid */
+            orgId: string;
+            /** Format: int32 */
+            priority: number;
+            reason?: string | null;
+            /** Format: date-time */
+            updatedAt: string;
+        };
         Trigger: {
             /** Format: uuid */
             agentId: string;
@@ -1926,6 +2604,7 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             enabled: boolean;
+            harnessKind?: string | null;
             /** Format: uuid */
             id: string;
             kind: string;
@@ -1935,8 +2614,13 @@ export interface components {
             nextRunAt?: string | null;
             /** Format: uuid */
             orgId: string;
+            /** Format: uuid */
+            ownerTeamId?: string | null;
+            /** Format: uuid */
+            ownerUserId?: string | null;
             /** Format: date-time */
             updatedAt: string;
+            visibility: string;
         };
         /** @enum {string} */
         TriggerSource: "manual" | "schedule" | "webhook" | "connector_event" | "agent_event" | "api";
@@ -2056,6 +2740,7 @@ export interface components {
             orgId: string;
             /** Format: uuid */
             profileId: string;
+            relaunchRequired: boolean;
             runtimeId?: string | null;
             /** Format: date-time */
             startedAt?: string | null;
@@ -2071,6 +2756,11 @@ export interface components {
         };
         WorkerProfile: {
             agentIds: string[];
+            agentScope: string;
+            allowGh: boolean;
+            allowGlab: boolean;
+            allowWebFetch: boolean;
+            allowWebSearch: boolean;
             authSecretName?: string | null;
             /** Format: date-time */
             createdAt: string;
@@ -2085,14 +2775,20 @@ export interface components {
             imageTag: string;
             model?: string | null;
             name: string;
+            nativeToolPermissions: unknown;
             /** Format: uuid */
             orgId: string;
+            /** Format: uuid */
+            ownerTeamId?: string | null;
+            /** Format: uuid */
+            ownerUserId?: string | null;
             provider?: string | null;
             resources: unknown;
             skillSlugs: string[];
             target: string;
             /** Format: date-time */
             updatedAt: string;
+            visibility: string;
         };
         WorkerView: {
             harnesses: string[];
@@ -2906,6 +3602,27 @@ export interface operations {
             };
         };
     };
+    test_connection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionTestResponse"];
+                };
+            };
+        };
+    };
     list_connectors: {
         parameters: {
             query?: never;
@@ -2940,6 +3657,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DashboardResponse"];
+                };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvMapping"][];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnvMappingRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvMapping"];
+                };
+            };
+        };
+    };
+    delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mapping_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mapping_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnvMappingRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvMapping"];
                 };
             };
         };
@@ -3055,6 +3858,48 @@ export interface operations {
             };
         };
     };
+    rerun_execution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                execution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionRecord"];
+                };
+            };
+        };
+    };
+    export_resource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resource: string;
+                resource_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secret-free resource export */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list_harnesses: {
         parameters: {
             query?: never;
@@ -3070,6 +3915,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HarnessView"][];
+                };
+            };
+        };
+    };
+    overview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LicenseOverview"];
                 };
             };
         };
@@ -3131,6 +3995,111 @@ export interface operations {
             };
         };
     };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutputView"][];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutputRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutputView"];
+                };
+            };
+        };
+    };
+    delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                output_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                output_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutputRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutputView"];
+                };
+            };
+        };
+    };
+    test_output: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                output_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list_providers: {
         parameters: {
             query?: never;
@@ -3169,6 +4138,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderView"];
+                };
+            };
+        };
+    };
+    probe_unsaved: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProbeProviderRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderProbeResponse"];
                 };
             };
         };
@@ -3238,6 +4230,176 @@ export interface operations {
             };
         };
     };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomRole"][];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomRole"];
+                };
+            };
+        };
+    };
+    delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomRole"];
+                };
+            };
+        };
+    };
+    get_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessSettings"];
+                };
+            };
+        };
+    };
+    update_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessSettings"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessSettings"];
+                };
+            };
+        };
+    };
+    get_harness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessSettings"];
+                };
+            };
+        };
+    };
+    update_harness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HarnessSettings"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessSettings"];
+                };
+            };
+        };
+    };
     get_oidc: {
         parameters: {
             query?: never;
@@ -3277,6 +4439,52 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OidcSettings"];
                 };
+            };
+        };
+    };
+    get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resource: string;
+                resource_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareRequest"];
+                };
+            };
+        };
+    };
+    share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resource: string;
+                resource_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareRequest"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -3425,6 +4633,247 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TeamRunDetail"];
+                };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessTeam"][];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessTeam"];
+                };
+            };
+        };
+    };
+    delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessTeam"];
+                };
+            };
+        };
+    };
+    list_members: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamMember"][];
+                };
+            };
+        };
+    };
+    add_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamMemberRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamMember"];
+                };
+            };
+        };
+    };
+    remove_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: {
+                /** @description Include agent rules and org defaults */
+                agentId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolPolicyView"][];
+                };
+            };
+        };
+    };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolPolicyRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolPolicyView"];
+                };
+            };
+        };
+    };
+    delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolPolicyRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolPolicyView"];
                 };
             };
         };
@@ -3855,6 +5304,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkerProfile"];
+                };
+            };
+        };
+    };
+    profile_mappings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvMapping"][];
                 };
             };
         };

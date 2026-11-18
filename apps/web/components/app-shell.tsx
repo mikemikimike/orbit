@@ -8,8 +8,8 @@ import { CommandPaletteProvider } from "@/components/shell/command-palette";
 import { MobileHeader, MobileTabBar } from "@/components/shell/mobile-nav";
 import { pageLabel } from "@/components/shell/nav";
 import { Sidebar } from "@/components/shell/sidebar";
-import { getAccessToken } from "@/lib/api";
-import { useDashboard, useMeta } from "@/lib/queries";
+import { getAccessToken, setAccessToken } from "@/lib/api";
+import { useDashboard, useMe, useMeta } from "@/lib/queries";
 
 function isPublicPath(pathname: string) {
   return pathname.startsWith("/login") || pathname.startsWith("/auth/");
@@ -21,12 +21,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const meta = useMeta();
   const publicPath = isPublicPath(pathname);
 
+  const me = useMe();
   useEffect(() => {
     const auth = (meta.data?.auth ?? {}) as { mode?: string };
-    if (auth.mode === "oidc" && !publicPath && !getAccessToken()) {
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+    if (auth.mode !== "oidc" || publicPath) return;
+    const login = `/login?next=${encodeURIComponent(pathname)}`;
+    if (!getAccessToken()) {
+      router.replace(login);
+    } else if (me.isError) {
+      // Expired or foreign token: clear it instead of treating it as a session.
+      setAccessToken(null);
+      router.replace(login);
     }
-  }, [meta.data?.auth, pathname, publicPath, router]);
+  }, [meta.data?.auth, me.isError, pathname, publicPath, router]);
 
   const title = publicPath ? "Sign in · ORBIT" : `${pageLabel(pathname)} · ORBIT`;
 

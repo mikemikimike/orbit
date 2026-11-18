@@ -494,7 +494,7 @@ function OidcSettingsForm() {
         setJwksUrl(data.jwksUrl ?? "");
         setAutoProvision(data.autoProvision ?? true);
         setDefaultRole(data.defaultRole || "viewer");
-        setEmailClaim((data as { emailClaim?: string }).emailClaim || "email");
+        setEmailClaim(data.emailClaim || "email");
       }
     } catch (error) {
       toast.error(errorMessage(error));
@@ -1187,8 +1187,10 @@ function DefaultHarnessSection() {
             onChange={(event) => save.mutate(event.target.value)}
           >
             <option value="">No default (require an explicit choice)</option>
-            {(harnesses.data ?? []).map((harness) => (
-              <option key={harness.kind} value={harness.kind} disabled={harness.implementationStatus === "planned"}>
+            {(harnesses.data ?? [])
+              .filter((harness) => harness.implementationStatus === "available")
+              .map((harness) => (
+              <option key={harness.kind} value={harness.kind}>
                 {harness.name}
               </option>
             ))}

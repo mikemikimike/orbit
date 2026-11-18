@@ -2,9 +2,21 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Boxes, Cpu, KeyRound, MoreHorizontal, Pencil, Plus, Server, Trash2, Zap } from "lucide-react";
+import {
+  Boxes,
+  Cpu,
+  Download,
+  KeyRound,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Server,
+  Trash2,
+  Zap,
+} from "lucide-react";
 import { toast } from "sonner";
 
+import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { Badge } from "@/components/ui/badge";
 import { Disclosure } from "@/components/ui/disclosure";
 import { Button } from "@/components/ui/button";
@@ -33,7 +45,7 @@ import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { Section } from "@/components/ui/section";
 import { Select } from "@/components/ui/select";
-import { ShareResourceDialog } from "@/components/share-resource-dialog";
+import { exportResource } from "@/components/export-resource-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Status, type StatusMeta } from "@/components/ui/status";
 import { api, API_BASE_URL, getAccessToken } from "@/lib/api";
@@ -509,11 +521,6 @@ export default function ModelsPage() {
                     <Button size="sm" variant="ghost" onClick={() => openEdit(provider)}>
                       <Pencil /> Edit
                     </Button>
-                    <ShareResourceDialog size="sm" variant="ghost"
-                      resource="providers"
-                      resourceId={provider.id}
-                      resourceName={provider.name}
-                    />
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
@@ -525,6 +532,9 @@ export default function ModelsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => void exportResource("providers", provider.id, provider.name)}>
+                          <Download /> Export as JSON
+                        </DropdownMenuItem>
                         <DropdownMenuItem destructive onSelect={() => void deleteProvider(provider)}>
                           <Trash2 /> Delete provider
                         </DropdownMenuItem>
@@ -810,6 +820,7 @@ export default function ModelsPage() {
             )}
           </div>
 
+          {editing ? <ResourceAccessFields resource="providers" resourceId={editing.id} /> : null}
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog}>
               Cancel

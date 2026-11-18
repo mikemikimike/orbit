@@ -7,9 +7,9 @@ import { KeyRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getAccessToken } from "@/lib/api";
+import { getAccessToken, setAccessToken } from "@/lib/api";
 import { beginOidcLogin } from "@/lib/oidc";
-import { useMeta } from "@/lib/queries";
+import { useMe, useMeta } from "@/lib/queries";
 
 export default function LoginPage() {
   const meta = useMeta();
@@ -19,9 +19,16 @@ export default function LoginPage() {
   const auth = (meta.data?.auth ?? {}) as { mode?: string; issuer?: string };
   const oidc = auth.mode === "oidc";
 
+  const me = useMe();
   useEffect(() => {
-    if (getAccessToken()) router.replace("/");
-  }, [router]);
+    if (!getAccessToken()) return;
+    if (me.isSuccess) {
+      router.replace("/");
+    } else if (me.isError) {
+      // Expired or foreign token: clear it instead of treating it as a session.
+      setAccessToken(null);
+    }
+  }, [me.isSuccess, me.isError, router]);
 
   function startSignIn() {
     setError(null);

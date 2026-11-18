@@ -434,11 +434,8 @@ pub async fn create_profile(
     } else {
         body.image.trim().to_string()
     };
-    let image_tag = if body.image_tag.trim().is_empty() {
-        crate::images::image_tag()
-    } else {
-        body.image_tag.trim().to_string()
-    };
+    // Empty tag follows the current platform image tag at launch time.
+    let image_tag = body.image_tag.trim().to_string();
     let agent_scope = resolve_agent_scope(body.agent_scope.as_deref(), &body.agent_ids)?;
     let resources = resolve_worker_resources(&body.resources)?;
     let profile = state
@@ -577,11 +574,8 @@ pub async fn update_profile(
     } else {
         body.image.trim().to_string()
     };
-    let image_tag = if body.image_tag.trim().is_empty() {
-        crate::images::image_tag()
-    } else {
-        body.image_tag.trim().to_string()
-    };
+    // Empty tag follows the current platform image tag at launch time.
+    let image_tag = body.image_tag.trim().to_string();
     let agent_scope = resolve_agent_scope(body.agent_scope.as_deref(), &body.agent_ids)?;
     let resources = resolve_worker_resources(&body.resources)?;
     let profile = state
@@ -781,7 +775,12 @@ pub async fn bootstrap(
         profile.harness_kind.replace('_', "-"),
         &profile.id.to_string()[..8]
     );
-    let image = format!("{}:{}", profile.image, profile.image_tag);
+    let image_tag = if profile.image_tag.trim().is_empty() {
+        crate::images::image_tag()
+    } else {
+        profile.image_tag.clone()
+    };
+    let image = format!("{}:{}", profile.image, image_tag);
     let has_auth = profile.auth_secret_name.is_some();
     let resources: orbit_domain::WorkerResources =
         serde_json::from_value::<orbit_domain::WorkerResources>(profile.resources.clone())

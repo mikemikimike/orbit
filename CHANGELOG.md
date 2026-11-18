@@ -32,9 +32,14 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
   the repository and how long until they expire.
 - Phone navigation reaches every page through a **More** sheet.
 - Light / Dark / System theme choice in the account menu.
-- **Run again** on a finished execution; **Activate** from the draft notice on an agent.
+- **Activate** from the draft notice on an agent.
 - Settings shows the organization default harness, team isolation, and members and roles
   to users with `settings:write`.
+
+- The 0.18.0 additions carried onto the new design: **Export as JSON** sits in each
+  row's overflow menu, access (visibility and owning team) is an "Access" block in edit
+  forms, and **Run again** uses the rerun endpoint. The separate grid/list toggle for
+  agents is gone: the agent list is always the compact, aligned list.
 
 ### Fixed
 
@@ -66,6 +71,32 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 - OpenCode results contain the answer written after the last tool call, not every remark
   the agent made along the way.
 - The "dispatched" event records the agent's provider and model, shown in execution details.
+## [0.18.0] - 2026-11-18
+
+### Added
+
+- Rerun terminal executions from execution detail (`POST /api/v1/executions/{id}/rerun`).
+- Secret-free resource export (`GET /api/v1/export/{resource}/{id}`) with recursive
+  redaction and Export actions.
+- Worker profiles with an empty image tag follow the platform image tag and auto-relaunch
+  after an upgrade (token revoke, drain, replace, audit).
+- Settings now renders Runtime, Access policy and Users & roles cards.
+
+### Changed
+
+- Resource visibility/team access moved from Share into Edit forms.
+- Worker-profile and Agent Team editors grouped into sections with sticky footers.
+- Agent lists have a compact list/grid view; worker/team secondary actions moved to More
+  menus.
+- Regenerated the OpenAPI TypeScript client.
+
+### Fixed
+
+- Description-only agent edits no longer fail as duplicate versions.
+- Planned/scaffolded harnesses are hidden from run dialogs and rejected by the API.
+- Pi auth works for launcher-created profile workers (writable copy of the Secret).
+- Stale SSO tokens are cleared; login shows SSO again and invalid sessions redirect.
+- Invalid/expired tokens are handled centrally on 401.
 
 ## [0.17.0] - 2026-11-18
 

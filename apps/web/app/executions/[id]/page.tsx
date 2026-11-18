@@ -25,6 +25,7 @@ import { ExecutionStatusBadge } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
 import { copyText } from "@/lib/browser";
+import { request } from "@/lib/http";
 import {
   queryKeys,
   unwrap,
@@ -101,22 +102,10 @@ export default function ExecutionDetailPage() {
     onError: (error) => toast.error(errorMessage(error)),
   });
 
+  // The API re-queues the execution with its original input and harness.
   const rerun = useMutation({
-    mutationFn: async (source: ExecutionRecord) => {
-      const input = (source.input ?? {}) as { task?: string; payload?: unknown; name?: string };
-      return unwrap(
-        await api.POST("/api/v1/agents/{agent_id}/executions", {
-          params: { path: { agent_id: source.agentId } },
-          body: {
-            task: input.task ?? "",
-            payload: input.payload ?? null,
-            name: input.name || undefined,
-            // Same runtime as the original: agents may have no harness of their own.
-            harnessOverride: source.harnessKind,
-          },
-        }),
-      );
-    },
+    mutationFn: async () =>
+      request<{ id: string }>(`/api/v1/executions/${executionId}/rerun`, { method: "POST" }),
     onSuccess: (created) => {
       toast.success("Execution queued");
       void queryClient.invalidateQueries({ queryKey: queryKeys.executions() });
@@ -331,7 +320,7 @@ export default function ExecutionDetailPage() {
               <Ban /> Cancel
             </Button>
           ) : task ? (
-            <Button variant="outline" loading={rerun.isPending} onClick={() => rerun.mutate(execution)}>
+            <Button variant="outline" loading={rerun.isPending} onClick={() => rerun.mutate()}>
               <RotateCw /> Run again
             </Button>
           ) : null

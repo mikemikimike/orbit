@@ -301,7 +301,12 @@ pub(crate) async fn launch_profile_internal(
     let issued =
         crate::handlers::worker_profiles::issue_profile_token(state, auth.org_id, &profile, false)
             .await?;
-    let image = format!("{}:{}", profile.image, profile.image_tag);
+    let image_tag = if profile.image_tag.trim().is_empty() {
+        crate::images::image_tag()
+    } else {
+        profile.image_tag.clone()
+    };
+    let image = format!("{}:{}", profile.image, image_tag);
     let launch = state
         .store
         .create_worker_launch(
@@ -330,7 +335,7 @@ pub(crate) async fn launch_profile_internal(
         target: profile.target.clone(),
         execution_driver: profile.execution_driver.clone(),
         image: profile.image.clone(),
-        image_tag: profile.image_tag.clone(),
+        image_tag,
         auth_secret_name: profile.auth_secret_name.clone(),
         env: profile.env.clone(),
         resources: profile.resources.clone(),
@@ -427,31 +432,37 @@ pub async fn stop_launch(
         .store
         .get_worker_launch(auth.org_id, launch_id)
         .await?;
+    Ok(Json(stop_launch_internal(&state, &auth, launch).await?))
+}
+
+pub(crate) async fn stop_launch_internal(
+    state: &AppState,
+    auth: &AuthContext,
+    launch: WorkerLaunch,
+) -> Result<WorkerLaunch, ApiError> {
     let _: serde_json::Value = call_launcher(
-        &state,
+        state,
         reqwest::Method::POST,
-        &format!("/launches/{launch_id}/stop?target={}", launch.target),
+        &format!("/launches/{}/stop?target={}", launch.id, launch.target),
         Some(serde_json::json!({})),
     )
     .await?;
     if let Some(token_id) = launch.worker_token_id {
         let _ = state.store.revoke_worker_token(auth.org_id, token_id).await;
     }
-    Ok(Json(
-        state
-            .store
-            .update_worker_launch(
-                auth.org_id,
-                launch_id,
-                "stopped",
-                None,
-                None,
-                None,
-                false,
-                true,
-            )
-            .await?,
-    ))
+    Ok(state
+        .store
+        .update_worker_launch(
+            auth.org_id,
+            launch.id,
+            "stopped",
+            None,
+            None,
+            None,
+            false,
+            true,
+        )
+        .await?)
 }
 
 #[utoipa::path(get, path = "/api/v1/worker-launches/{launch_id}/logs", tag = "workers", responses((status = 200, body = LaunchLogs)))]

@@ -2,9 +2,19 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Cable, MoreHorizontal, Pencil, PlugZap, Plus, Trash2, Webhook } from "lucide-react";
+import {
+  Cable,
+  Download,
+  MoreHorizontal,
+  Pencil,
+  PlugZap,
+  Plus,
+  Trash2,
+  Webhook,
+} from "lucide-react";
 import { toast } from "sonner";
 
+import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { Badge } from "@/components/ui/badge";
 import { Disclosure } from "@/components/ui/disclosure";
 import { Button } from "@/components/ui/button";
@@ -32,7 +42,7 @@ import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { Section } from "@/components/ui/section";
 import { Select } from "@/components/ui/select";
-import { ShareResourceDialog } from "@/components/share-resource-dialog";
+import { exportResource } from "@/components/export-resource-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Status, type StatusMeta } from "@/components/ui/status";
 import { Textarea } from "@/components/ui/textarea";
@@ -428,11 +438,6 @@ export default function ConnectionsPage() {
                     <Button size="sm" variant="ghost" onClick={() => openEdit(connection)}>
                       <Pencil /> Edit
                     </Button>
-                    <ShareResourceDialog size="sm" variant="ghost"
-                      resource="connections"
-                      resourceId={connection.id}
-                      resourceName={connection.name}
-                    />
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
@@ -444,6 +449,9 @@ export default function ConnectionsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => void exportResource("connections", connection.id, connection.name)}>
+                          <Download /> Export as JSON
+                        </DropdownMenuItem>
                         <DropdownMenuItem destructive onSelect={() => void removeConnection(connection)}>
                           <Trash2 /> Remove connection
                         </DropdownMenuItem>
@@ -696,6 +704,7 @@ export default function ConnectionsPage() {
                 </Field>
               </Disclosure>
 
+            {editing ? <ResourceAccessFields resource="connections" resourceId={editing.id} /> : null}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel

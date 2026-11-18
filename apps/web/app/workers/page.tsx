@@ -8,13 +8,14 @@ import {
   Boxes,
   ChevronDown,
   Copy,
+  Download,
   Ellipsis,
   Pencil,
   Plus,
   Power,
   PowerOff,
-  RotateCw,
   Rocket,
+  RotateCw,
   ScrollText,
   Server,
   Square,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -52,7 +54,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Section } from "@/components/ui/section";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
-import { ShareResourceDialog } from "@/components/share-resource-dialog";
+import { exportResource } from "@/components/export-resource-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Status, type StatusMeta } from "@/components/ui/status";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -471,18 +473,11 @@ function WorkersPageInner() {
     const scoped = (profile as WorkerProfile & { agentScope?: string }).agentScope === "selected";
     setAgentScope(scoped ? "selected" : "all");
     setEnvMappingIds([]);
-    const tools = profile as unknown as { allowWebSearch?: boolean; allowWebFetch?: boolean };
-    setAllowWebSearch(tools.allowWebSearch ?? false);
-    setAllowWebFetch(tools.allowWebFetch ?? false);
-    setAllowGlab((profile as unknown as { allowGlab?: boolean }).allowGlab ?? false);
-    setAllowGh((profile as unknown as { allowGh?: boolean }).allowGh ?? false);
-    setNativeToolsText(
-      JSON.stringify(
-        (profile as unknown as { nativeToolPermissions?: unknown }).nativeToolPermissions ?? {},
-        null,
-        2,
-      ),
-    );
+    setAllowWebSearch(profile.allowWebSearch);
+    setAllowWebFetch(profile.allowWebFetch);
+    setAllowGlab(profile.allowGlab);
+    setAllowGh(profile.allowGh);
+    setNativeToolsText(JSON.stringify(profile.nativeToolPermissions ?? {}, null, 2));
     setAgentIds(profile.agentIds);
     setSkillSlugs(profile.skillSlugs);
     const resources = ((profile as WorkerProfile & { resources?: Record<string, unknown> }).resources ?? {}) as {
@@ -824,9 +819,10 @@ function WorkersPageInner() {
                         </p>
                         <p
                           className="truncate font-mono text-xs text-muted-foreground"
-                          title={`${profile.image}:${profile.imageTag}`}
+                          title={`${profile.image}:${profile.imageTag || platformVersion || "platform tag"}`}
                         >
-                          {profile.image}:{profile.imageTag}
+                          {profile.image}:
+                          {profile.imageTag || `${platformVersion ?? "platform tag"} (follows the platform)`}
                         </p>
                         <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                           <Badge variant="secondary">
@@ -880,11 +876,6 @@ function WorkersPageInner() {
                         <Button size="sm" variant="outline" onClick={() => openEdit(profile)}>
                           <Pencil /> Edit
                         </Button>
-                        <ShareResourceDialog size="sm" variant="outline"
-                          resource="worker_profiles"
-                          resourceId={profile.id}
-                          resourceName={profile.name}
-                        />
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -896,6 +887,17 @@ function WorkersPageInner() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onSelect={async () => {
+                                if (await copyText(profile.id)) toast.success("Profile ID copied");
+                                else toast.error("Copying is not available in this browser");
+                              }}
+                            >
+                              <Copy /> Copy profile ID
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => void exportResource("worker_profiles", profile.id, profile.name)}>
+                              <Download /> Export as JSON
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               onSelect={() =>
                                 toggle.mutate({ id: profile.id, enabled: !profile.enabled })
@@ -1308,27 +1310,29 @@ function WorkersPageInner() {
                         label="Tag"
                         htmlFor="wp-tag"
                         hint={
-                          platformVersion && tag !== platformVersion ? (
-                            <>
-                              Defaults to the platform image tag.{" "}
-                              <button
-                                type="button"
-                                className="text-primary underline-offset-2 hover:underline"
-                                onClick={() => setTag(platformVersion)}
-                              >
-                                Use {platformVersion}
-                              </button>
-                            </>
-                          ) : (
-                            "Defaults to the platform image tag."
-                          )
+                          <>
+                            Leave empty to follow the platform&apos;s version; the worker is then
+                            relaunched automatically after an upgrade.
+                            {platformVersion && tag && tag !== platformVersion ? (
+                              <>
+                                {" "}
+                                <button
+                                  type="button"
+                                  className="text-primary underline-offset-2 hover:underline"
+                                  onClick={() => setTag("")}
+                                >
+                                  Follow the platform ({platformVersion})
+                                </button>
+                              </>
+                            ) : null}
+                          </>
                         }
                       >
                         <Input
                           id="wp-tag"
                           className="font-mono text-[13px]"
                           value={tag}
-                          placeholder="Release version"
+                          placeholder={platformVersion ? `${platformVersion} (follows the platform)` : "Follows the platform"}
                           onChange={(event) => setTag(event.target.value)}
                         />
                       </Field>
@@ -1554,6 +1558,7 @@ function WorkersPageInner() {
             </div>
           </div>
 
+          {editing ? <ResourceAccessFields resource="worker_profiles" resourceId={editing.id} /> : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
