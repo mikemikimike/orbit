@@ -6,6 +6,13 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
+## [Unreleased]
+
+### Fixed
+
+- The OpenCode MCP config writer no longer overwrites `opencode.json`; it merges, so
+  `websearch`, `tools` and `permission` settings survive.
+
 ## [0.16.2] - 2026-11-18
 
 ### Fixed

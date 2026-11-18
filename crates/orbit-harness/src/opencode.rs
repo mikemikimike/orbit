@@ -325,9 +325,24 @@ fn write_open_code_mcp_config(workspace: &Path, bridge: &OrbitMcpBridge) -> std:
     if bridge.command.is_empty() {
         return Ok(());
     }
-    let config = json!({
-        "$schema": "https://opencode.ai/config.json",
-        "mcp": {
+    let path = workspace.join("opencode.json");
+    let mut config: serde_json::Value = if path.exists() {
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_else(|| serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+    if !config.is_object() {
+        config = serde_json::json!({});
+    }
+    let root = config.as_object_mut().unwrap();
+    root.entry("$schema")
+        .or_insert_with(|| json!("https://opencode.ai/config.json"));
+    root.insert(
+        "mcp".into(),
+        json!({
             "servers": {
                 "orbit": {
                     "type": "local",
@@ -335,10 +350,10 @@ fn write_open_code_mcp_config(workspace: &Path, bridge: &OrbitMcpBridge) -> std:
                     "environment": bridge.environment,
                 }
             }
-        }
-    });
+        }),
+    );
     std::fs::write(
-        workspace.join("opencode.json"),
+        &path,
         serde_json::to_string_pretty(&config).unwrap_or_else(|_| "{}".into()),
     )
 }
@@ -1085,6 +1100,17 @@ mod permission_tests {
         assert_eq!(config["tools"]["websearch"], false);
         assert_eq!(config["tools"]["webfetch"], true);
         assert_eq!(config["websearch"], false);
+        let bridge = OrbitMcpBridge {
+            command: vec!["orbit".into()],
+            environment: Default::default(),
+        };
+        write_open_code_mcp_config(&dir, &bridge).unwrap();
+        let merged: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("opencode.json")).unwrap())
+                .unwrap();
+        assert_eq!(merged["tools"]["websearch"], false);
+        assert_eq!(merged["websearch"], false);
+        assert!(merged["mcp"]["servers"]["orbit"].is_object());
         let _ = std::fs::remove_dir_all(dir);
     }
 }
