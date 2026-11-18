@@ -19,7 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { randomId } from "@/lib/browser";
-import { unwrap } from "@/lib/queries";
+import { unwrap, useHarnesses } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 
 export function RunAgentDialog({
@@ -41,6 +41,8 @@ export function RunAgentDialog({
   const [payloadText, setPayloadText] = useState("{}");
   const [idempotencyKey, setIdempotencyKey] = useState(() => randomId());
   const [submitting, setSubmitting] = useState(false);
+  const [harness, setHarness] = useState("");
+  const harnesses = useHarnesses();
 
   async function run() {
     if (!task.trim()) {
@@ -59,7 +61,12 @@ export function RunAgentDialog({
       const execution = unwrap(
         await api.POST("/api/v1/agents/{agent_id}/executions", {
           params: { path: { agent_id: agentId } },
-          body: { task, payload, idempotencyKey },
+          body: {
+            task,
+            payload,
+            idempotencyKey,
+            harnessOverride: harness || undefined,
+          },
           headers: { "idempotency-key": idempotencyKey },
         }),
       );
@@ -103,6 +110,29 @@ export function RunAgentDialog({
             value={task}
             onChange={(event) => setTask(event.target.value)}
           />
+          <div className="space-y-1.5">
+            <Label>Harness</Label>
+            <select
+              className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+              value={harness}
+              onChange={(event) => setHarness(event.target.value)}
+            >
+              <option value="">Agent default</option>
+              {(harnesses.data ?? [])
+                .filter((item) => item.enabled)
+                .map((item) => (
+                  <option key={item.kind} value={item.kind}>
+                    {item.name} · {item.kind}
+                    {item.implementationStatus !== "available"
+                      ? ` · ${item.implementationStatus}`
+                      : ""}
+                  </option>
+                ))}
+            </select>
+            <p className="text-[11px] text-muted-foreground">
+              Override the runtime for this run. The agent definition stays unchanged.
+            </p>
+          </div>
           <details>
             <summary className="cursor-pointer text-xs text-muted-foreground">
               Payload / connector query (JSON, optional)

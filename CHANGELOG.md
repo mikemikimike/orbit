@@ -8,6 +8,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- Run dialogs for agents and Agent Teams expose an optional harness override, so one
+  agent can run on OpenCode or Pi without changing its definition.
+
+
 ### Documentation
 
 - ADR 0012: agents become harness-agnostic; harness is selected per execution/team step.

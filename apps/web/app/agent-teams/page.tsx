@@ -35,6 +35,7 @@ import {
   useAgentTeams,
   useConnections,
   useEnvMappings,
+  useHarnesses,
   useSkills,
   useTeamRuns,
   useWorkerProfiles,
@@ -69,6 +70,7 @@ export default function AgentTeamsPage() {
   const workerProfiles = useWorkerProfiles();
   const connections = useConnections();
   const envMappings = useEnvMappings();
+  const harnesses = useHarnesses();
   const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
@@ -99,6 +101,7 @@ export default function AgentTeamsPage() {
   const [task, setTask] = useState("");
   const [repository, setRepository] = useState("");
   const [autoApprove, setAutoApprove] = useState(false);
+  const [runHarness, setRunHarness] = useState("");
   const [detail, setDetail] = useState<TeamRunDetail | null>(null);
   const [queueTeam, setQueueTeam] = useState<AgentTeam | null>(null);
   const [queueItems, setQueueItems] = useState<TeamQueueItem[]>([]);
@@ -297,7 +300,8 @@ export default function AgentTeamsPage() {
   });
 
   const run = useMutation({
-    mutationFn: () => startTeamRun(runTeam!.id, task.trim(), repository, autoApprove),
+    mutationFn: () =>
+      startTeamRun(runTeam!.id, task.trim(), repository, autoApprove, runHarness || undefined),
     onSuccess: (result) => {
       toast.success("Agent team run started");
       setRunTeam(null);
@@ -416,6 +420,7 @@ export default function AgentTeamsPage() {
                     <Button
                       size="sm"
                       onClick={() => {
+                        setRunHarness("");
                         setRunTeam(team);
                         setTask(team.definition.instructions ?? "");
                         setRepository(team.definition.repository ?? "");
@@ -1053,6 +1058,21 @@ export default function AgentTeamsPage() {
               onChange={(event) => setRepository(event.target.value)}
               placeholder="owner/repo (optional if the connection sets defaultRepository)"
             />
+            <Label>Harness</Label>
+            <select
+              className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+              value={runHarness}
+              onChange={(event) => setRunHarness(event.target.value)}
+            >
+              <option value="">Team/agent default</option>
+              {(harnesses.data ?? [])
+                .filter((item) => item.enabled)
+                .map((item) => (
+                  <option key={item.kind} value={item.kind}>
+                    {item.name} · {item.kind}
+                  </option>
+                ))}
+            </select>
             <label className="flex items-start gap-2 rounded-lg border border-[hsl(var(--warning))]/40 bg-[hsl(var(--warning))]/10 p-3 text-xs">
               <input
                 type="checkbox"
