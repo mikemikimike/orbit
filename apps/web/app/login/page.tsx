@@ -7,20 +7,27 @@ import { KeyRound, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getAccessToken } from "@/lib/api";
+import { getAccessToken, setAccessToken } from "@/lib/api";
 import { beginOidcLogin } from "@/lib/oidc";
-import { useMeta } from "@/lib/queries";
+import { useMe, useMeta } from "@/lib/queries";
 
 export default function LoginPage() {
   const meta = useMeta();
+  const me = useMe();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const auth = (meta.data?.auth ?? {}) as { mode?: string; issuer?: string };
   const oidc = auth.mode === "oidc";
 
   useEffect(() => {
-    if (getAccessToken()) router.replace("/");
-  }, [router]);
+    if (!getAccessToken()) return;
+    if (me.isSuccess) {
+      router.replace("/");
+    } else if (me.isError) {
+      // Expired/foreign token: clear it instead of treating it as a session.
+      setAccessToken(null);
+    }
+  }, [me.isSuccess, me.isError, router]);
 
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-md items-center">

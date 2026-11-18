@@ -254,6 +254,23 @@ pub async fn execute_agent(
             })?,
         },
     };
+    if let Some(record) = state
+        .store
+        .get_harness_by_kind(auth.org_id, harness_kind.as_str())
+        .await?
+    {
+        if !record.enabled || record.implementation_status != "available" {
+            return Err(ApiError::validation(vec![
+                orbit_domain::ValidationIssue::new(
+                    "harness",
+                    format!(
+                        "harness '{}' is {} and cannot run executions",
+                        harness_kind, record.implementation_status
+                    ),
+                ),
+            ]));
+        }
+    }
     let placement = spec
         .harness
         .as_ref()
@@ -507,4 +524,125 @@ pub async fn stream_execution_events(
             .interval(Duration::from_secs(15))
             .text("keep-alive"),
     ))
+}
+
+#[utoipa::path(post, path = "/api/v1/executions/{execution_id}/rerun", tag = "executions", responses((status = 202, body = ExecutionRecord)))]
+pub async fn rerun_execution(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(execution_id): Path<Uuid>,
+) -> Result<(StatusCode, Json<ExecutionRecord>), ApiError> {
+    auth.require(Permission::ExecutionsCreate)?;
+    let original = require_execution_view(&state, &auth, execution_id).await?;
+    if !matches!(
+        ExecutionStatus::parse(&original.status),
+        Some(status) if status.is_terminal()
+    ) {
+        return Err(ApiError::conflict("only terminal executions can be rerun"));
+    }
+    let agent = state
+        .store
+        .get_agent(auth.org_id, original.agent_id)
+        .await?;
+    if agent.status == "archived" {
+        return Err(ApiError::bad_request("archived agents cannot be executed"));
+    }
+    let access = crate::access::AccessScope::load(&state, &auth).await?;
+    access.require_use(
+        "agent",
+        agent.owner_user_id,
+        agent.owner_team_id,
+        &agent.visibility,
+    )?;
+    let version = state
+        .store
+        .get_agent_version_by_id(auth.org_id, original.agent_version_id)
+        .await?;
+    let spec: orbit_domain::AgentSpec = serde_json::from_value(version.spec)
+        .map_err(|error| ApiError::internal(format!("stored agent spec is invalid: {error}")))?;
+    let active = state
+        .store
+        .count_active_executions_for_agent(auth.org_id, original.agent_id)
+        .await?;
+    if active >= spec.resources.max_concurrent_executions as i64 {
+        return Err(ApiError::conflict(
+            "agent concurrency limit reached; retry after a running execution finishes",
+        ));
+    }
+    let since = chrono::Utc::now() - chrono::Duration::hours(24);
+    state.enforce_limit(
+        "executions_per_day",
+        state
+            .store
+            .count_all_executions_since(auth.org_id, since)
+            .await?,
+    )?;
+    let harness_kind = original
+        .harness_kind
+        .parse::<orbit_domain::HarnessKind>()
+        .map_err(|_| ApiError::internal("stored execution has an unknown harness"))?;
+    let mut input = original.input.clone();
+    if let Some(object) = input.as_object_mut() {
+        object.insert("rerunOf".into(), serde_json::json!(original.id));
+    }
+    let idempotency_key = format!("rerun:{}:{}", original.id, Uuid::now_v7());
+    let execution = state
+        .store
+        .create_execution(orbit_store::executions::NewExecution {
+            org_id: auth.org_id,
+            agent_id: original.agent_id,
+            agent_version_id: original.agent_version_id,
+            agent_name: &original.agent_name,
+            harness_kind,
+            trigger_source: TriggerSource::Manual,
+            placement: &original.placement,
+            trigger_id: None,
+            input,
+            skills: &original.skills,
+            timeout_seconds: original.timeout_seconds.max(1) as u64,
+            requested_by: Some(auth.user_id),
+            idempotency_key: Some(&idempotency_key),
+            team_run_id: None,
+            team_step_index: None,
+        })
+        .await?;
+    let event = OrbitEvent::new(
+        subjects::EXECUTION_REQUESTED,
+        "orbit-api",
+        serde_json::json!({
+            "executionId": execution.id,
+            "agentId": execution.agent_id,
+            "harness": execution.harness_kind,
+            "rerunOf": original.id,
+        }),
+    )
+    .with_org(auth.org_id)
+    .with_idempotency(format!("exec:{}", execution.id));
+    if let Err(err) = state.bus.publish(event).await {
+        tracing::warn!(error = %err, "rerun event publish failed; worker polling will pick up the execution");
+    }
+    let _ = state
+        .store
+        .append_execution_event(
+            auth.org_id,
+            execution.id,
+            "status",
+            orbit_domain::LogLevel::Info,
+            &format!(
+                "execution queued as rerun of {}; waiting for a {} worker",
+                original.id, execution.harness_kind
+            ),
+            &serde_json::json!({ "rerunOf": original.id, "harness": execution.harness_kind }),
+        )
+        .await;
+    audit::record(
+        &state,
+        &auth,
+        "execution.rerun",
+        Some("execution"),
+        Some(execution.id),
+        serde_json::json!({ "rerunOf": original.id }),
+    )
+    .await;
+    Ok((StatusCode::ACCEPTED, Json(execution)))
 }

@@ -119,7 +119,7 @@ export function RunAgentDialog({
             >
               <option value="">Agent default</option>
               {(harnesses.data ?? [])
-                .filter((item) => item.enabled)
+                .filter((item) => item.enabled && item.implementationStatus === "available")
                 .map((item) => (
                   <option key={item.kind} value={item.kind}>
                     {item.name} · {item.kind}

@@ -17,6 +17,7 @@ import {
   Copy,
   Cpu,
   Radio,
+  RotateCw,
   Terminal,
   Wrench,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExecutionStatusBadge } from "@/components/ui/status-badge";
 import { api } from "@/lib/api";
+import { request } from "@/lib/http";
 import { copyText } from "@/lib/browser";
 import {
   queryKeys,
@@ -98,6 +100,18 @@ export default function ExecutionDetailPage() {
       toast.success("Cancellation requested");
       void queryClient.invalidateQueries({ queryKey: queryKeys.execution(executionId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.executions() });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const rerun = useMutation({
+    mutationFn: async () =>
+      request<{ id: string }>(`/api/v1/executions/${executionId}/rerun`, {
+        method: "POST",
+      }),
+    onSuccess: (result) => {
+      toast.success("Execution queued again");
+      window.location.assign(`/executions/${result.id}`);
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
@@ -180,6 +194,14 @@ export default function ExecutionDetailPage() {
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline">
               <Link href={`/agents/${execution.agentId}`}>Open agent</Link>
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!terminal}
+              loading={rerun.isPending}
+              onClick={() => rerun.mutate()}
+            >
+              <RotateCw /> Rerun
             </Button>
             <Button
               variant="outline"
