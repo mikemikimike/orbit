@@ -15,4 +15,5 @@ Practical, task-oriented documentation. For design rationale see
 | Tool policy and approvals | [tool-policies.md](tool-policies.md) |
 | Outputs (webhooks, Slack, Mattermost) | [outputs.md](outputs.md) |
 | Kubernetes connector (read-only) | [kubernetes-connector.md](kubernetes-connector.md) |
+| CLI tools (glab/gh escape hatch) | [cli-tools.md](cli-tools.md) |
 | Providers and models | [providers.md](providers.md) |

@@ -10,6 +10,7 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- `glab` and `gh` are bundled in the OpenCode/Pi worker images (pinned versions).
 - Worker-profile `allowGlab` / `allowGh` (default false). When enabled and a team GitLab/
   GitHub connection is attached, the execution environment receives `GITLAB_TOKEN` /
   `GH_TOKEN` (plus host) for CLI tools. Tokens are exposed to shell tools in that execution.

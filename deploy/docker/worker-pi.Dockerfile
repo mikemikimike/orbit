@@ -11,6 +11,22 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git \
     && rm -rf /var/lib/apt/lists/*
 
+# Opt-in CLI escape hatches (worker-profile allowGlab/allowGh). Pinned for reproducibility.
+ARG GH_VERSION=2.105.0
+ARG GLAB_VERSION=1.131.0
+RUN curl -fsSL --retry 3 \
+       "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
+       -o /tmp/gh.tar.gz \
+    && tar -xzf /tmp/gh.tar.gz -C /tmp \
+    && install -m 0755 "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/local/bin/gh \
+    && curl -fsSL --retry 3 \
+       "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/glab_${GLAB_VERSION}_linux_amd64.tar.gz" \
+       -o /tmp/glab.tar.gz \
+    && tar -xzf /tmp/glab.tar.gz -C /tmp \
+    && install -m 0755 /tmp/bin/glab /usr/local/bin/glab \
+    && rm -f /tmp/gh.tar.gz /tmp/glab.tar.gz \
+    && gh --version && glab --version
+
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
