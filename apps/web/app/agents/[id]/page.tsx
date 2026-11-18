@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { ExportResourceButton } from "@/components/export-resource-button";
 import { RunAgentDialog } from "@/components/agents/run-agent-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -157,6 +158,11 @@ export default function AgentDetailPage() {
           description={data.description || "No description yet."}
           actions={
             <>
+              <ExportResourceButton
+                resource="agents"
+                resourceId={data.id}
+                name={data.name}
+              />
               <Button asChild variant="outline">
                 <Link href={`/agents/${data.id}/edit`}>
                   <Pencil /> Edit

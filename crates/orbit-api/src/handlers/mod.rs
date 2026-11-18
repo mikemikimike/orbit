@@ -7,6 +7,7 @@ pub mod catalog;
 pub mod dashboard;
 pub mod env_mappings;
 pub mod executions;
+pub mod export;
 pub mod health;
 pub mod license;
 pub mod outputs;

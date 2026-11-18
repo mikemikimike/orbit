@@ -22,6 +22,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
+import { ExportResourceButton } from "@/components/export-resource-button";
 import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -495,6 +496,11 @@ function WorkersPageInner() {
                       <RotateCw /> Relaunch
                     </Button>
                   ) : null}
+                  <ExportResourceButton
+                    resource="worker_profiles"
+                    resourceId={profile.id}
+                    name={profile.name}
+                  />
                   <Button size="sm" onClick={() => setBootstrapProfile(profile)}>
                     <Boxes /> Bootstrap
                   </Button>
