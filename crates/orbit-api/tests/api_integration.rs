@@ -1245,3 +1245,62 @@ async fn community_license_blocks_team_and_sharing_writes() {
     assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
     assert_eq!(body["error"]["code"], "license_required");
 }
+
+#[tokio::test]
+async fn same_agent_queues_on_different_harnesses() {
+    let Some(app) = test_app(true).await else {
+        return;
+    };
+    let mut value = definition();
+    value["spec"].as_object_mut().unwrap().remove("harness");
+    let definition: orbit_domain::AgentDefinition = serde_json::from_value(value).unwrap();
+    let owner = app
+        .store
+        .list_users(app.org_id)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|user| user.role == "owner")
+        .unwrap();
+    let (agent, _) = app
+        .store
+        .create_agent(app.org_id, Some(owner.id), &definition)
+        .await
+        .unwrap();
+    app.store
+        .set_agent_status(app.org_id, agent.id, orbit_domain::AgentStatus::Active)
+        .await
+        .unwrap();
+    app.store
+        .set_platform_setting(
+            "harness_default",
+            &json!({ "default": "mock" }),
+            Some(owner.id),
+        )
+        .await
+        .unwrap();
+
+    let (status, first) = send(
+        &app.router,
+        auth_post(
+            &format!("/api/v1/agents/{}/executions", agent.id),
+            "test-token",
+            json!({ "task": "default harness" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(first["harnessKind"], "mock");
+
+    let (status, second) = send(
+        &app.router,
+        auth_post(
+            &format!("/api/v1/agents/{}/executions", agent.id),
+            "test-token",
+            json!({ "task": "pi override", "harness": "pi" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(second["harnessKind"], "pi");
+}
