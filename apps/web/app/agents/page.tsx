@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bot, Plus, Search } from "lucide-react";
+import { Bot, LayoutGrid, List, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ import { api } from "@/lib/api";
 import { queryKeys, unwrap, useAgents } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 import { Card, CardContent } from "@/components/ui/card";
+import { AgentStatusBadge } from "@/components/ui/status-badge";
+import { relativeTime, titleCase } from "@/lib/utils";
 
 const FILTERS = [
   { value: "", label: "All" },
@@ -28,6 +30,7 @@ const FILTERS = [
 export default function AgentsPage() {
   const [status, setStatus] = useState("active");
   const [search, setSearch] = useState("");
+  const [view, setView] = useState<"grid" | "list">("grid");
   const [query, setQuery] = useState("");
   const agents = useAgents({ status: status || undefined, q: query || undefined, limit: 50 });
   const queryClient = useQueryClient();
@@ -94,6 +97,26 @@ export default function AgentsPage() {
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
+        <div className="flex rounded-lg border p-0.5">
+          <Button
+            type="button"
+            size="sm"
+            variant={view === "grid" ? "secondary" : "ghost"}
+            onClick={() => setView("grid")}
+            title="Card view"
+          >
+            <LayoutGrid />
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={view === "list" ? "secondary" : "ghost"}
+            onClick={() => setView("list")}
+            title="Compact list"
+          >
+            <List />
+          </Button>
+        </div>
         <div className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto px-1 py-0.5">
           {FILTERS.map((filter) => (
             <Button
@@ -121,24 +144,48 @@ export default function AgentsPage() {
         </Card>
       ) : agents.data?.items.length ? (
         <>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {agents.data.items.map((agent) => (
-              <AgentCard
-                key={agent.id}
-                agent={agent}
-                onRestore={(id) => restore.mutate(id)}
-                onDelete={(id) => {
-                  if (
-                    window.confirm(
-                      `Permanently delete ${agent.name}? This removes the agent and its execution history and cannot be undone.`,
-                    )
-                  ) {
-                    hardDelete.mutate(id);
-                  }
-                }}
-              />
-            ))}
-          </div>
+          {view === "grid" ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {agents.data.items.map((agent) => (
+                <AgentCard
+                  key={agent.id}
+                  agent={agent}
+                  onRestore={(id) => restore.mutate(id)}
+                  onDelete={(id) => {
+                    if (
+                      window.confirm(
+                        `Permanently delete ${agent.name}? This removes the agent and its execution history and cannot be undone.`,
+                      )
+                    ) {
+                      hardDelete.mutate(id);
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <Card className="overflow-hidden">
+              {agents.data.items.map((agent) => (
+                <Link
+                  key={agent.id}
+                  href={`/agents/${agent.id}`}
+                  className="flex items-center gap-3 border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/40"
+                >
+                  <AgentStatusBadge status={agent.status} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{agent.name}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {agent.harness ? titleCase(agent.harness) : "harness at run time"} ·{" "}
+                      {agent.connectorCount} connectors
+                    </p>
+                  </div>
+                  <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:block">
+                    v{agent.currentVersion} · {relativeTime(agent.updatedAt)}
+                  </span>
+                </Link>
+              ))}
+            </Card>
+          )}
           <p className="text-center text-xs text-muted-foreground">
             {agents.data.items.length} of {agents.data.total} agents
           </p>
