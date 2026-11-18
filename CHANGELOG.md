@@ -10,6 +10,7 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- Helm: `auth.oidc.teamGroups` is exported as `ORBIT_OIDC_TEAM_GROUPS`.
 - OIDC `teamGroups` mapping (env `ORBIT_OIDC_TEAM_GROUPS`) adds users to access teams by
   IdP group, additively, with `lead`/`member`/`viewer` roles.
 

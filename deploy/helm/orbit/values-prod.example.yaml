@@ -122,6 +122,8 @@ auth:
     # Optional group → role mapping (Dex/Keycloak must return the claim).
     roleClaim: groups
     groupRoles: {}
+    # Optional IdP group -> "access-team-slug:role" mapping (lead/member/viewer).
+    teamGroups: {}
     syncRoles: false
 
 # Manage secrets externally (Vault, External Secrets, sealed-secrets, …).

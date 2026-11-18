@@ -196,6 +196,8 @@ spec:
               value: {{ .Values.auth.oidc.roleClaim | quote }}
             - name: ORBIT_OIDC_GROUP_ROLES
               value: {{ .Values.auth.oidc.groupRoles | toJson | quote }}
+            - name: ORBIT_OIDC_TEAM_GROUPS
+              value: {{ .Values.auth.oidc.teamGroups | toJson | quote }}
             - name: ORBIT_OIDC_SYNC_ROLES
               value: {{ .Values.auth.oidc.syncRoles | quote }}
             {{- end }}
