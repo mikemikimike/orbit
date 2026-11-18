@@ -289,18 +289,11 @@ function WorkersPageInner() {
     const scoped = (profile as WorkerProfile & { agentScope?: string }).agentScope === "selected";
     setAgentScope(scoped ? "selected" : "all");
     setEnvMappingIds([]);
-    const tools = profile as unknown as { allowWebSearch?: boolean; allowWebFetch?: boolean };
-    setAllowWebSearch(tools.allowWebSearch ?? false);
-    setAllowWebFetch(tools.allowWebFetch ?? false);
-    setAllowGlab((profile as unknown as { allowGlab?: boolean }).allowGlab ?? false);
-    setAllowGh((profile as unknown as { allowGh?: boolean }).allowGh ?? false);
-    setNativeToolsText(
-      JSON.stringify(
-        (profile as unknown as { nativeToolPermissions?: unknown }).nativeToolPermissions ?? {},
-        null,
-        2,
-      ),
-    );
+    setAllowWebSearch(profile.allowWebSearch);
+    setAllowWebFetch(profile.allowWebFetch);
+    setAllowGlab(profile.allowGlab);
+    setAllowGh(profile.allowGh);
+    setNativeToolsText(JSON.stringify(profile.nativeToolPermissions ?? {}, null, 2));
     setAgentIds(profile.agentIds);
     setSkillSlugs(profile.skillSlugs);
     const resources = ((profile as WorkerProfile & { resources?: Record<string, unknown> }).resources ?? {}) as {
