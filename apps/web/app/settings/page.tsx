@@ -219,6 +219,10 @@ export default function SettingsPage() {
         />
       </div>
 
+      <DefaultHarnessCard />
+      <AccessPolicyCard />
+      <UsersRolesCard />
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
