@@ -256,6 +256,10 @@ pub fn build_router(state: AppState) -> Router {
             get(handlers::dashboard::dashboard_summary),
         )
         .route(
+            "/api/v1/settings/harness",
+            get(handlers::settings::get_harness).put(handlers::settings::update_harness),
+        )
+        .route(
             "/api/v1/settings/access",
             get(handlers::settings::get_access).put(handlers::settings::update_access),
         )

@@ -269,3 +269,52 @@ pub async fn update_access(
         .await?;
     Ok(Json(body))
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct HarnessSettings {
+    /// Harness used when an execution/trigger does not select one.
+    pub default_harness: Option<String>,
+}
+
+#[utoipa::path(get, path = "/api/v1/settings/harness", tag = "settings", responses((status = 200, body = HarnessSettings)))]
+pub async fn get_harness(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> Result<Json<HarnessSettings>, ApiError> {
+    auth.require(Permission::SettingsRead)?;
+    let value = state
+        .store
+        .get_platform_setting("harness_default")
+        .await?
+        .unwrap_or_else(|| serde_json::json!({}));
+    Ok(Json(HarnessSettings {
+        default_harness: value
+            .get("default")
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+    }))
+}
+
+#[utoipa::path(put, path = "/api/v1/settings/harness", tag = "settings", request_body = HarnessSettings, responses((status = 200, body = HarnessSettings)))]
+pub async fn update_harness(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Json(body): Json<HarnessSettings>,
+) -> Result<Json<HarnessSettings>, ApiError> {
+    auth.require(Permission::SettingsWrite)?;
+    if let Some(harness) = &body.default_harness {
+        harness.parse::<orbit_domain::HarnessKind>().map_err(|_| {
+            ApiError::validation(vec![orbit_domain::ValidationIssue::new(
+                "defaultHarness",
+                "unknown harness",
+            )])
+        })?;
+    }
+    let value = serde_json::json!({ "default": body.default_harness });
+    state
+        .store
+        .set_platform_setting("harness_default", &value, Some(auth.user_id))
+        .await?;
+    Ok(Json(body))
+}
