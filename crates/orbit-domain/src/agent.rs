@@ -591,6 +591,7 @@ mod tests {
     fn minimal_spec() -> AgentSpec {
         AgentSpec {
             harness: Some(HarnessSpec::new(HarnessKind::Mock)),
+            harness_config: Default::default(),
             model: ModelSpec::default(),
             instructions: Instructions {
                 system: "Be helpful.".into(),
