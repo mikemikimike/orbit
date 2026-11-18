@@ -280,55 +280,10 @@ export function AgentForm({
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Braces className="h-4 w-4 text-primary" /> Harness &amp; model
+                <Braces className="h-4 w-4 text-primary" /> Model
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className={fieldClass}>
-                <Label>Harness</Label>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {(harnesses.data ?? []).map((harness) => {
-                    const active = formHarness.type === harness.kind;
-                    return (
-                      <button
-                        key={harness.kind}
-                        type="button"
-                        onClick={() =>
-                          updateSpec({
-                            harness: {
-                              ...formHarness,
-                              type: harness.kind as NonNullable<AgentDefinition["spec"]["harness"]>["type"],
-                            },
-                          })
-                        }
-                        className={cn(
-                          "rounded-lg border p-3 text-left transition-colors",
-                          active
-                            ? "border-primary bg-accent/60 ring-1 ring-primary/40"
-                            : "hover:bg-muted/50",
-                        )}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-sm font-medium">{harness.name}</span>
-                          <ImplementationBadge status={harness.implementationStatus} />
-                        </div>
-                        <p className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
-                          {harness.description}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-                {selectedHarness && selectedHarness.implementationStatus !== "available" ? (
-                  <p className="flex items-start gap-1.5 rounded-md bg-[hsl(var(--warning))]/10 p-2 text-[11px] text-[hsl(var(--warning))]">
-                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    {selectedHarness.implementationStatus === "scaffolded"
-                      ? "This adapter is scaffolded: configuration and preflight work, but task execution is not enabled yet in this build."
-                      : "This harness is registered but not implemented yet. Executions will fail closed."}
-                  </p>
-                ) : null}
-              </div>
-
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className={fieldClass}>
                   <Label>Placement</Label>
@@ -535,48 +490,6 @@ export function AgentForm({
                 </div>
               </div>
 
-              <div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-primary hover:underline"
-                    onClick={() => setAdvancedOpen((open) => !open)}
-                  >
-                    {advancedOpen ? "Hide" : "Show"} harness-specific configuration (JSON)
-                  </button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => configFileRef.current?.click()}
-                  >
-                    Upload JSON
-                  </Button>
-                  <input
-                    ref={configFileRef}
-                    type="file"
-                    accept=".json"
-                    className="hidden"
-                    onChange={handleConfigUpload}
-                  />
-                </div>
-                {advancedOpen ? (
-                  <div className="mt-2 space-y-1.5">
-                    <Textarea
-                      className="min-h-[120px] font-mono text-xs"
-                      value={harnessConfigText}
-                      onChange={(event) => setHarnessConfigText(event.target.value)}
-                      placeholder="{}"
-                    />
-                    {configError ? <p className="text-[11px] text-destructive">{configError}</p> : null}
-                    <p className={helpClass}>
-                      Passed to the harness adapter unchanged. OpenCode accepts{" "}
-                      <code className="font-mono">binary</code>, <code className="font-mono">provider</code>,{" "}
-                      <code className="font-mono">agent</code>, <code className="font-mono">extraArgs</code>.
-                    </p>
-                  </div>
-                ) : null}
-              </div>
             </CardContent>
           </Card>
 
