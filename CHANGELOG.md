@@ -10,6 +10,9 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- Worker-profile `allowGlab` / `allowGh` (default false). When enabled and a team GitLab/
+  GitHub connection is attached, the execution environment receives `GITLAB_TOKEN` /
+  `GH_TOKEN` (plus host) for CLI tools. Tokens are exposed to shell tools in that execution.
 - Worker-profile OpenCode toggles `allowWebSearch` / `allowWebFetch` (default false).
   ORBIT writes OpenCode `permission.websearch` / `permission.webfetch`, preventing
   headless runs from aborting on an interactive Web Search request.

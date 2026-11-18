@@ -139,6 +139,8 @@ async fn seed_worker_profile(
             &json!({}),
             false,
             false,
+            false,
+            false,
         )
         .await?;
     tracing::info!(

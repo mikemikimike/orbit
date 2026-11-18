@@ -528,6 +528,10 @@ pub struct WorkerProfile {
     pub allow_web_search: bool,
     #[sqlx(default)]
     pub allow_web_fetch: bool,
+    #[sqlx(default)]
+    pub allow_glab: bool,
+    #[sqlx(default)]
+    pub allow_gh: bool,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

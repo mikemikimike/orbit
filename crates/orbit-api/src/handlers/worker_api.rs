@@ -407,7 +407,7 @@ async fn build_context(
     slugs.sort();
     slugs.dedup();
     let skills = state.store.skills_by_slugs(org_id, &slugs).await?;
-    let env = resolve_team_env(&state.store, org_id, execution).await;
+    let env = resolve_team_env(&state.store, org_id, execution, profile).await;
     let tool_policies = state
         .store
         .effective_tool_policy_rules(org_id, execution.agent_id)
@@ -492,8 +492,69 @@ async fn resolve_team_env(
     store: &Store,
     org_id: Uuid,
     execution: &ExecutionRecord,
+    profile: Option<&WorkerProfile>,
 ) -> Vec<ResolvedEnv> {
     let mut resolved = Vec::new();
+    if let Some(profile) = profile {
+        for connection_id in team_ids(execution, "connectionIds") {
+            let Ok(row) = store
+                .get_connection_with_connector(org_id, connection_id)
+                .await
+            else {
+                continue;
+            };
+            let Some(reference) = row.connection.credential_ref.as_deref() else {
+                continue;
+            };
+            let Ok(Some(secret)) = store.get_secret_value(reference).await else {
+                continue;
+            };
+            let token = secret.expose().to_string();
+            if profile.allow_glab && row.connector_slug == "gitlab" {
+                resolved.push(ResolvedEnv {
+                    env_var: "GITLAB_TOKEN".into(),
+                    value: token.clone(),
+                });
+                if let Some(root) = row
+                    .connection
+                    .config
+                    .get("cloneBaseUrl")
+                    .or_else(|| row.connection.config.get("baseUrl"))
+                    .and_then(|value| value.as_str())
+                {
+                    resolved.push(ResolvedEnv {
+                        env_var: "GITLAB_HOST".into(),
+                        value: root
+                            .trim_end_matches("/api/v4")
+                            .trim_end_matches('/')
+                            .to_string(),
+                    });
+                }
+            }
+            if profile.allow_gh && row.connector_slug == "github" {
+                resolved.push(ResolvedEnv {
+                    env_var: "GH_TOKEN".into(),
+                    value: token,
+                });
+                if let Some(host) = row
+                    .connection
+                    .config
+                    .get("baseUrl")
+                    .and_then(|value| value.as_str())
+                {
+                    resolved.push(ResolvedEnv {
+                        env_var: "GH_HOST".into(),
+                        value: host
+                            .trim_start_matches("https://")
+                            .trim_start_matches("http://")
+                            .trim_end_matches("/api/v3")
+                            .trim_end_matches('/')
+                            .to_string(),
+                    });
+                }
+            }
+        }
+    }
     for mapping_id in team_ids(execution, "envMappingIds") {
         let Ok(mapping) = store.get_env_mapping(org_id, mapping_id).await else {
             continue;

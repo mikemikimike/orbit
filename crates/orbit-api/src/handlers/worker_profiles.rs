@@ -54,6 +54,10 @@ pub struct CreateWorkerProfileRequest {
     /// Allow OpenCode's built-in WebFetch tool. Default false for headless runs.
     #[serde(default)]
     pub allow_web_fetch: bool,
+    #[serde(default)]
+    pub allow_glab: bool,
+    #[serde(default)]
+    pub allow_gh: bool,
 }
 
 async fn require_profile_manage(
@@ -429,6 +433,8 @@ pub async fn create_profile(
             &resources,
             body.allow_web_search,
             body.allow_web_fetch,
+            body.allow_glab,
+            body.allow_gh,
         )
         .await?;
     state
@@ -569,6 +575,8 @@ pub async fn update_profile(
             &resources,
             body.allow_web_search,
             body.allow_web_fetch,
+            body.allow_glab,
+            body.allow_gh,
         )
         .await?;
     state

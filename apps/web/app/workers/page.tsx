@@ -95,6 +95,8 @@ function WorkersPageInner() {
   const [workspaceSize, setWorkspaceSize] = useState("1Gi");
   const [allowWebSearch, setAllowWebSearch] = useState(false);
   const [allowWebFetch, setAllowWebFetch] = useState(false);
+  const [allowGlab, setAllowGlab] = useState(false);
+  const [allowGh, setAllowGh] = useState(false);
   const [confirmRelaunch, setConfirmRelaunch] = useState(false);
 
   // Pre-fill from Work wizard query params.
@@ -194,6 +196,8 @@ function WorkersPageInner() {
         envMappingIds,
         allowWebSearch,
         allowWebFetch,
+        allowGlab,
+        allowGh,
         resources: {
           requests: { cpu: cpuRequest || undefined, memory: memoryRequest || undefined },
           limits: { cpu: cpuLimit || undefined, memory: memoryLimit || undefined },
@@ -260,6 +264,8 @@ function WorkersPageInner() {
     setWorkspaceSize("1Gi");
     setAllowWebSearch(false);
     setAllowWebFetch(false);
+    setAllowGlab(false);
+    setAllowGh(false);
     setOpen(true);
   }
 
@@ -282,6 +288,8 @@ function WorkersPageInner() {
     const tools = profile as unknown as { allowWebSearch?: boolean; allowWebFetch?: boolean };
     setAllowWebSearch(tools.allowWebSearch ?? false);
     setAllowWebFetch(tools.allowWebFetch ?? false);
+    setAllowGlab((profile as unknown as { allowGlab?: boolean }).allowGlab ?? false);
+    setAllowGh((profile as unknown as { allowGh?: boolean }).allowGh ?? false);
     setAgentIds(profile.agentIds);
     setSkillSlugs(profile.skillSlugs);
     const resources = ((profile as WorkerProfile & { resources?: Record<string, unknown> }).resources ?? {}) as {
@@ -928,6 +936,29 @@ function WorkersPageInner() {
                   <p className="text-[11px] text-muted-foreground">
                     Both are disabled by default so headless OpenCode runs do not abort on
                     an interactive Web Search request.
+                  </p>
+                </div>
+                <div className="space-y-2 rounded-lg border p-3">
+                  <Label>CLI tools (token exposure)</Label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={allowGlab}
+                      onChange={(event) => setAllowGlab(event.target.checked)}
+                    />
+                    Allow glab with GITLAB_TOKEN from a team GitLab connection
+                  </label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={allowGh}
+                      onChange={(event) => setAllowGh(event.target.checked)}
+                    />
+                    Allow gh with GH_TOKEN from a team GitHub connection
+                  </label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Enabling this exposes the token to shell tools in the workspace. The
+                    image must contain glab/gh.
                   </p>
                 </div>
                 <Label>Environment variable mappings</Label>
