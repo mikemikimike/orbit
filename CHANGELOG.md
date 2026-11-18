@@ -24,6 +24,8 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 ### Added
 
 - Command palette (`⌘K` / `Ctrl+K`) for pages, agents and common actions.
+- A schedule trigger can carry its own task (`spec.triggers[].task`), used as the task of
+  every run it fires. Editable in Agent Studio; **Start work → On a schedule** creates one.
 - Execution timeline reads as a story: what the agent said, the tools it used, which
   connector actions were allowed, blocked or sent for approval, and what a person decided.
   Agent answers render as Markdown. A run that ends without a result shows the agent's
@@ -57,8 +59,8 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
   `runDefaults`.
 - "Restore" on an archived agent always failed (the API has no such transition); the
   button is gone and the archive dialog now says archiving cannot be undone.
-- Start work no longer offers options it does not act on (schedule, event and connector
-  starts, auto-approve, keep running); they are disabled with a pointer to agent triggers.
+- Start work no longer offers options it does not act on (event and connector starts,
+  auto-approve, keep running); they are disabled and say so.
 - New agent teams no longer save a hardcoded repository and description nobody typed.
 - Start work: choosing a harness hid every agent without a harness of its own, and draft
   agents could not be chosen. It also tried to launch a worker when one was already online.

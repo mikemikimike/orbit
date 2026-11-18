@@ -23,6 +23,7 @@ import { ImplementationBadge } from "@/components/ui/status-badge";
 import { StatusGlyph } from "@/components/ui/status";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  queryKeys,
   unwrap,
   useAgents,
   useAgentTeams,
@@ -34,6 +35,7 @@ import {
   useWorkers,
 } from "@/lib/queries";
 import { api } from "@/lib/api";
+import { toAgentDefinitionBody } from "@/lib/agent-body";
 import { errorMessage } from "@orbit/api-client";
 import { cn, titleCase } from "@/lib/utils";
 import { brandName, autonomyName, cronDescription } from "@/lib/presentation";
@@ -69,10 +71,49 @@ export default function WorkPage() {
   const queryClient = useQueryClient();
   const [creating, setCreating] = useState(false);
 
+  /**
+   * "On a schedule" adds a schedule trigger (cron + this task) to the agent by saving
+   * a new version, the same thing Agent Studio does, so it shows up and can be
+   * edited or removed there.
+   */
+  async function createSchedule() {
+    const detail = unwrap(
+      await api.GET("/api/v1/agents/{agent_id}", { params: { path: { agent_id: who } } }),
+    );
+    const spec = detail.spec as unknown as { triggers?: unknown[] };
+    const definition = {
+      apiVersion: "orbit.io/v1",
+      kind: "Agent",
+      metadata: {
+        name: detail.name,
+        description: detail.description,
+        labels: detail.labels ?? {},
+      },
+      spec: {
+        ...spec,
+        triggers: [...(spec.triggers ?? []), { type: "schedule", cron: cron.trim(), task: task.trim() }],
+      },
+    };
+    unwrap(
+      await api.PATCH("/api/v1/agents/{agent_id}", {
+        params: { path: { agent_id: who } },
+        body: { definition: toAgentDefinitionBody(definition as never) },
+      }),
+    );
+    void queryClient.invalidateQueries({ queryKey: queryKeys.agent(who) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.agents() });
+    toast.success("Schedule created");
+    router.push(`/agents/${who}`);
+  }
+
   async function createWork() {
     if (!who || !task.trim()) return;
     setCreating(true);
     try {
+      if (scheduled) {
+        await createSchedule();
+        return;
+      }
       if (whoType === "agent") {
         const result = unwrap(
           await api.POST("/api/v1/agents/{agent_id}/executions", {
@@ -177,7 +218,14 @@ export default function WorkPage() {
     !selectedAgent?.harness &&
     defaultHarnessKnown &&
     !defaultHarness;
-  const missing = !who
+  const scheduled = when === "schedule" && whoType === "agent";
+  const cronValid = cron.trim().split(/\s+/).length === 5;
+  const scheduleHarness = selectedAgent?.harness || defaultHarness;
+  const missing = scheduled && !cronValid
+    ? "Enter a cron expression with five fields"
+    : scheduled && selectedAgent && defaultHarnessKnown && !scheduleHarness
+      ? "Set a default harness in Settings first: a schedule runs on the agent's harness or the default"
+      : !who
     ? `Choose the ${whoType === "agent" ? "agent" : "team"} that does the work`
     : needsHarness
       ? `Choose a harness under Where: ${selectedAgent?.name} has none and no default is set`
@@ -207,16 +255,21 @@ export default function WorkPage() {
             <div role="radiogroup" aria-label="Trigger type" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {([
                 { value: "manual", label: "Now", desc: "Start as soon as you create it", icon: <Play /> },
-                { value: "schedule", label: "On a schedule", desc: "Repeat on a cron expression", icon: <CalendarClock /> },
-                { value: "event", label: "On an event", desc: "Start when an event arrives", icon: <Zap /> },
-                { value: "connector", label: "From a connector", desc: "Start on a connector message", icon: <Plug /> },
+                { value: "schedule", label: "On a schedule", desc: "Repeat it, for example every morning", icon: <CalendarClock /> },
+                { value: "event", label: "On an event", desc: "Not available yet", icon: <Zap /> },
+                { value: "connector", label: "From a connector", desc: "Not available yet", icon: <Plug /> },
               ] as const).map((opt) => (
                 <ChoiceCard
                   key={opt.value}
                   selected={when === opt.value}
                   onSelect={() => setWhen(opt.value)}
-                  // Only "Now" is wired up: the others would be collected and then ignored.
-                  disabled={opt.value !== "manual"}
+                  // Events and connector messages cannot start work yet; a schedule
+                  // belongs to one agent, so it is not offered for a team.
+                  disabled={
+                    opt.value === "event" ||
+                    opt.value === "connector" ||
+                    (opt.value === "schedule" && whoType === "team")
+                  }
                   title={opt.label}
                   description={opt.desc}
                   icon={opt.icon}
@@ -224,12 +277,8 @@ export default function WorkPage() {
               ))}
             </div>
             <p className="text-[13px] text-muted-foreground">
-              Work started here begins straight away. To repeat it on a schedule or react to an event,
-              add a trigger to the agent in{" "}
-              <Link href="/agents" className="font-medium text-primary underline-offset-4 hover:underline">
-                Agent Studio
-              </Link>
-              .
+              Starting on an event or a connector message is not available yet.
+              {whoType === "team" ? " Schedules are set per agent, so they are not offered for a team." : ""}
             </p>
             {when === "schedule" ? (
               <Field
@@ -245,6 +294,23 @@ export default function WorkPage() {
                   placeholder="*/30 * * * *"
                 />
               </Field>
+            ) : null}
+            {scheduled ? (
+              <Callout
+                tone={selectedAgent?.status === "draft" ? "warning" : "info"}
+                title={
+                  selectedAgent
+                    ? `This adds a schedule to ${selectedAgent.name}`
+                    : "This adds a schedule to the agent you choose"
+                }
+              >
+                The agent gets the task below every time the schedule fires, until you remove the
+                schedule on its page. It runs on the agent&apos;s own harness or the organization
+                default, wherever a matching worker is free.
+                {selectedAgent?.status === "draft"
+                  ? " This agent is still a draft: schedules only fire once it is activated."
+                  : ""}
+              </Callout>
             ) : null}
             {when === "event" ? (
               <Field label="Event subject" htmlFor="work-subject">
@@ -360,6 +426,7 @@ export default function WorkPage() {
               onChange={(value) => {
                 setWhoType(value);
                 setWho("");
+                if (value === "team" && when === "schedule") setWhen("manual");
               }}
               options={[
                 { value: "agent", label: <><Bot className="h-3.5 w-3.5" /> One agent</> },
@@ -493,7 +560,14 @@ export default function WorkPage() {
           <h2 className="text-[15px] font-semibold">Summary</h2>
           <dl className="mt-3 divide-y text-[13px]">
             <SummaryRow label="When" value={whenSummary} />
-            <SummaryRow label="Where" value={`${where === "auto" ? "Anywhere" : titleCase(where)}${harness ? `, ${brandName(harness)}` : ""}`} />
+            <SummaryRow
+              label="Where"
+              value={
+                scheduled
+                  ? `Any free worker, ${scheduleHarness ? brandName(scheduleHarness) : "default harness"}`
+                  : `${where === "auto" ? "Anywhere" : titleCase(where)}${harness ? `, ${brandName(harness)}` : ""}`
+              }
+            />
             <SummaryRow
               label="Who"
               value={(whoType === "agent" ? selectedAgent?.name : selectedTeam?.name) ?? null}
@@ -518,10 +592,13 @@ export default function WorkPage() {
             loading={creating}
             onClick={() => void createWork()}
           >
-            <Play /> Start work
+            {scheduled ? <CalendarClock /> : <Play />} {scheduled ? "Create schedule" : "Start work"}
           </Button>
           <p className="mt-2 text-center text-[13px] text-muted-foreground" aria-live="polite">
-            {missing ?? "Starts an execution and opens its live timeline."}
+            {missing ??
+              (scheduled
+                ? "Adds the schedule to the agent as a new version. Nothing runs until it next fires."
+                : "Starts an execution and opens its live timeline.")}
           </p>
         </Card>
       </div>

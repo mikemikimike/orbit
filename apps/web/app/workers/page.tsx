@@ -103,6 +103,14 @@ const LAUNCH_STATUS: Record<string, StatusMeta> = {
   stopped: { label: "Stopped", tone: "neutral", shape: "slash" },
 };
 
+/** The launcher is optional; when it is missing, say that instead of a transport error. */
+function launchErrorText(error: string): string {
+  if (/worker launcher request failed|launcher.*error sending request|no worker launcher/i.test(error)) {
+    return "ORBIT could not reach a worker launcher, so nothing was started. Start this worker with Bootstrap, or configure the launcher.";
+  }
+  return error;
+}
+
 function launchStatusMeta(status: string): StatusMeta {
   return LAUNCH_STATUS[status] ?? { label: titleCase(status), tone: "neutral", shape: "ring" };
 }
@@ -609,7 +617,12 @@ function WorkersPageInner() {
   const liveCount = workerList.filter((worker) => worker.live).length;
   const staleCount = workerList.length - liveCount;
   const launchList = launches.data ?? [];
-  const failedLaunches = launchList.filter((item) => item.status === "failed");
+  // Only fresh failures raise the alarm. Old ones stay in History, where they are a
+  // record rather than something to act on now.
+  const FRESH_MS = 15 * 60 * 1000;
+  const failedLaunches = launchList.filter(
+    (item) => item.status === "failed" && Date.now() - new Date(item.updatedAt).getTime() < FRESH_MS,
+  );
   const enabledCount = (profiles.data ?? []).filter((profile) => profile.enabled).length;
 
   const summary: ReactNode[] = [];
@@ -675,7 +688,7 @@ function WorkersPageInner() {
           }
         >
           {failedLaunches[0].error
-            ? `${failedLaunches[0].name}: ${failedLaunches[0].error}`
+            ? `${failedLaunches[0].name}: ${launchErrorText(failedLaunches[0].error)}`
             : `${failedLaunches[0].name} did not start. Open its logs for details.`}
         </Callout>
       ) : null}
@@ -738,7 +751,7 @@ function WorkersPageInner() {
                   <div className="col-span-2 flex flex-wrap gap-1.5 md:col-span-1">
                     {worker.harnesses.map((item) => (
                       <Badge key={item} variant="secondary">
-                        {titleCase(item)}
+                        {brandName(item)}
                       </Badge>
                     ))}
                   </div>
@@ -1604,14 +1617,22 @@ function LaunchRow({
             {relaunchRequired ? <Badge variant="warning">Relaunch required</Badge> : null}
           </div>
           <p className="text-[13px] text-muted-foreground">
-            {targetLabel(item.target)} target. Worker{" "}
-            <span className="break-all font-mono text-xs">{item.workerId ?? "not assigned"}</span>
+            {targetLabel(item.target)} target.{" "}
+            {item.workerId ? (
+              <>
+                Worker <span className="break-all font-mono text-xs">{item.workerId}</span>
+              </>
+            ) : (
+              "No worker connected from this launch."
+            )}
           </p>
           <p className="truncate font-mono text-xs text-muted-foreground" title={item.image}>
             {item.image}
           </p>
           {item.error ? (
-            <p className="break-words text-[13px] text-destructive">{item.error}</p>
+            <p className="break-words text-[13px] text-destructive" title={item.error}>
+              {launchErrorText(item.error)}
+            </p>
           ) : null}
           <p className="text-xs text-muted-foreground">Updated {relativeTime(item.updatedAt)}</p>
         </div>

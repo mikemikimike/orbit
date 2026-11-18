@@ -211,6 +211,10 @@ pub enum TriggerSpec {
         cron: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         timezone: Option<String>,
+        /// What the agent is asked to do each time the schedule fires. Without it the
+        /// run gets a generic "perform your configured task" prompt.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        task: Option<String>,
     },
     Webhook {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -511,7 +515,17 @@ impl AgentSpec {
         }
         for (idx, trigger) in self.triggers.iter().enumerate() {
             match trigger {
-                TriggerSpec::Schedule { cron, timezone } => {
+                TriggerSpec::Schedule {
+                    cron,
+                    timezone,
+                    task,
+                } => {
+                    if task.as_deref().is_some_and(|task| task.len() > 20_000) {
+                        report.push(
+                            format!("spec.triggers[{idx}].task"),
+                            "task is too long (max 20000 characters)",
+                        );
+                    }
                     if cron.parse::<croner::Cron>().is_err() {
                         report.push(
                             format!("spec.triggers[{idx}].cron"),
@@ -585,6 +599,30 @@ impl FromStr for AgentDefinition {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn schedule_trigger_task_is_optional_and_round_trips() {
+        let without: TriggerSpec =
+            serde_json::from_value(serde_json::json!({ "type": "schedule", "cron": "0 9 * * *" }))
+                .unwrap();
+        assert!(matches!(without, TriggerSpec::Schedule { task: None, .. }));
+        // Older stored specs have no task; they must serialize back unchanged.
+        assert!(serde_json::to_value(&without)
+            .unwrap()
+            .get("task")
+            .is_none());
+
+        let with: TriggerSpec = serde_json::from_value(serde_json::json!({
+            "type": "schedule",
+            "cron": "0 9 * * *",
+            "task": "Summarise open issues",
+        }))
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(&with).unwrap()["task"],
+            "Summarise open issues"
+        );
+    }
+
     use super::*;
     use crate::ResourceLimits;
 
@@ -659,6 +697,7 @@ spec:
         spec.triggers.push(TriggerSpec::Schedule {
             cron: "not a cron".into(),
             timezone: None,
+            task: None,
         });
         let report = spec.validate();
         assert!(!report.is_valid());

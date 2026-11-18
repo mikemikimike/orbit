@@ -2627,6 +2627,11 @@ export interface components {
         TriggerSpec: {
             /** @description Standard 5-field cron expression, evaluated in UTC. */
             cron: string;
+            /**
+             * @description What the agent is asked to do each time the schedule fires. Without it the
+             *     run gets a generic "perform your configured task" prompt.
+             */
+            task?: string | null;
             timezone?: string | null;
             /** @enum {string} */
             type: "schedule";

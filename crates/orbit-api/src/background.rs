@@ -212,8 +212,22 @@ async fn fire_trigger_inner(state: &AppState, trigger: Trigger) -> anyhow::Resul
     }
 
     let fired_at = trigger.last_fired_at.unwrap_or_else(Utc::now);
+    // A schedule may carry its own task; otherwise the agent gets a generic prompt.
+    let task = trigger
+        .config
+        .get("task")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|task| !task.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            format!(
+                "Scheduled run for agent '{}'. Perform your configured monitoring task.",
+                agent.name
+            )
+        });
     let input = serde_json::json!({
-        "task": format!("Scheduled run for agent '{}'. Perform your configured monitoring task.", agent.name),
+        "task": task,
         "payload": { "triggerId": trigger.id, "firedAt": fired_at },
         "provenance": {
             "source": "schedule",

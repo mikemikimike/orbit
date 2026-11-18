@@ -27,14 +27,26 @@ pub(crate) async fn sync_agent_triggers(
 
     for spec in triggers {
         let (kind, config, next_run_at) = match spec {
-            TriggerSpec::Schedule { cron, timezone } => {
+            TriggerSpec::Schedule {
+                cron,
+                timezone,
+                task,
+            } => {
                 let next = cron
                     .parse::<croner::Cron>()
                     .ok()
                     .and_then(|parsed| parsed.find_next_occurrence(&Utc::now(), false).ok());
                 (
                     "schedule",
-                    json!({ "cron": cron, "timezone": timezone }),
+                    // The task travels in the trigger config, where the scheduler reads it.
+                    match task
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|task| !task.is_empty())
+                    {
+                        Some(task) => json!({ "cron": cron, "timezone": timezone, "task": task }),
+                        None => json!({ "cron": cron, "timezone": timezone }),
+                    },
                     next,
                 )
             }

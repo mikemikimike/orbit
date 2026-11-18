@@ -936,9 +936,27 @@ export function AgentForm({
                       className="font-mono"
                       value={trigger.cron}
                       onChange={(event) =>
-                        updateTrigger(index, { type: "schedule", cron: event.target.value })
+                        updateTrigger(index, { ...trigger, cron: event.target.value })
                       }
                       placeholder="*/30 * * * *"
+                    />
+                  </Field>
+                ) : null}
+                {trigger.type === "schedule" ? (
+                  <Field
+                    label="Task"
+                    optional
+                    htmlFor={`trigger-task-${index}`}
+                    hint="What the agent is asked to do each time this schedule fires. Leave empty for a general “do your configured task” prompt."
+                  >
+                    <Textarea
+                      id={`trigger-task-${index}`}
+                      className="min-h-[72px]"
+                      value={trigger.task ?? ""}
+                      onChange={(event) =>
+                        updateTrigger(index, { ...trigger, task: event.target.value || undefined })
+                      }
+                      placeholder="Summarise the issues opened since yesterday."
                     />
                   </Field>
                 ) : null}

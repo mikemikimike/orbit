@@ -189,10 +189,27 @@ export function cronDescription(cron: string | null | undefined): string {
     if (minute === "0" && hour === "0") return "Every day at midnight";
     if (minute === "0" && hour !== "*") return `Every day at ${formatHour(hour)}`;
   }
-  if (dayOfWeek !== "*" && minute === "0" && hour !== "*") {
-    return `Every ${dayOfWeek} at ${formatHour(hour)}`;
+  if (dayOfMonth === "*" && month === "*" && dayOfWeek !== "*" && minute === "0" && hour !== "*") {
+    return `${describeWeekdays(dayOfWeek)} at ${formatHour(hour)} UTC`;
   }
   return cron;
+}
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+/** "1-5" → "Every weekday", "1" → "Every Monday", "1,3" → "Every Monday and Wednesday". */
+function describeWeekdays(field: string): string {
+  if (field === "1-5") return "Every weekday";
+  if (field === "0,6" || field === "6,0" || field === "6,7") return "Every weekend day";
+  const range = field.match(/^(\d)-(\d)$/);
+  if (range && WEEKDAYS[Number(range[1])] && WEEKDAYS[Number(range[2])]) {
+    return `Every ${WEEKDAYS[Number(range[1])]} to ${WEEKDAYS[Number(range[2])]}`;
+  }
+  const days = field.split(",").map((part) => WEEKDAYS[Number(part)]);
+  if (days.every(Boolean)) {
+    return `Every ${days.length > 1 ? `${days.slice(0, -1).join(", ")} and ${days.at(-1)}` : days[0]}`;
+  }
+  return `On days ${field}`;
 }
 
 function formatHour(value: string): string {

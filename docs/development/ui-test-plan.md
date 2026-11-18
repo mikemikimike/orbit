@@ -172,7 +172,9 @@ approvals UI is still being finished.
 | Step | Expected |
 |---|---|
 | Open `/work` (sidebar **Start work**) | One page with five numbered sections (When, Where, Who, What, Then) and a Summary that stays in view on desktop |
-| When | Only **Now** can be chosen; schedule, event and connector starts are disabled with a pointer to agent triggers |
+| When → Now | Default; **Start work** queues one execution |
+| When → On a schedule | Cron field and a notice naming the agent; the button reads **Create schedule**; saving adds a schedule trigger with this task to the agent (new version) and opens the agent, where the trigger and its task are listed. Disabled for an agent team |
+| When → event / connector | Disabled, marked “Not available yet” |
 | Where | Placement cards (anywhere/local/docker/kubernetes) and harness cards, including **Agent default** |
 | Where → pick a harness | Matching worker profiles are shown, or a create link |
 | Who → Agent or Agent Team | Agents are filtered by the chosen harness; teams are listed |

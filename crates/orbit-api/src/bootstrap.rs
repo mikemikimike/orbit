@@ -182,6 +182,7 @@ async fn seed_demo(store: &Store, org_id: Uuid, config: &ApiConfig) -> anyhow::R
             vec![TriggerSpec::Schedule {
                 cron: "*/30 * * * *".into(),
                 timezone: None,
+                task: None,
             }],
             2,
             120,

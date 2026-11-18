@@ -38,6 +38,9 @@ type Row = { envVar: string; connectionId: string; secretKey: string };
 
 const EMPTY_ROW: Row = { envVar: "", connectionId: "", secretKey: "" };
 
+/** A name a shell and a process environment will both accept. */
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 export default function EnvironmentMappingsPage() {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
@@ -74,6 +77,18 @@ export default function EnvironmentMappingsPage() {
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
+
+  // Say what is missing instead of only disabling the button.
+  const filled = rows.filter((row) => row.envVar.trim());
+  const problem = !name.trim()
+    ? "Give the mapping a name."
+    : !filled.length
+      ? "Add at least one variable."
+      : filled.some((row) => !ENV_NAME.test(row.envVar.trim()))
+        ? "Fix the variable names marked above."
+        : filled.some((row) => !row.connectionId && !row.secretKey.trim())
+          ? "Every variable needs a connection or a stored secret key."
+          : null;
 
   const remove = useMutation({
     mutationFn: deleteEnvMapping,
@@ -237,24 +252,24 @@ export default function EnvironmentMappingsPage() {
                 <div>
                   <h3 className="text-[15px] font-semibold">Variables</h3>
                   <p className="mt-0.5 text-[13px] text-muted-foreground">
-                    Take a value from a connection, or reference a stored secret. Inline mappings on
-                    a worker profile override these.
+                    Each variable takes its value from a connection&apos;s credential or from a
+                    stored secret. A variable set directly on a worker profile wins over these.
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setRows((current) => [...current, EMPTY_ROW])}
-                >
-                  <Plus /> Add variable
-                </Button>
               </div>
               <ul className="space-y-2">
                 {rows.map((row, index) => (
                   <li key={index} className="rounded-lg border bg-card p-3">
                     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
-                      <Field label="Variable" htmlFor={`em-${index}-var`}>
+                      <Field
+                        label="Variable name"
+                        htmlFor={`em-${index}-var`}
+                        error={
+                          row.envVar.trim() && !ENV_NAME.test(row.envVar.trim())
+                            ? "Letters, digits and underscores only, not starting with a digit"
+                            : undefined
+                        }
+                      >
                         <Input
                           id={`em-${index}-var`}
                           value={row.envVar}
@@ -263,13 +278,13 @@ export default function EnvironmentMappingsPage() {
                           onChange={(event) => updateRow(index, { envVar: event.target.value })}
                         />
                       </Field>
-                      <Field label="Connection" htmlFor={`em-${index}-conn`}>
+                      <Field label="Value from connection" htmlFor={`em-${index}-conn`}>
                         <Select
                           id={`em-${index}-conn`}
                           value={row.connectionId}
                           onChange={(event) => updateRow(index, { connectionId: event.target.value })}
                         >
-                          <option value="">No connection</option>
+                          <option value="">None</option>
                           {(connections.data ?? []).map((connection) => (
                             <option key={connection.id} value={connection.id}>
                               {connection.name} ({connection.connectorSlug})
@@ -277,9 +292,11 @@ export default function EnvironmentMappingsPage() {
                           ))}
                         </Select>
                       </Field>
-                      <Field label="Secret reference" htmlFor={`em-${index}-secret`} optional>
+                      <Field label="or stored secret key" htmlFor={`em-${index}-secret`}>
                         <Input
                           id={`em-${index}-secret`}
+                          className="font-mono text-[13px]"
+                          placeholder="NOTIFY_TOKEN"
                           value={row.secretKey}
                           onChange={(event) => updateRow(index, { secretKey: event.target.value })}
                         />
@@ -298,13 +315,24 @@ export default function EnvironmentMappingsPage() {
                   </li>
                 ))}
               </ul>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setRows((current) => [...current, EMPTY_ROW])}
+              >
+                <Plus /> Add variable
+              </Button>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="sm:items-center">
+            <span className="text-[13px] text-muted-foreground sm:mr-auto" aria-live="polite">
+              {problem ?? ""}
+            </span>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => create.mutate()} loading={create.isPending} disabled={!name.trim()}>
+            <Button onClick={() => create.mutate()} loading={create.isPending} disabled={Boolean(problem)}>
               Create mapping
             </Button>
           </DialogFooter>

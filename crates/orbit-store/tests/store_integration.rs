@@ -62,6 +62,7 @@ fn definition(name: &str) -> AgentDefinition {
             triggers: vec![TriggerSpec::Schedule {
                 cron: "*/15 * * * *".into(),
                 timezone: None,
+                task: None,
             }],
             autonomy: AutonomySpec {
                 level: 2,

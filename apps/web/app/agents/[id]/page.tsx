@@ -357,12 +357,21 @@ export default function AgentDetailPage() {
                       {data.triggers.map((trigger) => (
                         <li key={trigger.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 first:pt-0 last:pb-0">
                           <Badge variant="secondary">{titleCase(trigger.kind)}</Badge>
-                          <span className="min-w-0 flex-1 truncate text-sm">
-                            {trigger.kind === "schedule"
-                              ? cronDescription(String((trigger.config as { cron?: string }).cron ?? ""))
-                              : trigger.kind === "event"
-                                ? String((trigger.config as { subject?: string }).subject ?? "")
-                                : "Started by hand"}
+                          <span className="min-w-0 flex-1 text-sm">
+                            <span className="block truncate">
+                              {trigger.kind === "schedule"
+                                ? cronDescription(String((trigger.config as { cron?: string }).cron ?? ""))
+                                : trigger.kind === "event"
+                                  ? String((trigger.config as { subject?: string }).subject ?? "")
+                                  : trigger.kind === "webhook"
+                                    ? "Inbound webhook"
+                                    : "Started by hand"}
+                            </span>
+                            {(trigger.config as { task?: string }).task ? (
+                              <span className="mt-0.5 line-clamp-2 block text-[13px] text-muted-foreground">
+                                {(trigger.config as { task?: string }).task}
+                              </span>
+                            ) : null}
                           </span>
                           <span className="text-[13px] text-muted-foreground">
                             {trigger.enabled
