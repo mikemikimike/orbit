@@ -45,6 +45,7 @@ import {
   useLicense,
   useMe,
   useMeta,
+  useHarnesses,
 } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
 import { formatDateTime, relativeTime, titleCase } from "@/lib/utils";
@@ -577,6 +578,59 @@ function OidcSettingsForm() {
   );
 }
 
+
+function DefaultHarnessCard() {
+  const queryClient = useQueryClient();
+  const me = useMe();
+  const canManage = me.data?.permissions.includes("settings:write") ?? false;
+  const harnesses = useHarnesses();
+  const settings = useQuery({
+    queryKey: ["harness-settings"],
+    queryFn: () =>
+      request<{ defaultHarness?: string | null }>("/api/v1/settings/harness"),
+    enabled: canManage,
+  });
+  const save = useMutation({
+    mutationFn: (defaultHarness: string) =>
+      request("/api/v1/settings/harness", {
+        method: "PUT",
+        body: JSON.stringify({ defaultHarness: defaultHarness || null }),
+      }),
+    onSuccess: () => {
+      toast.success("Default harness updated");
+      void queryClient.invalidateQueries({ queryKey: ["harness-settings"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+  if (!canManage) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Cpu className="h-4 w-4 text-primary" /> Runtime
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <Label>Default harness</Label>
+        <select
+          className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+          value={settings.data?.defaultHarness ?? ""}
+          onChange={(event) => save.mutate(event.target.value)}
+        >
+          <option value="">No default (require explicit selection)</option>
+          {(harnesses.data ?? []).map((harness) => (
+            <option key={harness.kind} value={harness.kind}>
+              {harness.name} · {harness.kind}
+            </option>
+          ))}
+        </select>
+        <p className="text-[11px] text-muted-foreground">
+          Used for trigger/background runs until harness selection is stored on triggers.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 function AccessPolicyCard() {
   const queryClient = useQueryClient();

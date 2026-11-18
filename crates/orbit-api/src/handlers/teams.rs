@@ -64,6 +64,9 @@ pub struct CreateTeamRequest {
     /// Skills materialized for every step in the team.
     #[serde(default)]
     pub skills: Vec<String>,
+    /// Harness for team steps. Falls back to the legacy agent harness or org default.
+    #[serde(default)]
+    pub harness: Option<String>,
     #[serde(default)]
     pub connection_ids: Vec<Uuid>,
     #[serde(default)]
@@ -118,6 +121,8 @@ pub struct TeamDefinition {
     pub auto_launch: bool,
     #[serde(default)]
     pub skills: Vec<String>,
+    #[serde(default)]
+    pub harness: Option<String>,
     #[serde(default)]
     pub connection_ids: Vec<Uuid>,
     #[serde(default)]
@@ -226,7 +231,13 @@ async fn validate_native_primary(
         return;
     };
     match serde_json::from_value::<orbit_domain::AgentSpec>(version.spec) {
-        Ok(spec) if spec.harness.kind == HarnessKind::OpenCode => {}
+        Ok(spec)
+            if spec
+                .harness
+                .as_ref()
+                .map(|harness| harness.kind)
+                .unwrap_or(HarnessKind::OpenCode)
+                == HarnessKind::OpenCode => {}
         Ok(_) => issues.push(ValidationIssue::new(
             "mode",
             "native Agent Teams currently require an OpenCode primary agent; Pi and other harnesses can use pipeline mode",
@@ -405,6 +416,7 @@ pub async fn create_team(
         "workerProfileId": body.worker_profile_id,
         "autoLaunch": body.auto_launch,
         "skills": body.skills,
+        "harness": body.harness,
         "connectionIds": body.connection_ids,
         "envMappingIds": body.env_mapping_ids,
         "timeoutSeconds": body.timeout_seconds,
@@ -567,6 +579,7 @@ pub async fn update_team(
         "workerProfileId": body.worker_profile_id,
         "autoLaunch": body.auto_launch,
         "skills": body.skills,
+        "harness": body.harness,
         "connectionIds": body.connection_ids,
         "envMappingIds": body.env_mapping_ids,
         "timeoutSeconds": body.timeout_seconds,
@@ -752,8 +765,28 @@ pub(crate) async fn start_step(
     } else {
         task_text
     };
+    let requested_harness = run
+        .input
+        .get("payload")
+        .and_then(|value| value.get("harnessOverride"))
+        .and_then(|value| value.as_str())
+        .or(definition.harness.as_deref());
+    let harness_kind = match requested_harness {
+        Some(value) => value.parse::<HarnessKind>().map_err(|_| {
+            ApiError::validation(vec![ValidationIssue::new("harness", "unknown harness")])
+        })?,
+        None => match spec.harness.as_ref().map(|harness| harness.kind) {
+            Some(kind) => kind,
+            None => state.default_harness().await.ok_or_else(|| {
+                ApiError::validation(vec![ValidationIssue::new(
+                    "harness",
+                    "no team harness, legacy agent harness or default harness is configured",
+                )])
+            })?,
+        },
+    };
     let native = definition.mode == "native";
-    if native && spec.harness.kind != HarnessKind::OpenCode {
+    if native && harness_kind != HarnessKind::OpenCode {
         return Err(ApiError::conflict(
             "native Agent Teams currently require an OpenCode primary agent",
         ));
@@ -799,15 +832,13 @@ pub(crate) async fn start_step(
             agent_id: agent.id,
             agent_version_id: version.id,
             agent_name: &agent.name,
-            harness_kind: run
-                .input
-                .get("payload")
-                .and_then(|value| value.get("harnessOverride"))
-                .and_then(|value| value.as_str())
-                .and_then(|value| value.parse::<orbit_domain::HarnessKind>().ok())
-                .unwrap_or(spec.harness.kind),
+            harness_kind,
             trigger_source: TriggerSource::Manual,
-            placement: spec.harness.placement.as_str(),
+            placement: spec
+                .harness
+                .as_ref()
+                .map(|harness| harness.placement.as_str())
+                .unwrap_or("auto"),
             trigger_id: None,
             input,
             skills: &definition.skills,

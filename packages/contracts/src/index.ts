@@ -63,12 +63,14 @@ export const resourceLimitsSchema = z.object({
 });
 
 export const agentSpecSchema = z.object({
-  harness: z.object({
-    type: harnessKindSchema,
-    executionMode: executionModeSchema.default("on_demand"),
-    placement: placementTargetSchema.default("auto"),
-    config: z.record(z.string(), z.unknown()).default({}),
-  }),
+  harness: z
+    .object({
+      type: harnessKindSchema,
+      executionMode: executionModeSchema.default("on_demand"),
+      placement: placementTargetSchema.default("auto"),
+      config: z.record(z.string(), z.unknown()).default({}),
+    })
+    .optional(),
   model: z
     .object({
       management: modelManagementSchema.default("harness"),

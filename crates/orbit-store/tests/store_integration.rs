@@ -45,12 +45,13 @@ fn definition(name: &str) -> AgentDefinition {
             labels: Default::default(),
         },
         spec: AgentSpec {
-            harness: HarnessSpec {
+            harness: Some(HarnessSpec {
                 kind: HarnessKind::Mock,
                 execution_mode: ExecutionMode::OnDemand,
                 placement: orbit_domain::PlacementTarget::Auto,
                 config: serde_json::json!({}),
-            },
+            }),
+            harness_config: Default::default(),
             model: ModelSpec::default(),
             instructions: Instructions {
                 system: "You are a test agent.".into(),

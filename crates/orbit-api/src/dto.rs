@@ -95,7 +95,7 @@ impl AgentSummary {
             status: agent.status.clone(),
             current_version: agent.current_version,
             labels: agent.labels.clone(),
-            harness: spec.map(|s| s.harness.kind),
+            harness: spec.and_then(|s| s.harness.as_ref().map(|harness| harness.kind)),
             autonomy_level: spec.map(|s| s.autonomy.level),
             model: spec.and_then(|s| s.model.model.clone().or_else(|| s.model.provider.clone())),
             connector_count: spec.map(|s| s.connectors.len()).unwrap_or(0),
@@ -200,7 +200,9 @@ pub struct CreateExecutionRequest {
     /// Skills to materialize for this execution, in addition to the agent spec.
     #[serde(default)]
     pub skills: Vec<String>,
-    /// Override the agent's stored harness for this execution.
+    /// Harness for this execution. `harnessOverride` is accepted as a legacy alias.
+    #[serde(default)]
+    pub harness: Option<String>,
     #[serde(default)]
     pub harness_override: Option<String>,
 }
@@ -431,6 +433,9 @@ impl From<ConnectionWithConnector> for ConnectionView {
 pub struct CreateTriggerRequest {
     pub agent_id: Uuid,
     pub kind: String,
+    /// Optional harness for executions fired by this trigger.
+    #[serde(default)]
+    pub harness: Option<String>,
     #[serde(default)]
     pub config: serde_json::Value,
     #[serde(default)]

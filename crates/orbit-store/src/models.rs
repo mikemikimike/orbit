@@ -217,6 +217,8 @@ pub struct Trigger {
     pub visibility: String,
     pub agent_id: Uuid,
     pub kind: String,
+    #[sqlx(default)]
+    pub harness_kind: Option<String>,
     pub enabled: bool,
     pub config: serde_json::Value,
     pub last_fired_at: Option<DateTime<Utc>>,
