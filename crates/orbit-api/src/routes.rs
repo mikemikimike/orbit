@@ -256,6 +256,10 @@ pub fn build_router(state: AppState) -> Router {
             get(handlers::dashboard::dashboard_summary),
         )
         .route(
+            "/api/v1/settings/access",
+            get(handlers::settings::get_access).put(handlers::settings::update_access),
+        )
+        .route(
             "/api/v1/settings/oidc",
             get(handlers::settings::get_oidc).put(handlers::settings::update_oidc),
         )

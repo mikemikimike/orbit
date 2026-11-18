@@ -16,6 +16,8 @@ pub struct AccessScope {
     pub role: UserRole,
     /// team_id -> role (`lead`, `member`, `viewer`)
     pub teams: BTreeMap<Uuid, String>,
+    /// Non-admins only see resources owned by their teams.
+    pub team_isolation: bool,
 }
 
 impl AccessScope {
@@ -26,10 +28,19 @@ impl AccessScope {
             .await?
             .into_iter()
             .collect();
+        let team_isolation = state
+            .store
+            .get_platform_setting("team_isolation")
+            .await
+            .ok()
+            .flatten()
+            .and_then(|value| value.get("enabled").and_then(|enabled| enabled.as_bool()))
+            .unwrap_or(true);
         Ok(Self {
             user_id: auth.user_id,
             role: auth.role,
             teams,
+            team_isolation,
         })
     }
 
@@ -62,6 +73,11 @@ impl AccessScope {
         }
         if owner_user_id == Some(self.user_id) {
             return true;
+        }
+        if self.team_isolation {
+            if let Some(team_id) = owner_team_id {
+                return self.teams.contains_key(&team_id);
+            }
         }
         if self.leads_team(owner_team_id) {
             return true;
@@ -127,6 +143,7 @@ mod tests {
                 .iter()
                 .map(|(id, role)| (*id, (*role).to_string()))
                 .collect(),
+            team_isolation: false,
         }
     }
 
@@ -163,5 +180,16 @@ mod tests {
             assert!(access.can_view(Some(Uuid::now_v7()), Some(Uuid::now_v7()), "private"));
             assert!(access.can_manage(Some(Uuid::now_v7()), Some(Uuid::now_v7())));
         }
+    }
+
+    #[test]
+    fn team_isolation_hides_other_teams_even_for_org_visibility() {
+        let team_a = Uuid::now_v7();
+        let team_b = Uuid::now_v7();
+        let mut access = scope(UserRole::Operator, &[(team_a, "member")]);
+        access.team_isolation = true;
+        assert!(access.can_view(None, Some(team_a), "org"));
+        assert!(!access.can_view(None, Some(team_b), "org"));
+        assert!(!access.can_view(None, None, "private"));
     }
 }

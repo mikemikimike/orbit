@@ -10,6 +10,13 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- Strict team isolation (default on): non-admins only see resources owned by their teams,
+  regardless of org visibility. Migration adds existing users to the Default team.
+- Settings → Access policy toggle and `GET/PUT /api/v1/settings/access`.
+
+
+### Added
+
 - Settings → Users & roles UI: organization role assignment and custom-role CRUD with
   permission checkboxes (owner/admin only).
 

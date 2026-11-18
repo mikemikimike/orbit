@@ -578,6 +578,59 @@ function OidcSettingsForm() {
 }
 
 
+function AccessPolicyCard() {
+  const queryClient = useQueryClient();
+  const me = useMe();
+  const canManage = me.data?.permissions.includes("settings:write") ?? false;
+  const policy = useQuery({
+    queryKey: ["access-settings"],
+    queryFn: () =>
+      request<{ teamIsolation: boolean }>("/api/v1/settings/access"),
+    enabled: canManage,
+  });
+  const save = useMutation({
+    mutationFn: (teamIsolation: boolean) =>
+      request("/api/v1/settings/access", {
+        method: "PUT",
+        body: JSON.stringify({ teamIsolation }),
+      }),
+    onSuccess: () => {
+      toast.success("Access policy updated");
+      void queryClient.invalidateQueries({ queryKey: ["access-settings"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+  if (!canManage) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-primary" /> Access policy
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <label className="flex items-start gap-2 rounded-lg border p-3 text-xs">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={policy.data?.teamIsolation ?? true}
+            disabled={policy.isLoading || save.isPending}
+            onChange={(event) => save.mutate(event.target.checked)}
+          />
+          <span>
+            <span className="font-medium">Strict team isolation</span>
+            <span className="mt-0.5 block text-muted-foreground">
+              Non-admin users only see private resources or resources owned by their access
+              teams. Organization owners/admins still see everything. Existing users are
+              members of the Default team.
+            </span>
+          </span>
+        </label>
+      </CardContent>
+    </Card>
+  );
+}
+
 const PERMISSIONS = [
   "agents:read",
   "agents:write",

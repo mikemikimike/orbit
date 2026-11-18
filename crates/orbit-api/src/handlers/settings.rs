@@ -223,3 +223,49 @@ pub async fn apply_stored_oidc(
     auth.oidc = Some(oidc);
     auth
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessSettings {
+    /// Non-admins only see resources owned by their access teams.
+    pub team_isolation: bool,
+}
+
+fn access_settings(value: serde_json::Value) -> AccessSettings {
+    AccessSettings {
+        team_isolation: value
+            .get("enabled")
+            .and_then(|enabled| enabled.as_bool())
+            .unwrap_or(true),
+    }
+}
+
+#[utoipa::path(get, path = "/api/v1/settings/access", tag = "settings", responses((status = 200, body = AccessSettings)))]
+pub async fn get_access(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> Result<Json<AccessSettings>, ApiError> {
+    auth.require(Permission::SettingsRead)?;
+    Ok(Json(access_settings(
+        state
+            .store
+            .get_platform_setting("team_isolation")
+            .await?
+            .unwrap_or_else(|| serde_json::json!({ "enabled": true })),
+    )))
+}
+
+#[utoipa::path(put, path = "/api/v1/settings/access", tag = "settings", request_body = AccessSettings, responses((status = 200, body = AccessSettings)))]
+pub async fn update_access(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Json(body): Json<AccessSettings>,
+) -> Result<Json<AccessSettings>, ApiError> {
+    auth.require(Permission::SettingsWrite)?;
+    let value = serde_json::json!({ "enabled": body.team_isolation });
+    state
+        .store
+        .set_platform_setting("team_isolation", &value, Some(auth.user_id))
+        .await?;
+    Ok(Json(body))
+}
