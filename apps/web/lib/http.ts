@@ -1,6 +1,6 @@
 "use client";
 
-import { API_BASE_URL, getAccessToken } from "./api";
+import { API_BASE_URL, getAccessToken, setAccessToken } from "./api";
 
 /**
  * Authenticated JSON request against the control plane.
@@ -19,6 +19,14 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       "Content-Type": "application/json",
     },
   });
+  if (response.status === 401 && token) {
+    setAccessToken(null);
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      window.location.assign(
+        `/login?next=${encodeURIComponent(window.location.pathname)}`,
+      );
+    }
+  }
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as
       | { error?: { message?: string } }

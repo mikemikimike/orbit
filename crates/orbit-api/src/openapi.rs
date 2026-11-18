@@ -44,6 +44,7 @@ use crate::handlers;
         handlers::executions::list_agent_executions,
         handlers::executions::execute_agent,
         handlers::executions::cancel_execution,
+        handlers::executions::rerun_execution,
         handlers::executions::stream_execution_events,
         handlers::catalog::list_harnesses,
         handlers::catalog::list_workers,

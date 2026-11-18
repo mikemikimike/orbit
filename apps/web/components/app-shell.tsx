@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { getAccessToken } from "@/lib/api";
+import { getAccessToken, setAccessToken } from "@/lib/api";
 import { useDashboard, useMe, useMeta } from "@/lib/queries";
 
 interface NavItem {
@@ -125,11 +125,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const auth = (meta.data?.auth ?? {}) as { mode?: string };
     const publicPath = pathname.startsWith("/login") || pathname.startsWith("/auth/");
-    if (auth.mode === "oidc" && !publicPath && !getAccessToken()) {
-      const next = pathname === "/" ? "/" : pathname;
+    if (auth.mode !== "oidc" || publicPath) return;
+    const next = pathname === "/" ? "/" : pathname;
+    if (!getAccessToken()) {
+      router.replace(`/login?next=${encodeURIComponent(next)}`);
+    } else if (me.isError) {
+      setAccessToken(null);
       router.replace(`/login?next=${encodeURIComponent(next)}`);
     }
-  }, [meta.data?.auth, pathname, router]);
+  }, [meta.data?.auth, me.isError, pathname, router]);
 
   return (
     <div className="min-h-dvh bg-background">

@@ -138,19 +138,47 @@ pub async fn update_agent(
         if !report.is_valid() {
             return Err(ApiError::validation(report.issues));
         }
-        let (_, version) = state
-            .store
-            .add_agent_version(auth.org_id, agent_id, Some(auth.user_id), definition)
-            .await?;
-        audit::record(
-            &state,
-            &auth,
-            "agent.version_created",
-            Some("agent"),
-            Some(agent_id),
-            serde_json::json!({ "version": version.version }),
-        )
-        .await;
+        let agent = state.store.get_agent(auth.org_id, agent_id).await?;
+        let current = state.store.get_current_version(auth.org_id, &agent).await?;
+        let candidate_spec = serde_json::to_value(&definition.spec)
+            .map_err(|error| ApiError::internal(error.to_string()))?;
+        if current.spec == candidate_spec {
+            // Metadata-only edit (name/description/labels) must not create a duplicate
+            // spec version.
+            state
+                .store
+                .update_agent_metadata(
+                    auth.org_id,
+                    agent_id,
+                    Some(definition.metadata.name.trim()),
+                    Some(definition.metadata.description.as_str()),
+                    Some(&serde_json::to_value(&definition.metadata.labels).unwrap_or_default()),
+                )
+                .await?;
+            audit::record(
+                &state,
+                &auth,
+                "agent.updated",
+                Some("agent"),
+                Some(agent_id),
+                serde_json::json!({ "fields": ["metadata"] }),
+            )
+            .await;
+        } else {
+            let (_, version) = state
+                .store
+                .add_agent_version(auth.org_id, agent_id, Some(auth.user_id), definition)
+                .await?;
+            audit::record(
+                &state,
+                &auth,
+                "agent.version_created",
+                Some("agent"),
+                Some(agent_id),
+                serde_json::json!({ "version": version.version }),
+            )
+            .await;
+        }
     } else {
         let name = body
             .name

@@ -94,6 +94,10 @@ pub fn build_router(state: AppState) -> Router {
             post(handlers::executions::cancel_execution),
         )
         .route(
+            "/api/v1/executions/{execution_id}/rerun",
+            post(handlers::executions::rerun_execution),
+        )
+        .route(
             "/api/v1/agent-teams",
             get(handlers::teams::list_teams).post(handlers::teams::create_team),
         )

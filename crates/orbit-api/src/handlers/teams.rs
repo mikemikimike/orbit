@@ -785,6 +785,21 @@ pub(crate) async fn start_step(
             })?,
         },
     };
+    if let Some(record) = state
+        .store
+        .get_harness_by_kind(run.org_id, harness_kind.as_str())
+        .await?
+    {
+        if !record.enabled || record.implementation_status != "available" {
+            return Err(ApiError::validation(vec![ValidationIssue::new(
+                "harness",
+                format!(
+                    "harness '{}' is {} and cannot run team steps",
+                    harness_kind, record.implementation_status
+                ),
+            )]));
+        }
+    }
     let native = definition.mode == "native";
     if native && harness_kind != HarnessKind::OpenCode {
         return Err(ApiError::conflict(
