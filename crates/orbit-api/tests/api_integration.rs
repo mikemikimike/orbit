@@ -1253,6 +1253,7 @@ async fn same_agent_queues_on_different_harnesses() {
     };
     let mut value = definition();
     value["spec"].as_object_mut().unwrap().remove("harness");
+    value["spec"]["resources"]["maxConcurrentExecutions"] = json!(2);
     let definition: orbit_domain::AgentDefinition = serde_json::from_value(value).unwrap();
     let owner = app
         .store
