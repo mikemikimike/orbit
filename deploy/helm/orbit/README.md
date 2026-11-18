@@ -218,6 +218,7 @@ Mount at `/etc/orbit-license.jwt`; the API hot-reloads it (~60s) and exposes the
 | `auth.oidc.roleClaim` | `groups` | IdP claim with group/role values |
 | `auth.oidc.groupRoles` | `{}` | group → role mapping, e.g. `orbit-admins: admin` |
 | `auth.oidc.teamGroups` | `{}` | group → `team-slug:role`, e.g. `platform: platform:member` |
+| `auth.oidc.autoCreateTeams` | `false` | create missing access teams for mapped group slugs |
 | `auth.oidc.syncRoles` | `false` | re-evaluate the stored role on every login |
 | `secrets.create` / `secrets.existingSecret` | `true` / `""` | bring your own Secret in production |
 | `secrets.masterKey` | dev key | base64 32-byte AES key; replace for real deployments |

@@ -23,6 +23,20 @@ ORBIT_OIDC_TEAM_GROUPS='{"platform":"platform:member"}'
 - Values are `access-team-slug:role`, role `lead|member|viewer`.
 - Sync runs on authenticated OIDC requests and is additive; it never removes a membership.
 - Missing groups claim does nothing.
-- Missing team slug is logged and skipped.
+- Missing team slug is logged and skipped by default.
+- With `autoCreateTeams: true` (or `ORBIT_OIDC_AUTO_CREATE_TEAMS=true`), a missing
+  team slug is created automatically using the IdP group name and mapped role.
 - Requires the `teams` license feature.
 - Org role mapping (`groupRoles`) is independent and continues to work.
+
+Example for a `Devs` IdP group:
+
+```yaml
+auth:
+  oidc:
+    teamGroups:
+      Devs: devs:member
+    autoCreateTeams: true
+```
+
+The first login creates access team `devs` and adds the user as `member`.

@@ -209,9 +209,26 @@ async fn sync_oidc_teams(
         if !groups.iter().any(|value| value == group) {
             continue;
         }
-        let Some(team) = teams.iter().find(|team| &team.slug == team_slug) else {
-            tracing::warn!(%group, team = %team_slug, "OIDC team mapping references a missing team");
-            continue;
+        let team = match teams.iter().find(|team| &team.slug == team_slug) {
+            Some(team) => team.clone(),
+            None if oidc.auto_create_teams && orbit_domain::is_valid_slug(team_slug) => match state
+                .store
+                .create_access_team(org_id, group, team_slug, None)
+                .await
+            {
+                Ok(team) => {
+                    tracing::info!(%group, team = %team_slug, "created access team from OIDC group");
+                    team
+                }
+                Err(error) => {
+                    tracing::warn!(%error, %group, team = %team_slug, "could not create OIDC access team");
+                    continue;
+                }
+            },
+            None => {
+                tracing::warn!(%group, team = %team_slug, "OIDC team mapping references a missing team");
+                continue;
+            }
         };
         state
             .store
