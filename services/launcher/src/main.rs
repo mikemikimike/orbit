@@ -546,8 +546,14 @@ async fn launch_kubernetes(
             }));
             mounts.push(json!({
                 "name": "harness-auth",
-                "mountPath": "/home/orbit/.pi/agent"
+                "mountPath": "/seed/pi-agent",
+                "readOnly": true
             }));
+            command = vec![
+                "/bin/sh".into(),
+                "-c".into(),
+                "mkdir -p \"$HOME/.pi/agent\"; cp -a /seed/pi-agent/. \"$HOME/.pi/agent/\" 2>/dev/null || true; exec /usr/local/bin/orbit-worker".into(),
+            ];
         }
     }
     let resources = worker_resources(&request.resources);
