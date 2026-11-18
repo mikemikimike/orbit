@@ -48,6 +48,12 @@ pub struct CreateWorkerProfileRequest {
     pub env_mapping_ids: Vec<Uuid>,
     #[serde(default)]
     pub resources: serde_json::Value,
+    /// Allow OpenCode's built-in Web Search tool. Default false for headless runs.
+    #[serde(default)]
+    pub allow_web_search: bool,
+    /// Allow OpenCode's built-in WebFetch tool. Default false for headless runs.
+    #[serde(default)]
+    pub allow_web_fetch: bool,
 }
 
 async fn require_profile_manage(
@@ -421,6 +427,8 @@ pub async fn create_profile(
             &body.env,
             &body.env_mappings,
             &resources,
+            body.allow_web_search,
+            body.allow_web_fetch,
         )
         .await?;
     state
@@ -559,6 +567,8 @@ pub async fn update_profile(
             &body.env,
             &body.env_mappings,
             &resources,
+            body.allow_web_search,
+            body.allow_web_fetch,
         )
         .await?;
     state

@@ -84,6 +84,8 @@ pub struct WorkerSession {
     pub execution_driver: Option<String>,
     pub agent_ids: Vec<Uuid>,
     pub skill_slugs: Vec<String>,
+    pub allow_web_search: bool,
+    pub allow_web_fetch: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -235,8 +237,16 @@ pub async fn session(
     auth: WorkerAuth,
 ) -> Result<Json<WorkerSession>, ApiError> {
     let profile = active_profile(&state, &auth).await?;
-    let (harnesses, target, execution_driver, agent_ids, skill_slugs, profile_name) = match &profile
-    {
+    let (
+        harnesses,
+        target,
+        execution_driver,
+        agent_ids,
+        skill_slugs,
+        profile_name,
+        allow_web_search,
+        allow_web_fetch,
+    ) = match &profile {
         Some(profile) => (
             vec![profile.harness_kind.clone()],
             Some(profile.target.clone()),
@@ -244,6 +254,8 @@ pub async fn session(
             profile_agent_ids(profile),
             profile.skill_slugs.clone(),
             Some(profile.name.clone()),
+            profile.allow_web_search,
+            profile.allow_web_fetch,
         ),
         None => (
             auth.harnesses.clone(),
@@ -252,6 +264,8 @@ pub async fn session(
             Vec::new(),
             Vec::new(),
             None,
+            false,
+            false,
         ),
     };
     if harnesses.is_empty() {
@@ -268,6 +282,8 @@ pub async fn session(
         execution_driver,
         agent_ids,
         skill_slugs,
+        allow_web_search,
+        allow_web_fetch,
     }))
 }
 

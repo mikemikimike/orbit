@@ -524,6 +524,10 @@ pub struct WorkerProfile {
     #[sqlx(default)]
     pub env_mappings: serde_json::Value,
     pub resources: serde_json::Value,
+    #[sqlx(default)]
+    pub allow_web_search: bool,
+    #[sqlx(default)]
+    pub allow_web_fetch: bool,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

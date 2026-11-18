@@ -69,12 +69,15 @@ impl Store {
         env: &serde_json::Value,
         env_mappings: &serde_json::Value,
         resources: &serde_json::Value,
+        allow_web_search: bool,
+        allow_web_fetch: bool,
     ) -> StoreResult<WorkerProfile> {
         sqlx::query_as::<_, WorkerProfile>(
             r#"
             INSERT INTO worker_profiles (id, org_id, name, harness_kind, target, execution_driver,
-                image, image_tag, agent_scope, agent_ids, skill_slugs, provider, model, auth_secret_name, env, env_mappings, resources)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                image, image_tag, agent_scope, agent_ids, skill_slugs, provider, model, auth_secret_name, env, env_mappings, resources,
+                allow_web_search, allow_web_fetch)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
             RETURNING *
             "#,
         )
@@ -95,6 +98,8 @@ impl Store {
         .bind(env)
         .bind(env_mappings)
         .bind(resources)
+        .bind(allow_web_search)
+        .bind(allow_web_fetch)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| {
@@ -126,6 +131,8 @@ impl Store {
         env: &serde_json::Value,
         env_mappings: &serde_json::Value,
         resources: &serde_json::Value,
+        allow_web_search: bool,
+        allow_web_fetch: bool,
     ) -> StoreResult<WorkerProfile> {
         sqlx::query_as::<_, WorkerProfile>(
             r#"
@@ -133,7 +140,8 @@ impl Store {
             SET name = $3, harness_kind = $4, target = $5, execution_driver = $6,
                 image = $7, image_tag = $8, agent_scope = $9, agent_ids = $10,
                 skill_slugs = $11, provider = $12, model = $13, auth_secret_name = $14,
-                env = $15, env_mappings = $16, resources = $17, updated_at = now()
+                env = $15, env_mappings = $16, resources = $17,
+                allow_web_search = $18, allow_web_fetch = $19, updated_at = now()
             WHERE org_id = $1 AND id = $2
             RETURNING *
             "#,
@@ -155,6 +163,8 @@ impl Store {
         .bind(env)
         .bind(env_mappings)
         .bind(resources)
+        .bind(allow_web_search)
+        .bind(allow_web_fetch)
         .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| StoreError::NotFound("worker profile".into()))

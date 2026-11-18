@@ -736,6 +736,8 @@ async fn skills_profiles_and_agent_scoped_claims() {
             &serde_json::json!({}),
             &serde_json::json!([]),
             &serde_json::json!({}),
+            false,
+            false,
         )
         .await
         .unwrap();

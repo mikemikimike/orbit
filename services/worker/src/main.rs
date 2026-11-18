@@ -162,6 +162,8 @@ async fn main() -> anyhow::Result<()> {
         target,
         profile_agent_ids: session.agent_ids.clone(),
         profile_skill_slugs: session.skill_slugs.clone(),
+        allow_web_search: session.allow_web_search,
+        allow_web_fetch: session.allow_web_fetch,
         extra_env,
         active: Arc::new(tokio::sync::Mutex::new(std::collections::BTreeMap::new())),
     };

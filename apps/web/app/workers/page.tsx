@@ -93,6 +93,8 @@ function WorkersPageInner() {
   const [cpuLimit, setCpuLimit] = useState("1");
   const [memoryLimit, setMemoryLimit] = useState("1Gi");
   const [workspaceSize, setWorkspaceSize] = useState("1Gi");
+  const [allowWebSearch, setAllowWebSearch] = useState(false);
+  const [allowWebFetch, setAllowWebFetch] = useState(false);
   const [confirmRelaunch, setConfirmRelaunch] = useState(false);
 
   // Pre-fill from Work wizard query params.
@@ -190,6 +192,8 @@ function WorkersPageInner() {
           secretKey: m.secretKey || null,
         })),
         envMappingIds,
+        allowWebSearch,
+        allowWebFetch,
         resources: {
           requests: { cpu: cpuRequest || undefined, memory: memoryRequest || undefined },
           limits: { cpu: cpuLimit || undefined, memory: memoryLimit || undefined },
@@ -254,6 +258,8 @@ function WorkersPageInner() {
     setCpuLimit("1");
     setMemoryLimit("1Gi");
     setWorkspaceSize("1Gi");
+    setAllowWebSearch(false);
+    setAllowWebFetch(false);
     setOpen(true);
   }
 
@@ -273,6 +279,9 @@ function WorkersPageInner() {
     const scoped = (profile as WorkerProfile & { agentScope?: string }).agentScope === "selected";
     setAgentScope(scoped ? "selected" : "all");
     setEnvMappingIds([]);
+    const tools = profile as unknown as { allowWebSearch?: boolean; allowWebFetch?: boolean };
+    setAllowWebSearch(tools.allowWebSearch ?? false);
+    setAllowWebFetch(tools.allowWebFetch ?? false);
     setAgentIds(profile.agentIds);
     setSkillSlugs(profile.skillSlugs);
     const resources = ((profile as WorkerProfile & { resources?: Record<string, unknown> }).resources ?? {}) as {
@@ -898,6 +907,29 @@ function WorkersPageInner() {
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <div className="flex items-center justify-between">
+                <div className="space-y-2 rounded-lg border p-3">
+                  <Label>OpenCode web tools</Label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={allowWebSearch}
+                      onChange={(event) => setAllowWebSearch(event.target.checked)}
+                    />
+                    Allow Web Search (non-interactive; needs a search provider)
+                  </label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={allowWebFetch}
+                      onChange={(event) => setAllowWebFetch(event.target.checked)}
+                    />
+                    Allow WebFetch (fetch known URLs)
+                  </label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Both are disabled by default so headless OpenCode runs do not abort on
+                    an interactive Web Search request.
+                  </p>
+                </div>
                 <Label>Environment variable mappings</Label>
                 <Button
                   type="button"

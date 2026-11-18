@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
+## [Unreleased]
+
+### Added
+
+- Worker-profile OpenCode toggles `allowWebSearch` / `allowWebFetch` (default false).
+  ORBIT writes OpenCode `permission.websearch` / `permission.webfetch`, preventing
+  headless runs from aborting on an interactive Web Search request.
+
 ## [0.14.0] - 2026-11-17
 
 ### Added

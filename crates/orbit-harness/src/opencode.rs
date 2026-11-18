@@ -56,6 +56,10 @@ pub struct OpenCodeSettings {
     pub orbit_mcp: Option<OrbitMcpBridge>,
     /// Stream OpenCode stderr diagnostics into execution events (default false).
     pub debug_logs: Option<bool>,
+    /// Allow OpenCode's built-in Web Search tool. Default false (headless safe).
+    pub web_search: Option<bool>,
+    /// Allow OpenCode's built-in WebFetch tool. Default false (headless safe).
+    pub web_fetch: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -94,6 +98,14 @@ impl OpenCodeSettings {
 
     pub fn standalone(&self) -> bool {
         self.standalone.unwrap_or(true)
+    }
+
+    pub fn web_search(&self) -> bool {
+        self.web_search.unwrap_or(false)
+    }
+
+    pub fn web_fetch(&self) -> bool {
+        self.web_fetch.unwrap_or(false)
     }
 
     /// Model selector in `provider/model` form. Harness config wins over agent config.
@@ -254,6 +266,46 @@ fn build_prompt(request: &ExecutionRequest) -> String {
         truncate(&payload_text, 120_000)
     ));
     prompt
+}
+
+/// Write OpenCode tool permissions. Web Search/WebFetch default to deny because
+/// `opencode run` is non-interactive and aborts when they ask for input.
+fn write_open_code_tool_permissions(
+    workspace: &Path,
+    web_search: bool,
+    web_fetch: bool,
+) -> std::io::Result<()> {
+    let path = workspace.join("opencode.json");
+    let mut config: serde_json::Value = if path.exists() {
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_else(|| serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+    if !config.is_object() {
+        config = serde_json::json!({});
+    }
+    let permission = config
+        .as_object_mut()
+        .unwrap()
+        .entry("permission")
+        .or_insert_with(|| serde_json::json!({}));
+    if let Some(map) = permission.as_object_mut() {
+        map.insert(
+            "websearch".into(),
+            serde_json::json!(if web_search { "allow" } else { "deny" }),
+        );
+        map.insert(
+            "webfetch".into(),
+            serde_json::json!(if web_fetch { "allow" } else { "deny" }),
+        );
+    }
+    std::fs::write(
+        &path,
+        serde_json::to_string_pretty(&config).unwrap_or_else(|_| "{}".into()),
+    )
 }
 
 fn write_open_code_mcp_config(workspace: &Path, bridge: &OrbitMcpBridge) -> std::io::Result<()> {
@@ -550,6 +602,13 @@ impl OpenCodeHarnessAdapter {
             ));
         }
 
+        write_open_code_tool_permissions(&workspace, settings.web_search(), settings.web_fetch())
+            .map_err(|error| {
+            HarnessError::new(
+                HarnessErrorKind::Internal,
+                format!("could not write OpenCode tool permissions: {error}"),
+            )
+        })?;
         if let Some(bridge) = &settings.orbit_mcp {
             write_open_code_mcp_config(&workspace, bridge).map_err(|error| {
                 HarnessError::new(
@@ -993,5 +1052,23 @@ mod tests {
     fn truncation_is_utf8_safe() {
         let value = "a".repeat(10) + "é";
         assert!(truncate(&value, 11).ends_with("… [truncated]"));
+    }
+}
+
+#[cfg(test)]
+mod permission_tests {
+    use super::*;
+
+    #[test]
+    fn writes_web_tool_permissions() {
+        let dir = std::env::temp_dir().join(format!("orbit-opencode-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        write_open_code_tool_permissions(&dir, false, true).unwrap();
+        let config: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("opencode.json")).unwrap())
+                .unwrap();
+        assert_eq!(config["permission"]["websearch"], "deny");
+        assert_eq!(config["permission"]["webfetch"], "allow");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

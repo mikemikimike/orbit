@@ -30,6 +30,8 @@ pub struct WorkerState {
     pub profile_agent_ids: Vec<Uuid>,
     /// Skills materialized for every execution handled by this worker.
     pub profile_skill_slugs: Vec<String>,
+    pub allow_web_search: bool,
+    pub allow_web_fetch: bool,
     /// Environment variables resolved from worker-profile connection mappings. Applied
     /// to each harness process instead of mutating the worker's global environment.
     pub extra_env: Arc<std::collections::BTreeMap<String, String>>,
@@ -376,6 +378,13 @@ pub async fn run_execution(
     // Add the MCP bridge details to the harness config. This stays in memory only; the
     // execution-scoped token is invalid as soon as the broker is dropped.
     let mut harness_config = spec.harness.config.clone();
+    if harness_kind == HarnessKind::OpenCode {
+        if !harness_config.is_object() {
+            harness_config = serde_json::json!({});
+        }
+        harness_config["webSearch"] = serde_json::json!(state.allow_web_search);
+        harness_config["webFetch"] = serde_json::json!(state.allow_web_fetch);
+    }
     if let (Some(handle), HarnessKind::OpenCode | HarnessKind::Pi) = (&broker, harness_kind) {
         if !harness_config.is_object() {
             harness_config = serde_json::json!({});

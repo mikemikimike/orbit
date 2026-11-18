@@ -885,6 +885,8 @@ async fn private_resources_are_hidden_from_other_users() {
             &json!({}),
             &json!({}),
             &json!({}),
+            false,
+            false,
         )
         .await
         .unwrap();
@@ -907,6 +909,8 @@ async fn private_resources_are_hidden_from_other_users() {
             &json!({}),
             &json!({}),
             &json!({}),
+            false,
+            false,
         )
         .await
         .unwrap();

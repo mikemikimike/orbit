@@ -25,6 +25,10 @@ pub struct WorkerSession {
     pub execution_driver: Option<String>,
     pub agent_ids: Vec<Uuid>,
     pub skill_slugs: Vec<String>,
+    #[serde(default)]
+    pub allow_web_search: bool,
+    #[serde(default)]
+    pub allow_web_fetch: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
