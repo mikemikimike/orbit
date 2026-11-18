@@ -136,6 +136,58 @@ impl Store {
         Ok(rows)
     }
 
+    /// End runs a live worker claimed but never started.
+    ///
+    /// A worker that cannot decode a claim (for example one older than the platform) or
+    /// fails before reporting leaves the run `dispatched` while its heartbeat stays fresh,
+    /// so [`Self::reap_orphaned_executions`] never sees it and the run blocks the agent's
+    /// concurrency. A run is ended once nothing has happened on it (claim, cancel request
+    /// or event) for `silent_after_seconds`, or `cancel_after_seconds` once a cancel was
+    /// requested. Cancelled runs end as `cancelled`, the rest as `failed`. A worker that
+    /// reports in afterwards is refused, because terminal states are never overwritten.
+    pub async fn reap_unstarted_executions(
+        &self,
+        org_id: Option<Uuid>,
+        silent_after_seconds: i64,
+        cancel_after_seconds: i64,
+    ) -> StoreResult<Vec<ExecutionRecord>> {
+        Ok(sqlx::query_as::<_, ExecutionRecord>(
+            r#"
+            UPDATE executions e
+            SET status = CASE WHEN e.cancel_requested THEN 'cancelled' ELSE 'failed' END,
+                error = CASE
+                    WHEN e.cancel_requested THEN e.error
+                    ELSE jsonb_build_object(
+                        'code', 'worker_did_not_start',
+                        'message', 'a worker took this execution but never started it',
+                        'retryable', true
+                    )
+                END,
+                finished_at = now(),
+                updated_at = now()
+            WHERE e.status = 'dispatched'
+              AND ($3::uuid IS NULL OR e.org_id = $3)
+              AND GREATEST(
+                    e.updated_at,
+                    COALESCE(e.started_at, e.created_at),
+                    COALESCE(
+                        (SELECT max(ev.created_at) FROM execution_events ev
+                         WHERE ev.execution_id = e.id),
+                        e.created_at
+                    )
+                  ) < now() - make_interval(
+                    secs => CASE WHEN e.cancel_requested THEN $2 ELSE $1 END
+                  )
+            RETURNING e.*
+            "#,
+        )
+        .bind(silent_after_seconds as f64)
+        .bind(cancel_after_seconds as f64)
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     pub async fn list_worker_heartbeats(&self) -> StoreResult<Vec<WorkerHeartbeat>> {
         Ok(sqlx::query_as::<_, WorkerHeartbeat>(
             "SELECT * FROM worker_heartbeats ORDER BY last_heartbeat_at DESC",

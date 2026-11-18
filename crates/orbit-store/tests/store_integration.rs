@@ -3,8 +3,8 @@ use std::sync::Arc;
 use base64::Engine;
 use orbit_domain::{
     AgentDefinition, AgentMetadata, AgentSpec, AgentStatus, AutonomySpec, ExecutionMode,
-    ExecutionStatus, HarnessKind, HarnessSpec, Instructions, MemorySpec, ModelSpec, ResourceLimits,
-    TriggerSource, TriggerSpec, UserRole,
+    ExecutionStatus, HarnessKind, HarnessSpec, Instructions, LogLevel, MemorySpec, ModelSpec,
+    ResourceLimits, TriggerSource, TriggerSpec, UserRole,
 };
 use orbit_security::{SecretCipher, SecretValue};
 use orbit_store::executions::NewExecution;
@@ -575,6 +575,144 @@ async fn orphaned_executions_are_failed_and_approvals_expired() {
         store.get_approval(org, approval.id).await.unwrap().status,
         "expired"
     );
+}
+
+#[tokio::test]
+async fn unstarted_executions_on_a_live_worker_are_ended() {
+    let Some(store) = test_store().await else {
+        return;
+    };
+    let (org, user) = seed_org(&store).await;
+    let (agent, version) = store
+        .create_agent(org, Some(user), &definition("Unstarted Reaper Agent"))
+        .await
+        .unwrap();
+    store
+        .upsert_worker_heartbeat("worker-skewed", &["mock".into()], "local", Some("test"))
+        .await
+        .unwrap();
+
+    let claimed = |key: &'static str| {
+        let store = &store;
+        let agent = &agent;
+        let version = &version;
+        async move {
+            let execution = store
+                .create_execution(NewExecution {
+                    org_id: org,
+                    agent_id: agent.id,
+                    agent_version_id: version.id,
+                    agent_name: &agent.name,
+                    harness_kind: HarnessKind::Mock,
+                    trigger_source: TriggerSource::Manual,
+                    placement: "auto",
+                    trigger_id: None,
+                    input: serde_json::json!({ "task": "x", "payload": {}, "provenance": { "source": "test", "trusted": true, "receivedAt": chrono::Utc::now() } }),
+                    skills: &[],
+                    timeout_seconds: 30,
+                    requested_by: Some(user),
+                    idempotency_key: Some(key),
+                    team_run_id: None,
+                    team_step_index: None,
+                })
+                .await
+                .unwrap();
+            store
+                .claim_execution(execution.id, "worker-skewed")
+                .await
+                .unwrap();
+            execution
+        }
+    };
+    let age = |id: uuid::Uuid, interval: &'static str| {
+        let store = &store;
+        async move {
+            sqlx::query(&format!(
+                "UPDATE executions SET created_at = now() - interval '{interval}', \
+                 started_at = now() - interval '{interval}', updated_at = now() - interval '{interval}' \
+                 WHERE id = $1"
+            ))
+            .bind(id)
+            .execute(store.pool())
+            .await
+            .unwrap();
+            sqlx::query(&format!(
+                "UPDATE execution_events SET created_at = now() - interval '{interval}' WHERE execution_id = $1"
+            ))
+            .bind(id)
+            .execute(store.pool())
+            .await
+            .unwrap();
+        }
+    };
+
+    // Claimed an hour ago, nothing since: the worker never got it.
+    let silent = claimed("unstarted-silent").await;
+    age(silent.id, "1 hour").await;
+
+    // Claimed an hour ago but still reporting (a long checkout, say): leave it alone.
+    let busy = claimed("unstarted-busy").await;
+    age(busy.id, "1 hour").await;
+    store
+        .append_execution_event(
+            org,
+            busy.id,
+            "status",
+            LogLevel::Info,
+            "checking out repository",
+            &serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+
+    // Cancel requested two minutes ago and ignored: end it as cancelled.
+    let cancelled = claimed("unstarted-cancelled").await;
+    store
+        .request_execution_cancel(org, cancelled.id)
+        .await
+        .unwrap();
+    age(cancelled.id, "2 minutes").await;
+
+    // Started runs belong to the heartbeat reaper, not this one.
+    let running = claimed("unstarted-running").await;
+    store
+        .mark_execution_running(running.id, Some("s"))
+        .await
+        .unwrap();
+    age(running.id, "1 hour").await;
+
+    let reaped = store
+        .reap_unstarted_executions(Some(org), 600, 60)
+        .await
+        .unwrap();
+    let mut ids: Vec<uuid::Uuid> = reaped.iter().map(|row| row.id).collect();
+    ids.sort();
+    let mut expected = vec![silent.id, cancelled.id];
+    expected.sort();
+    assert_eq!(ids, expected, "only the silent and the cancelled run end");
+
+    let silent_now = store.get_execution(org, silent.id).await.unwrap();
+    assert_eq!(silent_now.status, "failed");
+    assert_eq!(silent_now.error.unwrap()["code"], "worker_did_not_start");
+    assert_eq!(
+        store.get_execution(org, cancelled.id).await.unwrap().status,
+        "cancelled"
+    );
+    assert_eq!(
+        store.get_execution(org, busy.id).await.unwrap().status,
+        "dispatched"
+    );
+    assert_eq!(
+        store.get_execution(org, running.id).await.unwrap().status,
+        "running"
+    );
+
+    // A worker that finally reports in cannot revive an ended run.
+    assert!(store
+        .mark_execution_running(silent.id, Some("late"))
+        .await
+        .unwrap()
+        .is_none());
 }
 
 #[tokio::test]

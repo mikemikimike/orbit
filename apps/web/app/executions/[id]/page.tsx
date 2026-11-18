@@ -170,9 +170,15 @@ export default function ExecutionDetailPage() {
     inputTokens?: number;
     outputTokens?: number;
   };
-  const errorText = execution.error
-    ? String((execution.error as { message?: string }).message ?? "Unknown error")
-    : null;
+  const errorCode = (execution.error as { code?: string } | null)?.code;
+  // Outcomes the platform decided on, worded for the person reading the run.
+  const errorText = !execution.error
+    ? null
+    : errorCode === "worker_did_not_start"
+      ? "A worker took this run but never started it, so ORBIT ended it. This usually means the worker could not read the run, for example because it is older than the platform. Its logs in Workers say more."
+      : errorCode === "worker_lost"
+        ? "The worker running this stopped responding, so the outcome is unknown. Check whether it made any changes before running it again."
+        : String((execution.error as { message?: string }).message ?? "Unknown error");
 
   const errorInfo = (execution.error ?? {}) as { kind?: string; retryable?: boolean };
   const errorMeta =
@@ -407,7 +413,7 @@ export default function ExecutionDetailPage() {
           }
         >
           A worker took this run {relativeTime(silentSince(execution, events)!)} and has not reported since.
-          Its logs in Workers usually say why, for example a worker older than the platform.
+          ORBIT ends it after 10 minutes without activity, or a minute after you cancel it. Its logs in Workers usually say why, for example a worker older than the platform.
         </Callout>
       ) : null}
 

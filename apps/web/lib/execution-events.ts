@@ -122,6 +122,15 @@ function describeStatus(message: string): { title: string; tone?: EventTone } {
   }
   match = message.match(/^execution (succeeded|cancelled)/);
   if (match) return { title: match[1] === "succeeded" ? "Finished successfully" : "Cancelled", tone: match[1] === "succeeded" ? "success" : "muted" };
+  if (/^a worker took this execution but never started it/.test(message)) {
+    return { title: "Ended: the worker that took it never started it", tone: "danger" };
+  }
+  if (/^cancelled; the worker that took this execution never started it/.test(message)) {
+    return { title: "Cancelled before the worker started it", tone: "muted" };
+  }
+  if (/^worker heartbeat expired/.test(message)) {
+    return { title: "Ended: the worker stopped responding", tone: "danger" };
+  }
   match = message.match(/^execution finished with status (\w+)/);
   if (match) return { title: `Ended: ${humanizeIdentifier(match[1]).toLowerCase()}`, tone: "danger" };
   return { title: message };

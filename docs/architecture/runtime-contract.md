@@ -78,7 +78,12 @@ agent spec). A field added to a type workers decode breaks every older worker th
 receives it, so the API leaves out fields the execution plane never reads (for example the
 schedule trigger's `task`, see `omit_fields_workers_ignore` in
 `crates/orbit-api/src/handlers/worker_api.rs`). A worker that fails to decode a claim
-leaves the execution `dispatched` (and counting against the agent's concurrency) until that worker stops heartbeating; cancelling does not end it.
+leaves the execution `dispatched` while its heartbeat stays fresh. The API's background
+reaper ends such runs: `failed` with error code `worker_did_not_start` after 10 minutes
+without activity (claim, event or cancel request), or `cancelled` 60 seconds after an
+unanswered cancel request (`reap_unstarted_executions` in `crates/orbit-store/src/workers.rs`).
+A worker that reports `running` for an execution that has already ended gets `409 Conflict`
+and must not start the harness.
 
 ## Inputs
 

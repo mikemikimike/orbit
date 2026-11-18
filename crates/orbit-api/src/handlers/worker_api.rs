@@ -640,11 +640,26 @@ pub async fn running(
     Path(execution_id): Path<Uuid>,
     crate::extract::ApiJson(body): crate::extract::ApiJson<RunningRequest>,
 ) -> Result<StatusCode, ApiError> {
-    ensure_execution(&state, &auth, execution_id).await?;
-    state
+    let execution = ensure_execution(&state, &auth, execution_id).await?;
+    let updated = state
         .store
         .mark_execution_running(execution_id, body.session_ref.as_deref())
         .await?;
+    // The platform may have ended a run its worker took too long to start (or that was
+    // cancelled meanwhile). Refuse, so the worker stops instead of running the harness
+    // for an execution everyone else already sees as finished.
+    if updated.is_none() {
+        let current = state
+            .store
+            .get_execution(execution.org_id, execution_id)
+            .await?;
+        if ExecutionStatus::parse(&current.status).is_some_and(|status| status.is_terminal()) {
+            return Err(ApiError::conflict(format!(
+                "execution already ended with status {}",
+                current.status
+            )));
+        }
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

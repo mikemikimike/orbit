@@ -55,6 +55,10 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 - Workers older than the schedule `task` field could not claim runs of an agent with a
   scheduled task (their `TriggerSpec` refuses unknown fields), leaving the run stuck in
   `dispatched`. The worker context now leaves that field out; workers never read triggers.
+- A run a live worker took but never started stayed `dispatched` forever, blocked the
+  agent's concurrency, and could not be cancelled. The API now ends it after 10 minutes
+  without activity (`worker_did_not_start`) or 60 seconds after an unanswered cancel, and
+  refuses a late `running` report for an ended run with `409` so the harness never starts.
 - Execution detail kept showing the status from when the page opened: status changes
   that come without an event (picked up, cancel requested) now arrive by polling while a
   run is active. A run a worker took but never started is flagged after two minutes.
