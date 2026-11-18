@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
+## [0.16.0] - 2026-11-18
+
+### Added
+
+- OIDC `teamGroups` mapping (env `ORBIT_OIDC_TEAM_GROUPS`) adds users to access teams by
+  IdP group, additively, with `lead`/`member`/`viewer` roles.
+- Helm: `auth.oidc.teamGroups` is exported as `ORBIT_OIDC_TEAM_GROUPS`.
+
 ## [0.15.0] - 2026-11-18
 
 ### Added
