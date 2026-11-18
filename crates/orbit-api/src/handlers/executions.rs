@@ -175,7 +175,7 @@ pub async fn execute_agent(
         return Err(ApiError::bad_request("archived agents cannot be executed"));
     }
     let access = crate::access::AccessScope::load(&state, &auth).await?;
-    access.require_view(
+    access.require_use(
         "agent",
         agent.owner_user_id,
         agent.owner_team_id,
@@ -190,7 +190,7 @@ pub async fn execute_agent(
                 .store
                 .get_connection(auth.org_id, connection_id)
                 .await?;
-            access.require_view(
+            access.require_use(
                 "connection",
                 connection.owner_user_id,
                 connection.owner_team_id,

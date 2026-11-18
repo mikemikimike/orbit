@@ -89,6 +89,44 @@ impl AccessScope {
         }
     }
 
+    /// Use/run access: team leads and members can use, viewers cannot.
+    pub fn can_use(
+        &self,
+        owner_user_id: Option<Uuid>,
+        owner_team_id: Option<Uuid>,
+        visibility: &str,
+    ) -> bool {
+        if self.is_privileged() || owner_user_id == Some(self.user_id) {
+            return true;
+        }
+        if let Some(team_id) = owner_team_id {
+            return matches!(
+                self.teams.get(&team_id).map(String::as_str),
+                Some("lead" | "member")
+            );
+        }
+        self.can_view(owner_user_id, owner_team_id, visibility)
+    }
+
+    pub fn require_use(
+        &self,
+        resource: &str,
+        owner_user_id: Option<Uuid>,
+        owner_team_id: Option<Uuid>,
+        visibility: &str,
+    ) -> Result<(), ApiError> {
+        if !self.can_view(owner_user_id, owner_team_id, visibility) {
+            return Err(ApiError::not_found(resource));
+        }
+        if self.can_use(owner_user_id, owner_team_id, visibility) {
+            Ok(())
+        } else {
+            Err(ApiError::forbidden(format!(
+                "your team role cannot use this {resource}"
+            )))
+        }
+    }
+
     pub fn can_manage(&self, owner_user_id: Option<Uuid>, owner_team_id: Option<Uuid>) -> bool {
         if self.is_privileged() || owner_user_id == Some(self.user_id) {
             return true;
@@ -191,5 +229,15 @@ mod tests {
         assert!(access.can_view(None, Some(team_a), "org"));
         assert!(!access.can_view(None, Some(team_b), "org"));
         assert!(!access.can_view(None, None, "private"));
+    }
+
+    #[test]
+    fn team_viewers_can_view_but_not_use() {
+        let team = Uuid::now_v7();
+        let access = scope(UserRole::Operator, &[(team, "viewer")]);
+        assert!(access.can_view(None, Some(team), "org"));
+        assert!(!access.can_use(None, Some(team), "org"));
+        let member = scope(UserRole::Operator, &[(team, "member")]);
+        assert!(member.can_use(None, Some(team), "org"));
     }
 }

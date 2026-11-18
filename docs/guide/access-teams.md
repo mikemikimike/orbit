@@ -44,3 +44,14 @@ other teams. Org owners/admins still see everything.
 
 Existing users are migrated into the **Default** team, so legacy Default-owned resources
 remain visible while non-default teams stay isolated.
+
+## Team roles
+
+| Role | View team resources | Use/run | Manage |
+|---|---|---|---|
+| `lead` | yes | yes | yes |
+| `member` | yes | yes | no |
+| `viewer` | yes | no | no |
+
+Organization owner/admin bypass these checks. Use/run is enforced when starting an
+execution with a team-owned agent or connection.

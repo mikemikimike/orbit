@@ -8,6 +8,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Changed
+
+- Team roles: `lead`/`member` can use team resources, `viewer` is read-only. Execution
+  creation enforces use access for the agent and referenced connections.
+
+
 ### Added
 
 - Strict team isolation (default on): non-admins only see resources owned by their teams,
