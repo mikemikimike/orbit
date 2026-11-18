@@ -379,9 +379,10 @@ pub async fn run_execution(
     // Add the MCP bridge details to the harness config. This stays in memory only; the
     // execution-scoped token is invalid as soon as the broker is dropped.
     let mut harness_config = spec
-        .harness
-        .as_ref()
-        .map(|harness| harness.config.clone())
+        .harness_config
+        .get(harness_kind.as_str())
+        .cloned()
+        .or_else(|| spec.harness.as_ref().map(|harness| harness.config.clone()))
         .unwrap_or_else(|| serde_json::json!({}));
     if harness_kind == HarnessKind::OpenCode {
         if !harness_config.is_object() {

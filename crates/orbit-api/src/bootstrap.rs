@@ -316,6 +316,7 @@ fn demo_definition(
                 placement: orbit_domain::PlacementTarget::Auto,
                 config: json!({ "stepDelayMs": 120 }),
             }),
+            harness_config: Default::default(),
             model: ModelSpec {
                 management: ModelManagement::Harness,
                 provider: Some("mock".into()),

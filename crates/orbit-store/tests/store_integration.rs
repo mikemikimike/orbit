@@ -51,6 +51,7 @@ fn definition(name: &str) -> AgentDefinition {
                 placement: orbit_domain::PlacementTarget::Auto,
                 config: serde_json::json!({}),
             }),
+            harness_config: Default::default(),
             model: ModelSpec::default(),
             instructions: Instructions {
                 system: "You are a test agent.".into(),

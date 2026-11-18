@@ -42,6 +42,9 @@ pub struct AgentSpec {
     pub harness: Option<HarnessSpec>,
     #[serde(default)]
     pub model: ModelSpec,
+    /// Harness-specific options keyed by harness kind (`opencode`, `pi`, …).
+    #[serde(default)]
+    pub harness_config: BTreeMap<String, Value>,
     pub instructions: Instructions,
     #[serde(default)]
     pub connectors: Vec<ConnectorBinding>,
