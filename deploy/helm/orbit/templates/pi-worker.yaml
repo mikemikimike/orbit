@@ -35,6 +35,24 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: seed-pi-auth
+          image: {{ include "orbit.image" (dict "root" . "registry" .Values.imageRegistry "image" .Values.piWorker.image "tag" .Values.piWorker.tag) | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          command:
+            - /bin/sh
+            - -c
+            - mkdir -p /home/orbit/.pi/agent && cp -a /seed/pi-agent/. /home/orbit/.pi/agent/ && chmod -R u+rwX /home/orbit/.pi/agent
+          volumeMounts:
+            - name: pi-home
+              mountPath: /home/orbit/.pi
+            {{- if .Values.piWorker.auth.existingSecret }}
+            - name: pi-auth
+              mountPath: /seed/pi-agent
+              readOnly: true
+            {{- end }}
       containers:
         - name: worker-pi
           image: {{ include "orbit.image" (dict "root" . "registry" .Values.imageRegistry "image" .Values.piWorker.image "tag" .Values.piWorker.tag) | quote }}
@@ -91,11 +109,6 @@ spec:
               mountPath: /tmp
             - name: pi-home
               mountPath: /home/orbit/.pi
-            {{- if .Values.piWorker.auth.existingSecret }}
-            - name: pi-auth
-              mountPath: /home/orbit/.pi/agent
-              readOnly: true
-            {{- end }}
           {{- with .Values.piWorker.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

@@ -112,7 +112,7 @@ piWorker:
   workspace:
     sizeLimit: 2Gi
   auth:
-    # Existing Secret mounted at /home/orbit/.pi/agent, e.g.
+    # Existing Secret copied into a writable /home/orbit/.pi/agent at startup, e.g.
     #   kubectl -n orbit create secret generic orbit-pi-auth \
     #     --from-file=auth.json=$HOME/.pi/agent/auth.json
     existingSecret: ""
