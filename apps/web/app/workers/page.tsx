@@ -780,6 +780,9 @@ function WorkersPageInner() {
                 placeholder="release version (defaults to the platform image tag)"
                 onChange={(event) => setTag(event.target.value)}
               />
+              <p className="text-[11px] text-muted-foreground">
+                Leave blank to follow the platform tag and auto-relaunch after an upgrade.
+              </p>
               {platformVersion && tag !== platformVersion ? (
                 <button
                   type="button"

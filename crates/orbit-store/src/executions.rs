@@ -611,3 +611,25 @@ impl Store {
         .await?)
     }
 }
+
+impl Store {
+    pub async fn has_active_executions_for_worker(
+        &self,
+        org_id: Uuid,
+        worker_id: &str,
+    ) -> StoreResult<bool> {
+        Ok(sqlx::query_scalar::<_, bool>(
+            r#"
+            SELECT EXISTS(
+                SELECT 1 FROM executions
+                WHERE org_id = $1 AND worker_id = $2
+                  AND status IN ('running', 'awaiting_approval')
+            )
+            "#,
+        )
+        .bind(org_id)
+        .bind(worker_id)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+}
