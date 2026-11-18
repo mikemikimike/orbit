@@ -532,6 +532,8 @@ pub struct WorkerProfile {
     pub allow_glab: bool,
     #[sqlx(default)]
     pub allow_gh: bool,
+    #[sqlx(default)]
+    pub native_tool_permissions: serde_json::Value,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

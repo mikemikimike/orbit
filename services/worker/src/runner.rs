@@ -32,6 +32,7 @@ pub struct WorkerState {
     pub profile_skill_slugs: Vec<String>,
     pub allow_web_search: bool,
     pub allow_web_fetch: bool,
+    pub native_tool_permissions: serde_json::Value,
     /// Environment variables resolved from worker-profile connection mappings. Applied
     /// to each harness process instead of mutating the worker's global environment.
     pub extra_env: Arc<std::collections::BTreeMap<String, String>>,
@@ -384,6 +385,9 @@ pub async fn run_execution(
         }
         harness_config["webSearch"] = serde_json::json!(state.allow_web_search);
         harness_config["webFetch"] = serde_json::json!(state.allow_web_fetch);
+        if state.native_tool_permissions.is_object() {
+            harness_config["nativeToolPermissions"] = state.native_tool_permissions.clone();
+        }
     }
     if let (Some(handle), HarnessKind::OpenCode | HarnessKind::Pi) = (&broker, harness_kind) {
         if !harness_config.is_object() {

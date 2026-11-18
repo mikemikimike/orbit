@@ -29,6 +29,8 @@ pub struct WorkerSession {
     pub allow_web_search: bool,
     #[serde(default)]
     pub allow_web_fetch: bool,
+    #[serde(default)]
+    pub native_tool_permissions: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Deserialize)]

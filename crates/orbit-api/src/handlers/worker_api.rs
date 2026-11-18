@@ -86,6 +86,7 @@ pub struct WorkerSession {
     pub skill_slugs: Vec<String>,
     pub allow_web_search: bool,
     pub allow_web_fetch: bool,
+    pub native_tool_permissions: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -246,6 +247,7 @@ pub async fn session(
         profile_name,
         allow_web_search,
         allow_web_fetch,
+        native_tool_permissions,
     ) = match &profile {
         Some(profile) => (
             vec![profile.harness_kind.clone()],
@@ -256,6 +258,7 @@ pub async fn session(
             Some(profile.name.clone()),
             profile.allow_web_search,
             profile.allow_web_fetch,
+            profile.native_tool_permissions.clone(),
         ),
         None => (
             auth.harnesses.clone(),
@@ -266,6 +269,7 @@ pub async fn session(
             None,
             false,
             false,
+            serde_json::json!({}),
         ),
     };
     if harnesses.is_empty() {
@@ -284,6 +288,7 @@ pub async fn session(
         skill_slugs,
         allow_web_search,
         allow_web_fetch,
+        native_tool_permissions,
     }))
 }
 

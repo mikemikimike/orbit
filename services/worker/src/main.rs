@@ -164,6 +164,7 @@ async fn main() -> anyhow::Result<()> {
         profile_skill_slugs: session.skill_slugs.clone(),
         allow_web_search: session.allow_web_search,
         allow_web_fetch: session.allow_web_fetch,
+        native_tool_permissions: session.native_tool_permissions,
         extra_env,
         active: Arc::new(tokio::sync::Mutex::new(std::collections::BTreeMap::new())),
     };

@@ -60,6 +60,9 @@ pub struct OpenCodeSettings {
     pub web_search: Option<bool>,
     /// Allow OpenCode's built-in WebFetch tool. Default false (headless safe).
     pub web_fetch: Option<bool>,
+    /// Native tool name -> allow|ask|deny, written to OpenCode `permission`.
+    #[serde(default)]
+    pub native_tool_permissions: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -274,6 +277,7 @@ fn write_open_code_tool_permissions(
     workspace: &Path,
     web_search: bool,
     web_fetch: bool,
+    native: &std::collections::BTreeMap<String, String>,
 ) -> std::io::Result<()> {
     let path = workspace.join("opencode.json");
     let mut config: serde_json::Value = if path.exists() {
@@ -299,6 +303,11 @@ fn write_open_code_tool_permissions(
         .entry("permission")
         .or_insert_with(|| serde_json::json!({}));
     if let Some(map) = permission.as_object_mut() {
+        for (tool, decision) in native {
+            if matches!(decision.as_str(), "allow" | "ask" | "deny") {
+                map.insert(tool.clone(), serde_json::json!(decision));
+            }
+        }
         map.insert(
             "websearch".into(),
             serde_json::json!(if web_search { "allow" } else { "deny" }),
@@ -630,8 +639,13 @@ impl OpenCodeHarnessAdapter {
             ));
         }
 
-        write_open_code_tool_permissions(&workspace, settings.web_search(), settings.web_fetch())
-            .map_err(|error| {
+        write_open_code_tool_permissions(
+            &workspace,
+            settings.web_search(),
+            settings.web_fetch(),
+            &settings.native_tool_permissions,
+        )
+        .map_err(|error| {
             HarnessError::new(
                 HarnessErrorKind::Internal,
                 format!("could not write OpenCode tool permissions: {error}"),
@@ -1091,7 +1105,7 @@ mod permission_tests {
     fn writes_web_tool_permissions() {
         let dir = std::env::temp_dir().join(format!("orbit-opencode-{}", uuid::Uuid::now_v7()));
         std::fs::create_dir_all(&dir).unwrap();
-        write_open_code_tool_permissions(&dir, false, true).unwrap();
+        write_open_code_tool_permissions(&dir, false, true, &Default::default()).unwrap();
         let config: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(dir.join("opencode.json")).unwrap())
                 .unwrap();

@@ -73,13 +73,14 @@ impl Store {
         allow_web_fetch: bool,
         allow_glab: bool,
         allow_gh: bool,
+        native_tool_permissions: &serde_json::Value,
     ) -> StoreResult<WorkerProfile> {
         sqlx::query_as::<_, WorkerProfile>(
             r#"
             INSERT INTO worker_profiles (id, org_id, name, harness_kind, target, execution_driver,
                 image, image_tag, agent_scope, agent_ids, skill_slugs, provider, model, auth_secret_name, env, env_mappings, resources,
-                allow_web_search, allow_web_fetch, allow_glab, allow_gh)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+                allow_web_search, allow_web_fetch, allow_glab, allow_gh, native_tool_permissions)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
             RETURNING *
             "#,
         )
@@ -104,6 +105,7 @@ impl Store {
         .bind(allow_web_fetch)
         .bind(allow_glab)
         .bind(allow_gh)
+        .bind(native_tool_permissions)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| {
@@ -139,6 +141,7 @@ impl Store {
         allow_web_fetch: bool,
         allow_glab: bool,
         allow_gh: bool,
+        native_tool_permissions: &serde_json::Value,
     ) -> StoreResult<WorkerProfile> {
         sqlx::query_as::<_, WorkerProfile>(
             r#"
@@ -148,7 +151,8 @@ impl Store {
                 skill_slugs = $11, provider = $12, model = $13, auth_secret_name = $14,
                 env = $15, env_mappings = $16, resources = $17,
                 allow_web_search = $18, allow_web_fetch = $19,
-                allow_glab = $20, allow_gh = $21, updated_at = now()
+                allow_glab = $20, allow_gh = $21,
+                native_tool_permissions = $22, updated_at = now()
             WHERE org_id = $1 AND id = $2
             RETURNING *
             "#,
@@ -174,6 +178,7 @@ impl Store {
         .bind(allow_web_fetch)
         .bind(allow_glab)
         .bind(allow_gh)
+        .bind(native_tool_permissions)
         .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| StoreError::NotFound("worker profile".into()))

@@ -97,6 +97,7 @@ function WorkersPageInner() {
   const [allowWebFetch, setAllowWebFetch] = useState(false);
   const [allowGlab, setAllowGlab] = useState(false);
   const [allowGh, setAllowGh] = useState(false);
+  const [nativeToolsText, setNativeToolsText] = useState("{}");
   const [confirmRelaunch, setConfirmRelaunch] = useState(false);
 
   // Pre-fill from Work wizard query params.
@@ -198,6 +199,7 @@ function WorkersPageInner() {
         allowWebFetch,
         allowGlab,
         allowGh,
+        nativeToolPermissions: JSON.parse(nativeToolsText || "{}"),
         resources: {
           requests: { cpu: cpuRequest || undefined, memory: memoryRequest || undefined },
           limits: { cpu: cpuLimit || undefined, memory: memoryLimit || undefined },
@@ -266,6 +268,7 @@ function WorkersPageInner() {
     setAllowWebFetch(false);
     setAllowGlab(false);
     setAllowGh(false);
+    setNativeToolsText("{}");
     setOpen(true);
   }
 
@@ -290,6 +293,13 @@ function WorkersPageInner() {
     setAllowWebFetch(tools.allowWebFetch ?? false);
     setAllowGlab((profile as unknown as { allowGlab?: boolean }).allowGlab ?? false);
     setAllowGh((profile as unknown as { allowGh?: boolean }).allowGh ?? false);
+    setNativeToolsText(
+      JSON.stringify(
+        (profile as unknown as { nativeToolPermissions?: unknown }).nativeToolPermissions ?? {},
+        null,
+        2,
+      ),
+    );
     setAgentIds(profile.agentIds);
     setSkillSlugs(profile.skillSlugs);
     const resources = ((profile as WorkerProfile & { resources?: Record<string, unknown> }).resources ?? {}) as {
@@ -959,6 +969,18 @@ function WorkersPageInner() {
                   <p className="text-[11px] text-muted-foreground">
                     Enabling this exposes the token to shell tools in the workspace. The
                     image must contain glab/gh.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Native tool permissions (OpenCode)</Label>
+                  <textarea
+                    className="min-h-24 w-full rounded-lg border bg-card p-2 font-mono text-[11px]"
+                    value={nativeToolsText}
+                    onChange={(event) => setNativeToolsText(event.target.value)}
+                    placeholder={'{\n  "bash": "deny",\n  "edit": "allow",\n  "shell": "allow"\n}'}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    JSON map of tool name to allow/ask/deny. Example: shell allow, bash deny.
                   </p>
                 </div>
                 <Label>Environment variable mappings</Label>

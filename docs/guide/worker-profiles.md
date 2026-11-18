@@ -66,3 +66,22 @@ restricted to queued executions whose agent is `org`-visible or owned by that te
 profile can never claim another team's private agent. Execution context/running/events/
 completion/cancel endpoints re-check the same rule, so knowing an execution ID is not
 enough. Agent and skill references on create/update must be visible to the caller.
+
+## Native OpenCode tool permissions
+
+OpenCode can enforce per-tool `allow | ask | deny` permissions. Set a JSON map on the
+worker profile (`nativeToolPermissions`):
+
+```json
+{
+  "bash": "deny",
+  "shell": "allow",
+  "edit": "ask",
+  "read": "allow"
+}
+```
+
+ORBIT writes this into `opencode.json` under `permission`. Tool names are OpenCode's
+native tool names (`bash`, `edit`, `read`, `webfetch`, `websearch`, …); `shell` only
+applies when the harness exposes that name. These permissions are enforced by OpenCode,
+not by the ORBIT broker. Connector tools still use ORBIT grants/policy/approvals.

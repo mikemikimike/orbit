@@ -58,6 +58,9 @@ pub struct CreateWorkerProfileRequest {
     pub allow_glab: bool,
     #[serde(default)]
     pub allow_gh: bool,
+    /// Native harness tool name -> allow|ask|deny (OpenCode permission map).
+    #[serde(default)]
+    pub native_tool_permissions: serde_json::Value,
 }
 
 async fn require_profile_manage(
@@ -101,6 +104,31 @@ fn resolve_agent_scope(requested: Option<&str>, agent_ids: &[Uuid]) -> Result<St
             "agentScope must be 'all' or 'selected', got '{other}'"
         ))),
     }
+}
+
+fn validate_native_tool_permissions(value: &serde_json::Value) -> Result<(), ApiError> {
+    let Some(map) = value.as_object() else {
+        if value.is_null() {
+            return Ok(());
+        }
+        return Err(ApiError::validation(vec![
+            orbit_domain::ValidationIssue::new(
+                "nativeToolPermissions",
+                "must be an object of tool -> allow|ask|deny",
+            ),
+        ]));
+    };
+    for (tool, decision) in map {
+        if tool.trim().is_empty() || !matches!(decision.as_str(), Some("allow" | "ask" | "deny")) {
+            return Err(ApiError::validation(vec![
+                orbit_domain::ValidationIssue::new(
+                    "nativeToolPermissions",
+                    format!("invalid permission for tool '{tool}'"),
+                ),
+            ]));
+        }
+    }
+    Ok(())
 }
 
 fn resolve_worker_resources(value: &serde_json::Value) -> Result<serde_json::Value, ApiError> {
@@ -342,6 +370,7 @@ pub async fn create_profile(
     crate::extract::ApiJson(body): crate::extract::ApiJson<CreateWorkerProfileRequest>,
 ) -> Result<(StatusCode, Json<WorkerProfile>), ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    validate_native_tool_permissions(&body.native_tool_permissions)?;
     let access = crate::access::AccessScope::load(&state, &auth).await?;
     state.enforce_limit(
         "workers",
@@ -435,6 +464,7 @@ pub async fn create_profile(
             body.allow_web_fetch,
             body.allow_glab,
             body.allow_gh,
+            &body.native_tool_permissions,
         )
         .await?;
     state
@@ -465,6 +495,7 @@ pub async fn update_profile(
     crate::extract::ApiJson(body): crate::extract::ApiJson<CreateWorkerProfileRequest>,
 ) -> Result<Json<WorkerProfile>, ApiError> {
     auth.require(Permission::SettingsWrite)?;
+    validate_native_tool_permissions(&body.native_tool_permissions)?;
     let existing = state
         .store
         .get_worker_profile(auth.org_id, profile_id)
@@ -577,6 +608,7 @@ pub async fn update_profile(
             body.allow_web_fetch,
             body.allow_glab,
             body.allow_gh,
+            &body.native_tool_permissions,
         )
         .await?;
     state

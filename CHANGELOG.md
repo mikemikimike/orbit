@@ -8,6 +8,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- Worker-profile `nativeToolPermissions` JSON map (OpenCode `permission`), e.g. `bash:
+  deny`, `shell: allow`, `edit: ask`. Editable in the worker profile UI.
+
+
 ### Changed
 
 - Team roles: `lead`/`member` can use team resources, `viewer` is read-only. Execution
