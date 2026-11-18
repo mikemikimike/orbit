@@ -487,7 +487,7 @@ function OidcSettingsForm() {
         setJwksUrl(data.jwksUrl ?? "");
         setAutoProvision(data.autoProvision ?? true);
         setDefaultRole(data.defaultRole || "viewer");
-        setEmailClaim((data as { emailClaim?: string }).emailClaim || "email");
+        setEmailClaim(data.emailClaim || "email");
       }
     } catch (error) {
       toast.error(errorMessage(error));
