@@ -301,7 +301,12 @@ pub(crate) async fn launch_profile_internal(
     let issued =
         crate::handlers::worker_profiles::issue_profile_token(state, auth.org_id, &profile, false)
             .await?;
-    let image = format!("{}:{}", profile.image, profile.image_tag);
+    let image_tag = if profile.image_tag.trim().is_empty() {
+        crate::images::image_tag()
+    } else {
+        profile.image_tag.clone()
+    };
+    let image = format!("{}:{}", profile.image, image_tag);
     let launch = state
         .store
         .create_worker_launch(
@@ -330,7 +335,7 @@ pub(crate) async fn launch_profile_internal(
         target: profile.target.clone(),
         execution_driver: profile.execution_driver.clone(),
         image: profile.image.clone(),
-        image_tag: profile.image_tag.clone(),
+        image_tag,
         auth_secret_name: profile.auth_secret_name.clone(),
         env: profile.env.clone(),
         resources: profile.resources.clone(),
