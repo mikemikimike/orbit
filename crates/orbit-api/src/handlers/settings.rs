@@ -35,6 +35,9 @@ pub struct OidcSettings {
     /// IdP group/claim value -> ORBIT role name.
     #[serde(default)]
     pub group_roles: std::collections::BTreeMap<String, String>,
+    /// IdP group -> `team-slug:role` (access team membership).
+    #[serde(default)]
+    pub team_groups: std::collections::BTreeMap<String, String>,
     /// Re-evaluate the stored role on every login when a mapping matches.
     #[serde(default)]
     pub sync_roles: bool,
@@ -68,6 +71,7 @@ pub async fn get_oidc(
         default_role: "viewer".into(),
         role_claim: "groups".into(),
         group_roles: Default::default(),
+        team_groups: Default::default(),
         sync_roles: false,
     });
     Ok(Json(settings))
@@ -121,6 +125,7 @@ pub async fn apply_stored_oidc(
         default_role: orbit_domain::UserRole::Viewer,
         role_claim: "groups".into(),
         group_roles: Vec::new(),
+        team_groups: Vec::new(),
         sync_roles: false,
         clock_skew_seconds: 60,
     });
@@ -177,6 +182,25 @@ pub async fn apply_stored_oidc(
             }
         }
         oidc.group_roles = mappings;
+    }
+    if !stored.team_groups.is_empty() {
+        let mut mappings = Vec::new();
+        for (group, value) in &stored.team_groups {
+            match value.split_once(':') {
+                Some((team, role))
+                    if !team.trim().is_empty()
+                        && matches!(role.trim(), "lead" | "member" | "viewer") =>
+                {
+                    mappings.push((
+                        group.clone(),
+                        team.trim().to_string(),
+                        role.trim().to_string(),
+                    ));
+                }
+                _ => tracing::warn!(group = %group, "ignoring invalid OIDC team mapping"),
+            }
+        }
+        oidc.team_groups = mappings;
     }
     if stored.sync_roles {
         oidc.sync_roles = true;

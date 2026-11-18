@@ -109,6 +109,9 @@ Equivalent environment variables: `ORBIT_OIDC_ROLE_CLAIM`,
 Group mappings target built-in roles. Custom roles (`docs/development/rbac.md`) are
 assigned manually for now; group-to-custom-role mapping is a follow-up.
 
+OIDC groups can also add users to access teams; see
+[oidc-team-sync.md](oidc-team-sync.md).
+
 ## Configure from the UI
 
 Once the platform is reachable, OIDC can also be configured under **Settings → OIDC / SSO**

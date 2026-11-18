@@ -72,6 +72,8 @@ pub struct OidcConfig {
     /// Claim values mapped to ORBIT roles. Order is irrelevant; the most privileged
     /// matching role wins.
     pub group_roles: Vec<(String, UserRole)>,
+    /// IdP group -> (access team slug, team role).
+    pub team_groups: Vec<(String, String, String)>,
     /// Re-evaluate the stored role on every login when a mapping matches. Without this,
     /// the mapped role is only used at auto-provisioning.
     pub sync_roles: bool,
@@ -148,6 +150,7 @@ impl AuthConfig {
                         .map_err(SecurityError::Config)?,
                     role_claim: env_or("ORBIT_OIDC_ROLE_CLAIM", "groups"),
                     group_roles: parse_group_roles(&env_or("ORBIT_OIDC_GROUP_ROLES", ""))?,
+                    team_groups: parse_team_groups(&env_or("ORBIT_OIDC_TEAM_GROUPS", ""))?,
                     sync_roles: env_bool("ORBIT_OIDC_SYNC_ROLES", false),
                     clock_skew_seconds: env_or("ORBIT_OIDC_CLOCK_SKEW_SECONDS", "60")
                         .parse()
@@ -556,6 +559,50 @@ pub fn public_auth_metadata(config: &AuthConfig) -> Value {
     }
 }
 
+/// Parse `group=team-slug:role,group2=platform:member` or JSON
+/// `{"group":"team-slug:role"}`. Roles are lead/member/viewer.
+fn parse_team_groups(value: &str) -> Result<Vec<(String, String, String)>, SecurityError> {
+    fn parse_one(group: &str, value: &str) -> Result<(String, String, String), SecurityError> {
+        let (team, role) = value.split_once(':').ok_or_else(|| {
+            SecurityError::Config(format!(
+                "ORBIT_OIDC_TEAM_GROUPS: expected team-slug:role for '{group}'"
+            ))
+        })?;
+        let team = team.trim();
+        let role = role.trim();
+        if team.is_empty() || !matches!(role, "lead" | "member" | "viewer") {
+            return Err(SecurityError::Config(format!(
+                "ORBIT_OIDC_TEAM_GROUPS: invalid mapping for '{group}'"
+            )));
+        }
+        Ok((group.trim().to_string(), team.to_string(), role.to_string()))
+    }
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(Vec::new());
+    }
+    if value.starts_with('{') {
+        let map: std::collections::BTreeMap<String, String> = serde_json::from_str(value)
+            .map_err(|error| SecurityError::Config(format!("ORBIT_OIDC_TEAM_GROUPS: {error}")))?;
+        return map
+            .iter()
+            .map(|(group, value)| parse_one(group, value))
+            .collect();
+    }
+    value
+        .split(',')
+        .filter(|pair| !pair.trim().is_empty())
+        .map(|pair| {
+            let (group, value) = pair.split_once('=').ok_or_else(|| {
+                SecurityError::Config(
+                    "ORBIT_OIDC_TEAM_GROUPS must be 'group=team-slug:role'".into(),
+                )
+            })?;
+            parse_one(group, value)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -574,6 +621,18 @@ mod tests {
         assert_eq!(bearer_token(Some("bearer abc")), Some("abc"));
         assert_eq!(bearer_token(Some("Basic abc")), None);
         assert_eq!(bearer_token(None), None);
+    }
+
+    #[test]
+    fn parses_team_group_mappings() {
+        let mappings = parse_team_groups("platform=platform:member, leads=platform:lead").unwrap();
+        assert_eq!(mappings.len(), 2);
+        assert_eq!(mappings[1].0, "leads");
+        assert_eq!(mappings[1].1, "platform");
+        assert_eq!(mappings[1].2, "lead");
+        assert!(parse_team_groups("platform=platform:owner").is_err());
+        assert!(parse_team_groups("platform:member").is_err());
+        assert!(parse_team_groups("").unwrap().is_empty());
     }
 
     #[test]

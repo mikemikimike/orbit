@@ -10,6 +10,9 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- OIDC `teamGroups` mapping (env `ORBIT_OIDC_TEAM_GROUPS`) adds users to access teams by
+  IdP group, additively, with `lead`/`member`/`viewer` roles.
+
 - `glab` and `gh` are bundled in the OpenCode/Pi worker images (pinned versions).
 - Worker-profile `allowGlab` / `allowGh` (default false). When enabled and a team GitLab/
   GitHub connection is attached, the execution environment receives `GITLAB_TOKEN` /

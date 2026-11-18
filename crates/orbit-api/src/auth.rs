@@ -170,6 +170,11 @@ async fn resolve_oidc(state: &AppState, token: Option<&str>) -> Result<AuthConte
     if user.status != "active" {
         return Err(ApiError::forbidden("user is disabled"));
     }
+    if !identity.groups.is_empty() && !oidc.team_groups.is_empty() {
+        if let Err(error) = sync_oidc_teams(state, user.id, user.org_id, &identity.groups).await {
+            tracing::warn!(%error, "OIDC access-team sync failed");
+        }
+    }
     let (role, scopes) = resolve_role(state, user.org_id, &user.role).await?;
     Ok(AuthContext {
         user_id: user.id,
@@ -181,6 +186,36 @@ async fn resolve_oidc(state: &AppState, token: Option<&str>) -> Result<AuthConte
         scopes,
         token_id: None,
     })
+}
+
+/// Additive OIDC group -> access-team membership sync. Never removes manual memberships.
+async fn sync_oidc_teams(
+    state: &AppState,
+    user_id: uuid::Uuid,
+    org_id: uuid::Uuid,
+    groups: &[String],
+) -> Result<(), ApiError> {
+    if !state.license_status().has_feature("teams") {
+        return Ok(());
+    }
+    let Some(oidc) = state.auth.oidc.as_ref() else {
+        return Ok(());
+    };
+    let teams = state.store.list_access_teams(org_id).await?;
+    for (group, team_slug, team_role) in &oidc.team_groups {
+        if !groups.iter().any(|value| value == group) {
+            continue;
+        }
+        let Some(team) = teams.iter().find(|team| &team.slug == team_slug) else {
+            tracing::warn!(%group, team = %team_slug, "OIDC team mapping references a missing team");
+            continue;
+        };
+        state
+            .store
+            .upsert_team_member(team.id, user_id, team_role)
+            .await?;
+    }
+    Ok(())
 }
 
 /// Resolve a stored role name to a built-in role or a custom permission set.
