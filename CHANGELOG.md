@@ -20,6 +20,10 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 - Overview, Agents, Executions, execution detail, agent detail, Approvals, Start work,
   Agent Studio, Agent teams, Workers, Settings (now tabbed) and the catalogue pages were
   rebuilt on those primitives. Execution filters live in the URL.
+- **Environments**: mappings can now be edited and duplicated (the API already allowed it).
+  Each mapping is a card showing where every variable comes from and which worker profiles
+  use it; the editor picks one source per variable, suggests a name from the connection and
+  flags invalid or duplicate names.
 
 ### Added
 

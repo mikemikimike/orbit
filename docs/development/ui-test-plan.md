@@ -212,6 +212,7 @@ approvals UI is still being finished.
 | `/workers` → New profile | Harness, target, driver, image/tag (defaults to `latest`), provider/model |
 | Agents / Shared skills | **Select all** and **Clear** work |
 | Env variable mappings | Add row, choose connection, set the env var name; saved and reloaded |
+| `/environment-mappings` | New mapping, Edit (rename a variable, switch Connection / Secret), Duplicate, Delete; invalid or duplicate names block saving with a reason; cards show "Used by" worker profiles |
 | Enable + Launch | Launch appears in Launches; Pod/Job created when a launcher is configured |
 | Without a launcher | Clear error: no worker launcher configured |
 | Launches filter | Active / History |

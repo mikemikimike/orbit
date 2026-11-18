@@ -40,3 +40,13 @@ export function createEnvMapping(body: {
 export function deleteEnvMapping(id: string): Promise<void> {
   return request<void>(`/api/v1/env-mappings/${id}`, { method: "DELETE" });
 }
+
+export function updateEnvMapping(
+  id: string,
+  body: { name: string; description: string; mappings: EnvMappingEntry[] },
+): Promise<EnvMappingRecord> {
+  return request<EnvMappingRecord>(`/api/v1/env-mappings/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
