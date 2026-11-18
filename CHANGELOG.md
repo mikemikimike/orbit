@@ -6,7 +6,7 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
-## [Unreleased]
+## [0.16.2] - 2026-11-18
 
 ### Fixed
 
