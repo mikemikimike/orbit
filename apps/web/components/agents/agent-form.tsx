@@ -59,7 +59,7 @@ export function AgentForm({
     initial ? structuredClone(initial) : emptyAgentDefinition(),
   );
   const [harnessConfigText, setHarnessConfigText] = useState(
-    JSON.stringify(initial?.spec.harness.config ?? {}, null, 2),
+    JSON.stringify(initial?.spec.harness?.config ?? {}, null, 2),
   );
   const configFileRef = useRef<HTMLInputElement>(null);
 
@@ -84,7 +84,10 @@ export function AgentForm({
   const [issues, setIssues] = useState<Array<{ path: string; message: string }>>([]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  const selectedHarness = harnesses.data?.find((r) => r.kind === definition.spec.harness.type);
+  const formHarness =
+    definition.spec.harness ??
+    { type: "mock" as const, executionMode: "on_demand" as const, placement: "auto" as const, config: {} };
+  const selectedHarness = harnesses.data?.find((r) => r.kind === formHarness.type);
   const platformProviders = useMemo(
     () => providers.data?.filter((p) => p.kind === "openai_compatible") ?? [],
     [providers.data],
@@ -186,17 +189,18 @@ export function AgentForm({
       }
     }
     setConfigError(null);
-    const candidate: AgentDefinition = {
+    const { harness: _legacyHarness, ...portableSpec } = definition.spec;
+    const candidate = {
       ...definition,
       metadata: {
         ...definition.metadata,
         name: definition.metadata.name.trim(),
       },
       spec: {
-        ...definition.spec,
-        harness: { ...definition.spec.harness, config: config as Record<string, unknown> },
+        ...portableSpec,
+        // Harness config is selected per run/worker; never stored on the agent.
       },
-    };
+    } as unknown as AgentDefinition;
     const parsed = agentDefinitionSchema.safeParse(candidate);
     if (!parsed.success) {
       const nextIssues = parsed.error.issues.map((issue) => ({
@@ -284,7 +288,7 @@ export function AgentForm({
                 <Label>Harness</Label>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {(harnesses.data ?? []).map((harness) => {
-                    const active = definition.spec.harness.type === harness.kind;
+                    const active = formHarness.type === harness.kind;
                     return (
                       <button
                         key={harness.kind}
@@ -292,8 +296,8 @@ export function AgentForm({
                         onClick={() =>
                           updateSpec({
                             harness: {
-                              ...definition.spec.harness,
-                              type: harness.kind as AgentDefinition["spec"]["harness"]["type"],
+                              ...formHarness,
+                              type: harness.kind as NonNullable<AgentDefinition["spec"]["harness"]>["type"],
                             },
                           })
                         }
@@ -330,13 +334,13 @@ export function AgentForm({
                   <Label>Placement</Label>
                   <select
                     className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                    value={definition.spec.harness.placement}
+                    value={formHarness.placement}
                     onChange={(event) =>
                       updateSpec({
                         harness: {
-                          ...definition.spec.harness,
+                          ...formHarness,
                           placement: event.target
-                            .value as AgentDefinition["spec"]["harness"]["placement"],
+                            .value as NonNullable<AgentDefinition["spec"]["harness"]>["placement"],
                         },
                       })
                     }
@@ -354,13 +358,13 @@ export function AgentForm({
                   <Label>Execution mode</Label>
                   <select
                     className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                    value={definition.spec.harness.executionMode}
+                    value={formHarness.executionMode}
                     onChange={(event) =>
                       updateSpec({
                         harness: {
-                          ...definition.spec.harness,
+                          ...formHarness,
                           executionMode: event.target
-                            .value as AgentDefinition["spec"]["harness"]["executionMode"],
+                            .value as NonNullable<AgentDefinition["spec"]["harness"]>["executionMode"],
                         },
                       })
                     }

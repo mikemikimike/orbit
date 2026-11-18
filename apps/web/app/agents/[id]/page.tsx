@@ -210,7 +210,7 @@ export default function AgentDetailPage() {
       <div className="flex flex-wrap items-center gap-2">
         <AgentStatusBadge status={data.status} />
         <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-medium">
-          {titleCase(spec.harness.type)}
+          {spec.harness ? titleCase(spec.harness.type) : "harness at run time"}
         </span>
         <span className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-[11px]">
           <ShieldCheck className="h-3 w-3" /> {autonomyName(autonomy.level)}
@@ -262,9 +262,16 @@ export default function AgentDetailPage() {
                   <CardTitle>Harness</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  <Row label="Harness" value={titleCase(spec.harness.type)} />
-                  <Row label="Mode" value={titleCase(spec.harness.executionMode)} />
-                  <Row label="Placement" value={titleCase(spec.harness.placement)} />
+                  <Row
+                    label="Harness"
+                    value={spec.harness ? titleCase(spec.harness.type) : "selected per run"}
+                  />
+                  {spec.harness ? (
+                    <>
+                      <Row label="Mode" value={titleCase(spec.harness.executionMode)} />
+                      <Row label="Placement" value={titleCase(spec.harness.placement)} />
+                    </>
+                  ) : null}
                   <Row
                     label="Model management"
                     value={titleCase(spec.model.management)}
