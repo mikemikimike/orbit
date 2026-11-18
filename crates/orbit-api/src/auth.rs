@@ -195,7 +195,10 @@ async fn sync_oidc_teams(
     org_id: uuid::Uuid,
     groups: &[String],
 ) -> Result<(), ApiError> {
-    if !state.license_status().has_feature("teams") {
+    if !state
+        .license_status()
+        .has_feature(orbit_security::FEATURE_TEAMS)
+    {
         return Ok(());
     }
     let Some(oidc) = state.auth.oidc.as_ref() else {

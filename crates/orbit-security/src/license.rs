@@ -16,6 +16,7 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
 pub const FEATURE_CUSTOM_ROLES: &str = "custom_roles";
+pub const FEATURE_TEAMS: &str = "teams";
 pub const FEATURE_RESOURCE_PERMISSIONS: &str = "resource_permissions";
 pub const FEATURE_SHARED_CONNECTIONS: &str = "shared_connections";
 pub const FEATURE_QUOTAS: &str = "quotas";

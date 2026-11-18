@@ -33,7 +33,7 @@ A small signed token (Ed25519 JWS) containing:
 {
   "customer": "Acme",
   "plan": "enterprise",
-  "features": ["custom_roles"],
+  "features": ["custom_roles", "teams", "resource_permissions"],
   "limits": { "seats": 50, "agents": 500, "workers": 25, "executions_per_day": 10000 },
   "issued_at": "2026-11-01T00:00:00Z",
   "expires_at": "2027-11-01T00:00:00Z",

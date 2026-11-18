@@ -16,4 +16,6 @@ pub use http::*;
 pub use permissions::*;
 pub use secrets::*;
 
-pub use license::{LicenseHandle, LicenseLimits, LicenseSource, LicenseStatus, LicenseVerifier};
+pub use license::{
+    LicenseHandle, LicenseLimits, LicenseSource, LicenseStatus, LicenseVerifier, FEATURE_TEAMS,
+};
