@@ -226,3 +226,14 @@ impl Store {
         )
     }
 }
+
+impl Store {
+    /// Enabled profiles that follow the platform image tag (empty imageTag).
+    pub async fn list_platform_follow_profiles(&self) -> StoreResult<Vec<WorkerProfile>> {
+        Ok(sqlx::query_as::<_, WorkerProfile>(
+            "SELECT * FROM worker_profiles WHERE enabled AND image_tag = '' ORDER BY created_at ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+}

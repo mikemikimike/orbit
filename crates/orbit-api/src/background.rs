@@ -90,6 +90,18 @@ pub fn spawn(state: AppState) {
         }
     });
 
+    let tag_state = state.clone();
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(60));
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticker.tick().await;
+            if let Err(error) = reconcile_worker_tags(&tag_state).await {
+                tracing::warn!(%error, "worker tag reconciliation failed");
+            }
+        }
+    });
+
     let retention_state = state.clone();
     tokio::spawn(async move {
         // Run shortly after start, then daily.
@@ -315,4 +327,97 @@ async fn reap(state: &AppState) {
         Ok(_) => {}
         Err(error) => tracing::warn!(%error, "execution reaper failed"),
     }
+}
+
+/// Relaunch platform-follow worker profiles when ORBIT_IMAGE_TAG changes. The old token
+/// is revoked first (no new claims), active executions drain, then the launcher stops and
+/// replaces the worker.
+async fn reconcile_worker_tags(state: &AppState) -> anyhow::Result<()> {
+    if state.launcher_url.is_none() {
+        return Ok(());
+    }
+    let tag = crate::images::image_tag();
+    let profiles = state.store.list_platform_follow_profiles().await?;
+    for profile in profiles {
+        let Some(user_id) = profile.owner_user_id else {
+            continue;
+        };
+        let desired = format!("{}:{}", profile.image, tag);
+        let launches = state
+            .store
+            .list_worker_launches(profile.org_id, None)
+            .await?;
+        for launch in launches.into_iter().filter(|launch| {
+            launch.profile_id == profile.id
+                && matches!(launch.status.as_str(), "pending" | "starting" | "running")
+                && launch.image != desired
+        }) {
+            let auth = orbit_security::AuthContext {
+                user_id,
+                org_id: profile.org_id,
+                email: "system@orbit.local".into(),
+                display_name: "ORBIT auto-update".into(),
+                role: orbit_domain::UserRole::Owner,
+                method: orbit_security::AuthMethod::ApiToken,
+                scopes: Vec::new(),
+                token_id: None,
+            };
+            if let Some(token_id) = launch.worker_token_id {
+                let _ = state
+                    .store
+                    .revoke_worker_token(profile.org_id, token_id)
+                    .await;
+            }
+            if let Some(worker_id) = &launch.worker_id {
+                if state
+                    .store
+                    .has_active_executions_for_worker(profile.org_id, worker_id)
+                    .await?
+                {
+                    tracing::info!(profile = %profile.name, %worker_id, "worker update waiting for drain");
+                    continue;
+                }
+            }
+            let old_image = launch.image.clone();
+            match crate::handlers::worker_launches::stop_launch_internal(state, &auth, launch).await
+            {
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(profile = %profile.name, %error, "could not stop old worker");
+                    continue;
+                }
+            }
+            match crate::handlers::worker_launches::launch_profile_internal(
+                state, &auth, profile.id, None,
+            )
+            .await
+            {
+                Ok(new_launch) => {
+                    tracing::info!(
+                        profile = %profile.name,
+                        old = %old_image,
+                        new = %new_launch.image,
+                        "worker auto-relaunched for platform tag"
+                    );
+                    crate::audit::record(
+                        state,
+                        &auth,
+                        "worker.auto_relaunched",
+                        Some("worker_profile"),
+                        Some(profile.id),
+                        serde_json::json!({
+                            "oldImage": old_image,
+                            "newImage": new_launch.image,
+                            "launchId": new_launch.id,
+                        }),
+                    )
+                    .await;
+                }
+                Err(error) => {
+                    tracing::error!(profile = %profile.name, %error, "worker auto-relaunch failed");
+                }
+            }
+        }
+    }
+    Ok(())
 }
