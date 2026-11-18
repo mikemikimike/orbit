@@ -10,6 +10,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Added
 
+- Settings → Users & roles UI: organization role assignment and custom-role CRUD with
+  permission checkboxes (owner/admin only).
+
+
+### Added
+
 - OIDC `emailClaim` / `ORBIT_OIDC_EMAIL_CLAIM` selects the unique identity/email claim
   (default `email`); use `name` when multiple IdP accounts share an email.
 

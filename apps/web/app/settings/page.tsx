@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
   Boxes,
@@ -34,6 +34,7 @@ import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { request } from "@/lib/http";
 import { signOut } from "@/lib/session";
 import { copyText } from "@/lib/browser";
 import {
@@ -576,6 +577,250 @@ function OidcSettingsForm() {
   );
 }
 
+
+const PERMISSIONS = [
+  "agents:read",
+  "agents:write",
+  "executions:read",
+  "executions:create",
+  "executions:cancel",
+  "approvals:decide",
+  "harnesses:read",
+  "providers:read",
+  "providers:write",
+  "connections:read",
+  "connections:write",
+  "triggers:write",
+  "settings:read",
+  "settings:write",
+  "members:read",
+  "audit:read",
+];
+
+type UserRow = {
+  id: string;
+  email: string;
+  displayName: string;
+  role: string;
+  status: string;
+  oidcSubject?: string | null;
+};
+type RoleRow = { id: string; name: string; permissions: string[] };
+const BUILTIN_ROLES = ["owner", "admin", "operator", "viewer"];
+
+function UsersRolesCard() {
+  const queryClient = useQueryClient();
+  const me = useMe();
+  const canManage = me.data?.permissions.includes("settings:write") ?? false;
+  const users = useQuery({
+    queryKey: ["users"],
+    queryFn: () => request<UserRow[]>("/api/v1/users"),
+    enabled: canManage,
+  });
+  const roles = useQuery({
+    queryKey: ["custom-roles"],
+    queryFn: () => request<RoleRow[]>("/api/v1/roles"),
+    enabled: canManage,
+  });
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<RoleRow | null>(null);
+  const [name, setName] = useState("");
+  const [permissions, setPermissions] = useState<string[]>([]);
+
+  const setRole = useMutation({
+    mutationFn: ({ id, role }: { id: string; role: string }) =>
+      request(`/api/v1/users/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ role }),
+      }),
+    onSuccess: () => {
+      toast.success("Role updated");
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const saveRole = useMutation({
+    mutationFn: () =>
+      request(editing ? `/api/v1/roles/${editing.id}` : "/api/v1/roles", {
+        method: editing ? "PATCH" : "POST",
+        body: JSON.stringify({ name: name.trim(), permissions }),
+      }),
+    onSuccess: () => {
+      toast.success(editing ? "Role updated" : "Role created");
+      setOpen(false);
+      setEditing(null);
+      void queryClient.invalidateQueries({ queryKey: ["custom-roles"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const removeRole = useMutation({
+    mutationFn: (id: string) =>
+      request(`/api/v1/roles/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast.success("Role deleted");
+      void queryClient.invalidateQueries({ queryKey: ["custom-roles"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  function openCreate() {
+    setEditing(null);
+    setName("");
+    setPermissions([]);
+    setOpen(true);
+  }
+  function openEdit(role: RoleRow) {
+    setEditing(role);
+    setName(role.name);
+    setPermissions(role.permissions);
+    setOpen(true);
+  }
+
+  if (!canManage) return null;
+
+  const roleOptions = [
+    ...BUILTIN_ROLES,
+    ...((roles.data ?? []).map((role) => role.name)),
+  ];
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between">
+        <CardTitle className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-primary" /> Users &amp; roles
+        </CardTitle>
+        <Button size="sm" variant="outline" onClick={openCreate}>
+          <Plus /> New role
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">Organization users</p>
+          {users.isLoading ? <Skeleton className="h-16" /> : null}
+          {users.data?.map((user) => (
+            <div
+              key={user.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{user.displayName}</p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {user.email} · {user.status}
+                  {user.oidcSubject ? " · OIDC" : ""}
+                </p>
+              </div>
+              <select
+                className="h-8 rounded-lg border bg-card px-2 text-xs"
+                value={user.role}
+                onChange={(event) =>
+                  setRole.mutate({ id: user.id, role: event.target.value })
+                }
+              >
+                {[...new Set([user.role, ...roleOptions])].map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">Custom roles</p>
+          {(roles.data ?? []).length ? (
+            roles.data!.map((role) => (
+              <div
+                key={role.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{role.name}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {role.permissions.join(", ")}
+                  </p>
+                </div>
+                <div className="flex gap-1">
+                  <Button size="sm" variant="ghost" onClick={() => openEdit(role)}>
+                    Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive"
+                    onClick={() => {
+                      if (window.confirm(`Delete role ${role.name}?`)) {
+                        removeRole.mutate(role.id);
+                      }
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No custom roles. Custom roles require the custom_roles license feature.
+            </p>
+          )}
+        </div>
+      </CardContent>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit role" : "New custom role"}</DialogTitle>
+            <DialogDescription>
+              Permissions are additive to the organization role. Team access is separate.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Name</Label>
+              <Input value={name} onChange={(event) => setName(event.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Permissions</Label>
+              <div className="grid max-h-56 gap-1 overflow-y-auto rounded-lg border p-3 sm:grid-cols-2">
+                {PERMISSIONS.map((permission) => (
+                  <label key={permission} className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={permissions.includes(permission)}
+                      onChange={(event) =>
+                        setPermissions((current) =>
+                          event.target.checked
+                            ? [...current, permission]
+                            : current.filter((item) => item !== permission),
+                        )
+                      }
+                    />
+                    {permission}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => saveRole.mutate()}
+              loading={saveRole.isPending}
+              disabled={!name.trim() || !permissions.length}
+            >
+              Save role
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
