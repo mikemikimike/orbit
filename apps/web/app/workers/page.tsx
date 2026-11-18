@@ -693,7 +693,7 @@ function WorkersPageInner() {
       </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit worker profile" : "New worker profile"}</DialogTitle>
             <DialogDescription>
@@ -702,6 +702,9 @@ function WorkersPageInner() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 sm:grid-cols-2">
+            <div className="border-b pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:col-span-2">
+              Runtime
+            </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Name</Label>
               <Input value={name} onChange={(event) => setName(event.target.value)} />
@@ -802,6 +805,9 @@ function WorkersPageInner() {
               </div>
             </div>
             <div className="space-y-1.5">
+              <div className="border-b pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:col-span-2">
+                Model &amp; auth
+              </div>
               <Label>Provider</Label>
               {workerProviders.length ? (
                 <>
@@ -928,6 +934,9 @@ function WorkersPageInner() {
             <div className="space-y-1.5 sm:col-span-2">
               <div className="flex items-center justify-between">
                 <div className="space-y-2 rounded-lg border p-3">
+                  <div className="border-b pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:col-span-2">
+                    Permissions
+                  </div>
                   <Label>OpenCode web tools</Label>
                   <label className="flex items-center gap-2 text-xs">
                     <input
@@ -984,6 +993,9 @@ function WorkersPageInner() {
                   <p className="text-[11px] text-muted-foreground">
                     JSON map of tool name to allow/ask/deny. Example: shell allow, bash deny.
                   </p>
+                </div>
+                <div className="border-b pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:col-span-2">
+                  Environment
                 </div>
                 <Label>Environment variable mappings</Label>
                 <Button
@@ -1104,6 +1116,9 @@ function WorkersPageInner() {
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <div className="flex items-center justify-between">
+                <div className="border-b pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:col-span-2">
+                  Scope
+                </div>
                 <Label>Agents</Label>
                 <div className="flex gap-1">
                   <Button
