@@ -6,6 +6,33 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
+## [0.18.0] - 2026-11-18
+
+### Added
+
+- Rerun terminal executions from execution detail (`POST /api/v1/executions/{id}/rerun`).
+- Secret-free resource export (`GET /api/v1/export/{resource}/{id}`) with recursive
+  redaction and Export actions.
+- Worker profiles with an empty image tag follow the platform image tag and auto-relaunch
+  after an upgrade (token revoke, drain, replace, audit).
+- Settings now renders Runtime, Access policy and Users & roles cards.
+
+### Changed
+
+- Resource visibility/team access moved from Share into Edit forms.
+- Worker-profile and Agent Team editors grouped into sections with sticky footers.
+- Agent lists have a compact list/grid view; worker/team secondary actions moved to More
+  menus.
+- Regenerated the OpenAPI TypeScript client.
+
+### Fixed
+
+- Description-only agent edits no longer fail as duplicate versions.
+- Planned/scaffolded harnesses are hidden from run dialogs and rejected by the API.
+- Pi auth works for launcher-created profile workers (writable copy of the Secret).
+- Stale SSO tokens are cleared; login shows SSO again and invalid sessions redirect.
+- Invalid/expired tokens are handled centrally on 401.
+
 ## [0.17.0] - 2026-11-18
 
 ### Breaking
