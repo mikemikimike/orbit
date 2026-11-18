@@ -42,6 +42,13 @@ pub async fn create_trigger(
     crate::extract::ApiJson(body): crate::extract::ApiJson<CreateTriggerRequest>,
 ) -> Result<(StatusCode, Json<Trigger>), ApiError> {
     auth.require(Permission::TriggersWrite)?;
+    if let Some(harness) = &body.harness {
+        if harness.parse::<orbit_domain::HarnessKind>().is_err() {
+            return Err(ApiError::validation(vec![
+                orbit_domain::ValidationIssue::new("harness", "unknown harness"),
+            ]));
+        }
+    }
     let mut issues = Vec::new();
     match body.kind.as_str() {
         "schedule" => {
@@ -87,6 +94,7 @@ pub async fn create_trigger(
             auth.org_id,
             body.agent_id,
             &body.kind,
+            body.harness.as_deref(),
             body.config,
             body.enabled.unwrap_or(true),
         )

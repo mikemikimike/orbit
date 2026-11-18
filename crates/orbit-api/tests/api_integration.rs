@@ -922,12 +922,12 @@ async fn private_resources_are_hidden_from_other_users() {
         .unwrap();
     let alice_trigger = app
         .store
-        .create_trigger(app.org_id, alice_agent, "manual", json!({}), true)
+        .create_trigger(app.org_id, alice_agent, "manual", None, json!({}), true)
         .await
         .unwrap();
     let bob_trigger = app
         .store
-        .create_trigger(app.org_id, bob_agent, "manual", json!({}), true)
+        .create_trigger(app.org_id, bob_agent, "manual", None, json!({}), true)
         .await
         .unwrap();
     let alice_policy = app

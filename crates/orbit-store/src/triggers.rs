@@ -104,6 +104,7 @@ impl Store {
         org_id: Uuid,
         agent_id: Uuid,
         kind: &str,
+        harness_kind: Option<&str>,
         config: serde_json::Value,
         enabled: bool,
     ) -> StoreResult<Trigger> {
@@ -123,8 +124,8 @@ impl Store {
         };
         Ok(sqlx::query_as::<_, Trigger>(
             r#"
-            INSERT INTO triggers (id, org_id, agent_id, kind, enabled, config, next_run_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO triggers (id, org_id, agent_id, kind, harness_kind, enabled, config, next_run_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING *
             "#,
         )
@@ -132,6 +133,7 @@ impl Store {
         .bind(org_id)
         .bind(agent_id)
         .bind(kind)
+        .bind(harness_kind)
         .bind(enabled)
         .bind(config)
         .bind(next_run_at)

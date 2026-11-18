@@ -431,6 +431,9 @@ impl From<ConnectionWithConnector> for ConnectionView {
 pub struct CreateTriggerRequest {
     pub agent_id: Uuid,
     pub kind: String,
+    /// Optional harness for executions fired by this trigger.
+    #[serde(default)]
+    pub harness: Option<String>,
     #[serde(default)]
     pub config: serde_json::Value,
     #[serde(default)]

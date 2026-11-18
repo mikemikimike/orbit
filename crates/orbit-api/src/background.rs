@@ -212,6 +212,11 @@ async fn fire_trigger_inner(state: &AppState, trigger: Trigger) -> anyhow::Resul
         "agentVersion": version.version,
     });
 
+    let harness_kind = trigger
+        .harness_kind
+        .as_deref()
+        .and_then(|value| value.parse::<orbit_domain::HarnessKind>().ok())
+        .unwrap_or(spec.harness.kind);
     let idempotency_key = format!("trigger:{}:{}", trigger.id, fired_at.timestamp_millis());
     let execution = state
         .store
@@ -220,7 +225,7 @@ async fn fire_trigger_inner(state: &AppState, trigger: Trigger) -> anyhow::Resul
             agent_id: agent.id,
             agent_version_id: version.id,
             agent_name: &agent.name,
-            harness_kind: spec.harness.kind,
+            harness_kind,
             trigger_source: TriggerSource::Schedule,
             placement: spec.harness.placement.as_str(),
             trigger_id: Some(trigger.id),
@@ -241,7 +246,7 @@ async fn fire_trigger_inner(state: &AppState, trigger: Trigger) -> anyhow::Resul
             "executionId": execution.id,
             "agentId": agent.id,
             "triggerId": trigger.id,
-            "harness": spec.harness.kind.as_str(),
+            "harness": harness_kind.as_str(),
         }),
     )
     .with_org(trigger.org_id)
