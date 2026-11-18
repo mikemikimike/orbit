@@ -290,10 +290,98 @@ pub struct ExecutionRequest {
     pub events: Option<tokio::sync::mpsc::Sender<HarnessEvent>>,
     #[serde(skip, default = "default_cancellation")]
     pub cancel: tokio_util::sync::CancellationToken,
+    /// Time the run spends waiting on a person (an approval) does not count toward
+    /// `resources.timeout_seconds`. The platform pauses this clock while it waits;
+    /// adapters enforce their timeout with [`PauseClock::deadline`].
+    #[serde(skip)]
+    pub pause: PauseClock,
 }
 
 fn default_cancellation() -> tokio_util::sync::CancellationToken {
     tokio_util::sync::CancellationToken::new()
+}
+
+/// Tracks how long an execution has been paused waiting for a human decision.
+///
+/// Cheap to clone; all clones share one clock. Pauses may overlap (two tool calls
+/// waiting at once): the clock runs again only when every pause has ended.
+#[derive(Debug, Clone, Default)]
+pub struct PauseClock {
+    inner: std::sync::Arc<std::sync::Mutex<PauseState>>,
+}
+
+#[derive(Debug, Default)]
+struct PauseState {
+    /// Completed pause time.
+    paused: std::time::Duration,
+    /// Number of pauses currently open, and when the first of them began.
+    open: u32,
+    since: Option<std::time::Instant>,
+}
+
+/// Ends its pause when dropped, so an early return or error cannot leave the clock stopped.
+#[derive(Debug)]
+pub struct PauseGuard {
+    clock: PauseClock,
+}
+
+impl Drop for PauseGuard {
+    fn drop(&mut self) {
+        let mut state = self.clock.inner.lock().unwrap_or_else(|e| e.into_inner());
+        state.open = state.open.saturating_sub(1);
+        if state.open == 0 {
+            if let Some(since) = state.since.take() {
+                state.paused += since.elapsed();
+            }
+        }
+    }
+}
+
+impl PauseClock {
+    /// Stop the run's clock until the returned guard is dropped.
+    pub fn pause(&self) -> PauseGuard {
+        let mut state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        if state.open == 0 {
+            state.since = Some(std::time::Instant::now());
+        }
+        state.open += 1;
+        PauseGuard {
+            clock: self.clone(),
+        }
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).open > 0
+    }
+
+    /// Total time spent paused so far, including a pause still in progress.
+    pub fn total_paused(&self) -> std::time::Duration {
+        let state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        state.paused + state.since.map(|since| since.elapsed()).unwrap_or_default()
+    }
+
+    /// Resolves once the run has been *active* (not paused) for `timeout`.
+    ///
+    /// Use in place of `tokio::time::sleep(timeout)` when enforcing an execution timeout.
+    pub async fn deadline(&self, timeout: std::time::Duration) {
+        let started = std::time::Instant::now();
+        loop {
+            let active = started.elapsed().saturating_sub(self.total_paused());
+            if !self.is_paused() && active >= timeout {
+                return;
+            }
+            // While paused there is nothing to count down; poll for the pause to end.
+            let wait = if self.is_paused() {
+                std::time::Duration::from_millis(250)
+            } else {
+                timeout.saturating_sub(active).clamp(
+                    std::time::Duration::from_millis(10),
+                    std::time::Duration::from_secs(1),
+                )
+            };
+            tokio::time::sleep(wait).await;
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -528,5 +616,42 @@ pub trait HarnessAdapter: Send + Sync {
     async fn resume(&self, request: ResumeRequest) -> Result<ExecutionOutcome, HarnessError> {
         let _ = request;
         Err(HarnessError::unsupported("session resumption"))
+    }
+}
+
+#[cfg(test)]
+mod pause_clock_tests {
+    #[tokio::test]
+    async fn pause_clock_does_not_count_paused_time() {
+        let clock = super::PauseClock::default();
+        let started = std::time::Instant::now();
+        let waiter = {
+            let clock = clock.clone();
+            tokio::spawn(async move { clock.deadline(std::time::Duration::from_millis(200)).await })
+        };
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        {
+            let _guard = clock.pause();
+            let _overlapping = clock.pause();
+            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+            assert!(clock.is_paused());
+            assert!(!waiter.is_finished(), "deadline must not fire while paused");
+        }
+        assert!(!clock.is_paused());
+        waiter.await.unwrap();
+        assert!(started.elapsed() >= std::time::Duration::from_millis(590));
+        assert!(clock.total_paused() >= std::time::Duration::from_millis(390));
+    }
+
+    #[tokio::test]
+    async fn pause_clock_without_pauses_is_a_plain_timeout() {
+        let clock = super::PauseClock::default();
+        let started = std::time::Instant::now();
+        clock.deadline(std::time::Duration::from_millis(120)).await;
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed >= std::time::Duration::from_millis(120)
+                && elapsed < std::time::Duration::from_millis(600)
+        );
     }
 }

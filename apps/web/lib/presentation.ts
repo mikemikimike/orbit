@@ -1,3 +1,5 @@
+import { AUTONOMY_LEVELS } from "@orbit/contracts";
+
 // Human-friendly labels for the technical primitives ORBIT exposes in the UI.
 // Kept in one place so capability ids, effects, cron expressions and event kinds
 // read like English everywhere instead of internal identifiers.
@@ -37,16 +39,8 @@ const CAPABILITY_LABELS: Record<string, string> = {
 const EFFECT_LABELS: Record<string, { label: string; tone: "safe" | "write" | "external" }> = {
   read: { label: "Read only", tone: "safe" },
   write: { label: "Can change data", tone: "write" },
-  external_side_effect: { label: "Can act externally", tone: "external" },
+  external_side_effect: { label: "Can act outside ORBIT", tone: "external" },
   none: { label: "No side effects", tone: "safe" },
-};
-
-const AUTONOMY_NAMES: Record<number, string> = {
-  0: "Manual",
-  1: "Observe",
-  2: "Assist",
-  3: "Act with approval",
-  4: "Fully autonomous",
 };
 
 export function capabilityLabel(capabilityId: string | null | undefined): string {
@@ -76,9 +70,71 @@ export function effectTone(
   return EFFECT_LABELS[effect]?.tone ?? "safe";
 }
 
+/** The level's name as defined once in `@orbit/contracts` (Observe, Recommend, ...). */
 export function autonomyName(level: number | null | undefined): string {
   if (level === null || level === undefined) return "Autonomy";
-  return AUTONOMY_NAMES[level] ?? `Level ${level}`;
+  return AUTONOMY_LEVELS.find((entry) => entry.level === level)?.name ?? `Level ${level}`;
+}
+
+const BRAND_NAMES: Record<string, string> = {
+  github: "GitHub",
+  gitlab: "GitLab",
+  x: "X",
+  kubernetes: "Kubernetes",
+  telegram: "Telegram",
+  webhook: "Webhook",
+  mock: "Mock",
+  opencode: "OpenCode",
+  pi: "Pi",
+  claude_code: "Claude Code",
+};
+
+/** Product names keep their own capitalisation ("GitLab", not "Gitlab"). */
+export function brandName(slug: string | null | undefined): string {
+  if (!slug) return "";
+  return (
+    BRAND_NAMES[slug.toLowerCase()] ??
+    slug.replace(/[_-]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())
+  );
+}
+
+const IDENTIFIER_WORDS: Record<string, string> = {
+  api: "API",
+  id: "ID",
+  url: "URL",
+  oidc: "OIDC",
+  oauth2: "OAuth 2",
+  oauth: "OAuth",
+  hmac: "HMAC",
+  sso: "SSO",
+  jwks: "JWKS",
+  ci: "CI",
+};
+
+/**
+ * Turn a machine identifier into a label: "chatId" → "Chat ID", "api_token" →
+ * "API token", "execution.cancel_requested" → "Execution cancel requested".
+ */
+export function humanizeIdentifier(value: string | null | undefined): string {
+  if (!value) return "";
+  const words = value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Za-z])(\d)/g, "$1$2")
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .map((word) => word.toLowerCase());
+  const merged: string[] = [];
+  for (let index = 0; index < words.length; index += 1) {
+    const pair = `${words[index]}${words[index + 1] ?? ""}`;
+    if (IDENTIFIER_WORDS[pair] && words[index + 1]) {
+      merged.push(IDENTIFIER_WORDS[pair]);
+      index += 1;
+    } else {
+      merged.push(IDENTIFIER_WORDS[words[index]] ?? words[index]);
+    }
+  }
+  const sentence = merged.join(" ");
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
 
 export function eventKindLabel(kind: string | null | undefined): string {

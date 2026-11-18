@@ -134,7 +134,8 @@ helm template orbit deploy/helm/orbit -f deploy/helm/orbit/values.yaml
 - Store/schema change → migration + integration tests in `crates/orbit-store/tests`.
 - API change → handler tests in `crates/orbit-api/tests` + regenerated OpenAPI client.
 - Harness change → contract tests + real-harness integration evidence.
-- UI change → `pnpm typecheck` + `pnpm build`; keep pages usable at 360px width.
+- UI change → `pnpm typecheck` + `pnpm build`; keep pages usable at 360px width and follow
+  `docs/development/design-system.md` (tokens, primitives, patterns).
 
 ## Local requirements
 

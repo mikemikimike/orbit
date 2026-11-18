@@ -6,6 +6,67 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
+## [Unreleased]
+
+### Changed
+
+- Web UI redesigned on a documented design system (`docs/development/design-system.md`):
+  theme-aware sidebar with regrouped, foldable navigation, bundled Archivo and JetBrains Mono fonts, flat
+  bordered surfaces, an orbit status glyph whose shape encodes state, and shared
+  primitives (`Section`, `Field`, `Callout`, `Segmented`, `ChoiceCard`, `DescriptionList`,
+  `DropdownMenu`, `useConfirm`).
+- Navigation labels: Dashboard is now **Overview**, Work is the standing **Start work**
+  action, Providers is **Model providers**, Teams is **Access teams**. Routes are unchanged.
+- Overview, Agents, Executions, execution detail, agent detail, Approvals, Start work,
+  Agent Studio, Agent teams, Workers, Settings (now tabbed) and the catalogue pages were
+  rebuilt on those primitives. Execution filters live in the URL.
+
+### Added
+
+- Command palette (`⌘K` / `Ctrl+K`) for pages, agents and common actions.
+- Execution timeline reads as a story: what the agent said, the tools it used, which
+  connector actions were allowed, blocked or sent for approval, and what a person decided.
+  Agent answers render as Markdown. A run that ends without a result shows the agent's
+  last message. Verified against real OpenCode runs.
+- A run paused for approval shows "Needs approval" instead of "Running"; approvals show
+  the repository and how long until they expire.
+- Phone navigation reaches every page through a **More** sheet.
+- Light / Dark / System theme choice in the account menu.
+- **Run again** on a finished execution; **Activate** from the draft notice on an agent.
+- Settings shows the organization default harness, team isolation, and members and roles
+  to users with `settings:write`.
+
+### Fixed
+
+- The agent **Executions** tab listed every agent's executions: the web client sent the
+  filter as `agent_id` while the API expects `agentId`.
+- Agent YAML export pointed at `http://localhost:8080` when no public API URL was set; it
+  now goes through the same origin with the session token.
+- Newly created draft agents were hidden by the agent list's default "Active" filter.
+- Execution detail rendered the approval and error notices twice.
+- Running an agent with no harness and no organization default failed with a raw API
+  error; the run dialog now asks for the harness up front.
+- OpenAI-compatible model providers could not be created: the web client sent a
+  `settings` field the API rejects for that kind.
+- An agent's default task was dropped on save because the shared schema did not know
+  `runDefaults`.
+- "Restore" on an archived agent always failed (the API has no such transition); the
+  button is gone and the archive dialog now says archiving cannot be undone.
+- Start work no longer offers options it does not act on (schedule, event and connector
+  starts, auto-approve, keep running); they are disabled with a pointer to agent triggers.
+- New agent teams no longer save a hardcoded repository and description nobody typed.
+- Start work: choosing a harness hid every agent without a harness of its own, and draft
+  agents could not be chosen. It also tried to launch a worker when one was already online.
+- Start work now warns when a repository is entered for an agent that cannot check it out.
+- Time spent waiting for an approval no longer counts toward the execution timeout
+  (`PauseClock` in the harness contract); an approval request now stays open for 15 minutes
+  regardless of the run's remaining time.
+- An action a person rejected is refused if the agent asks for it again in the same run,
+  instead of queueing a second identical approval.
+- OpenCode results contain the answer written after the last tool call, not every remark
+  the agent made along the way.
+- The "dispatched" event records the agent's provider and model, shown in execution details.
+
 ## [0.17.0] - 2026-11-18
 
 ### Breaking

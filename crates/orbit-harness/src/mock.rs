@@ -226,6 +226,7 @@ impl HarnessAdapter for MockHarnessAdapter {
         let events = request.events.clone();
         let timeout_seconds = request.resources.timeout_seconds;
         let started = Instant::now();
+        let pause = request.pause.clone();
 
         let future = Self::run(request);
         tokio::pin!(future);
@@ -239,7 +240,7 @@ impl HarnessAdapter for MockHarnessAdapter {
                 outcome
             }
             result = &mut future => result?,
-            _ = tokio::time::sleep(timeout) => {
+            _ = pause.deadline(timeout) => {
                 Self::emit(&events, HarnessEvent::new(HarnessEventKind::Error, LogLevel::Error, "execution timed out")).await;
                 let mut outcome = ExecutionOutcome::failed(HarnessError::timeout(timeout_seconds));
                 outcome.status = ExecutionStatus::TimedOut;
@@ -281,6 +282,7 @@ impl HarnessAdapter for MockHarnessAdapter {
             workspace: Default::default(),
             events: request.events,
             cancel: request.cancel,
+            pause: Default::default(),
         };
         self.execute(execution_request).await
     }

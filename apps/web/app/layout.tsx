@@ -1,15 +1,13 @@
 export const dynamic = 'force-dynamic';
 
 import type { Metadata, Viewport } from "next";
+import "@fontsource-variable/archivo/wdth.css";
+import "@fontsource-variable/jetbrains-mono/index.css";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { AppShell } from "@/components/app-shell";
 
 export const metadata: Metadata = {
-  title: {
-    default: "ORBIT — Open Agent Platform",
-    template: "%s · ORBIT",
-  },
   description:
     "Self-hosted control plane for creating, connecting, running and governing autonomous AI agents.",
   applicationName: "ORBIT",
@@ -31,8 +29,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
-    { media: "(prefers-color-scheme: dark)", color: "#101013" },
+    { media: "(prefers-color-scheme: light)", color: "#0f0f1a" },
+    { media: "(prefers-color-scheme: dark)", color: "#08080e" },
   ],
 };
 

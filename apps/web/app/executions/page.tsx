@@ -1,38 +1,87 @@
 "use client";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo } from "react";
 import Link from "next/link";
-import { Activity, Filter, Users } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Activity, Play, Workflow } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
+import { Segmented } from "@/components/ui/segmented";
+import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExecutionRow } from "@/components/executions/execution-row";
+import { ExecutionListHeader, ExecutionRow } from "@/components/executions/execution-row";
 import { useExecutions } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
-import { cn } from "@/lib/utils";
 
 const STATUSES = [
-  { value: "", label: "All" },
+  { value: "all", label: "All" },
   { value: "running", label: "Running" },
   { value: "queued", label: "Queued" },
+  { value: "awaiting_approval", label: "Needs approval" },
   { value: "succeeded", label: "Succeeded" },
   { value: "failed", label: "Failed" },
   { value: "cancelled", label: "Cancelled" },
-];
+] as const;
+
+type StatusFilter = (typeof STATUSES)[number]["value"];
+type ArchiveFilter = "active" | "archived" | "all";
 
 export default function ExecutionsPage() {
-  const [status, setStatus] = useState("");
-  const [archived, setArchived] = useState<"active" | "archived" | "all">("active");
+  // useSearchParams needs a Suspense boundary so the page can still prerender.
+  return (
+    <Suspense fallback={<ListSkeleton />}>
+      <Executions />
+    </Suspense>
+  );
+}
+
+function ListSkeleton() {
+  return (
+    <Card className="overflow-hidden">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div key={index} className="border-b px-5 py-3.5 last:border-b-0">
+          <Skeleton className="h-9" />
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+function Executions() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Filters live in the URL so a filtered view can be linked, bookmarked and
+  // survives the back button after opening an execution.
+  const statusParam = searchParams.get("status") ?? "all";
+  const status: StatusFilter = STATUSES.some((item) => item.value === statusParam)
+    ? (statusParam as StatusFilter)
+    : "all";
+  const archiveParam = searchParams.get("view");
+  const archived: ArchiveFilter =
+    archiveParam === "archived" || archiveParam === "all" ? archiveParam : "active";
+
+  function setParam(key: string, value: string, fallback: string) {
+    const next = new URLSearchParams(searchParams.toString());
+    if (value === fallback) next.delete(key);
+    else next.set(key, value);
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
+
   const executions = useExecutions({
-    status: status || undefined,
+    status: status === "all" ? undefined : status,
     limit: 50,
     archived: archived === "all" ? undefined : archived === "archived",
   });
+
   const groups = useMemo(() => {
     const items = executions.data?.items ?? [];
     const grouped = new Map<string, typeof items>();
@@ -46,100 +95,108 @@ export default function ExecutionsPage() {
     return Array.from(grouped.entries());
   }, [executions.data?.items]);
 
+  const filtered = status !== "all" || archived !== "active";
+  const shown = executions.data?.items.length ?? 0;
+  const total = executions.data?.total ?? 0;
+
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="space-y-6">
       <PageHeader
-        eyebrow="Observability"
         title="Executions"
-        description="Every agent invocation: input, output, status, harness events and usage."
+        description="Every time an agent ran: what it was asked, what happened, and what it returned."
+        actions={
+          <Button asChild className="lg:hidden">
+            <Link href="/work">
+              <Play /> Start work
+            </Link>
+          </Button>
+        }
       />
 
-      <div className="flex items-center gap-2">
-        <Filter className="hidden h-4 w-4 text-muted-foreground sm:block" />
-        <div className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto px-1 py-0.5">
-          {STATUSES.map((item) => (
-            <Button
-              key={item.value}
-              size="sm"
-              variant={status === item.value ? "default" : "outline"}
-              onClick={() => setStatus(item.value)}
-            >
-              {item.label}
-            </Button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">View:</span>
-          {(["active", "archived", "all"] as const).map((value) => (
-            <Button
-              key={value}
-              size="sm"
-              variant={archived === value ? "default" : "outline"}
-              onClick={() => setArchived(value)}
-            >
-              {value === "active" ? "Active" : value === "archived" ? "Archived" : "All"}
-            </Button>
-          ))}
-        </div>
-        {executions.data ? (
-          <span className="ml-auto hidden text-xs text-muted-foreground sm:block">
-            {executions.data.total} total
-          </span>
-        ) : null}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <Segmented
+          label="Execution status"
+          value={status}
+          onChange={(value) => setParam("status", value, "all")}
+          options={STATUSES}
+        />
+        <label className="flex shrink-0 items-center gap-2 text-[13px] text-muted-foreground">
+          Show
+          <Select
+            className="w-auto"
+            value={archived}
+            onChange={(event) => setParam("view", event.target.value, "active")}
+          >
+            <option value="active">Current</option>
+            <option value="archived">Archived</option>
+            <option value="all">Current and archived</option>
+          </Select>
+        </label>
       </div>
 
-      <Card className={cn("overflow-hidden")}>
-        {executions.isLoading ? (
-          <div className="space-y-2 p-4">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <Skeleton key={index} className="h-14" />
-            ))}
-          </div>
-        ) : executions.isError ? (
-          <p className="p-4 text-sm text-destructive">{errorMessage(executions.error)}</p>
-        ) : executions.data?.items.length ? (
-          groups.map(([key, items]) =>
-            key === "standalone" ? (
-              items.map((execution) => (
-                <ExecutionRow key={execution.id} execution={execution} />
-              ))
-            ) : (
-              <div key={key}>
-                <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2">
-                  <Users className="h-3.5 w-3.5 text-primary" />
-                  <Link
-                    href={`/agent-teams?run=${key}`}
-                    className="text-xs font-medium text-primary hover:underline"
-                  >
-                    Agent Team run
-                  </Link>
-                  <span className="font-mono text-[10px] text-muted-foreground">
-                    {key.slice(0, 8)}
-                  </span>
-                  <span className="ml-auto text-[10px] text-muted-foreground">
-                    {items.length} step{items.length === 1 ? "" : "s"}
-                  </span>
+      {executions.isLoading ? (
+        <ListSkeleton />
+      ) : executions.isError ? (
+        <Callout tone="danger" title="Executions could not be loaded">
+          {errorMessage(executions.error)}
+        </Callout>
+      ) : shown ? (
+        <>
+          <Card className="overflow-hidden">
+            <ExecutionListHeader />
+            {groups.map(([key, items]) =>
+              key === "standalone" ? (
+                items.map((execution) => <ExecutionRow key={execution.id} execution={execution} />)
+              ) : (
+                <div key={key} className="border-b last:border-b-0">
+                  <div className="flex items-center gap-2 border-b bg-subtle px-4 py-2 text-[13px] sm:px-5">
+                    <Workflow className="h-4 w-4 text-muted-foreground" />
+                    <Link
+                      href={`/agent-teams?run=${key}`}
+                      className="font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                      Agent team run
+                    </Link>
+                    <span className="font-mono text-xs text-muted-foreground">{key.slice(0, 8)}</span>
+                    <span className="ml-auto text-muted-foreground">
+                      {items.length} step{items.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  {items.map((execution) => (
+                    <ExecutionRow key={execution.id} execution={execution} />
+                  ))}
                 </div>
-                {items.map((execution) => (
-                  <ExecutionRow key={execution.id} execution={execution} />
-                ))}
-              </div>
-            ),
-          )
-        ) : (
-          <EmptyState
-            icon={<Activity className="h-6 w-6" />}
-            title="No executions"
-            description="Run an agent manually or configure a trigger. Executions appear here with live logs."
-            action={
-              <Button asChild size="sm">
-                <Link href="/agents">Open agents</Link>
+              ),
+            )}
+          </Card>
+          <p className="tabular text-[13px] text-muted-foreground">
+            {shown < total ? `Showing the latest ${shown} of ${total}.` : `${total} execution${total === 1 ? "" : "s"}.`}
+          </p>
+        </>
+      ) : (
+        <EmptyState
+          icon={<Activity />}
+          title={filtered ? "No executions match these filters" : "No executions yet"}
+          description={
+            filtered
+              ? "Nothing has this status in the selected view."
+              : "Start work with an agent or add a trigger. Each execution appears here with a live timeline."
+          }
+          action={
+            filtered ? (
+              <Button variant="outline" onClick={() => router.replace(pathname, { scroll: false })}>
+                Clear filters
               </Button>
-            }
-            className="border-0"
-          />
-        )}
-      </Card>
+            ) : (
+              <Button asChild>
+                <Link href="/work">
+                  <Play /> Start work
+                </Link>
+              </Button>
+            )
+          }
+        />
+      )}
     </div>
   );
 }

@@ -98,6 +98,8 @@ export const agentSpecSchema = z.object({
       retentionDays: z.number().int().min(1).max(3650).optional(),
     })
     .default({ enabled: false, strategy: "none" }),
+  /** Pre-filled task for manual runs (mirrors `RunDefaults` in orbit-domain). */
+  runDefaults: z.object({ task: z.string().optional() }).optional(),
 });
 
 export const agentDefinitionSchema = z.object({

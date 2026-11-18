@@ -39,6 +39,11 @@ pub trait HarnessAdapter: Send + Sync {
 `ExecutionRequest::cancel: CancellationToken` and `ResourceLimits::timeout_seconds`;
 adapters must terminate child processes/containers on cancellation.
 
+The timeout covers **active** time only. While the platform waits for a person to decide
+on an approval it pauses `ExecutionRequest::pause` (`PauseClock`); adapters enforce their
+timeout with `request.pause.deadline(timeout)` instead of a plain sleep, so a slow
+approver never turns into a timed-out execution.
+
 ## Capabilities
 
 Advertised per adapter and surfaced to the UI (`GET /api/v1/harnesses`):
@@ -170,8 +175,10 @@ harness tool call ──► worker broker /policy or /tools/call
 - `POST /policy` on the loopback broker (bearer: execution-scoped broker token) is the
   adapter hook for native tools: request `{ tool, capability?, effect?, connection?,
   arguments }`, response is the decision with `ruleId`, `ruleName`, `reason`, `impact`.
-  `require_approval` creates a durable approval and blocks until decided or the execution
-  timeout expires; timeout and rejection deny the call.
+  `require_approval` creates a durable approval and blocks until it is decided or its own
+  15-minute window expires (the execution timeout is paused meanwhile); expiry and
+  rejection deny the call. An action a person rejected is denied without a new approval
+  if the agent requests the identical capability and arguments again in the same run.
 - Management API: `GET/POST /api/v1/tool-policies`, `PATCH/DELETE
   /api/v1/tool-policies/{id}` (`settings:read` / `settings:write`).
 - Approvals record the rule, reason, impact and arguments for the reviewer. Every deny

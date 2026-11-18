@@ -5,7 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Share2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -15,10 +16,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { ChoiceCard } from "@/components/ui/choice-card";
+import { Field } from "@/components/ui/field";
 import { request } from "@/lib/http";
 import { listAccessTeams } from "@/lib/access-teams";
 import { errorMessage } from "@orbit/api-client";
+
+const VISIBILITY_OPTIONS = [
+  { value: "private", title: "Private", description: "Only you and admins." },
+  { value: "team", title: "Team", description: "Members of the team that owns it." },
+  { value: "org", title: "Organization", description: "Everyone in the organization." },
+] as const;
 
 type Sharing = { visibility: string; ownerTeamId?: string | null };
 
@@ -28,10 +36,15 @@ export function ShareResourceDialog({
   resource,
   resourceId,
   resourceName,
+  size = "default",
+  variant = "outline",
 }: {
   resource: string;
   resourceId: string;
   resourceName: string;
+  /** Match the buttons the trigger sits beside. */
+  size?: ButtonProps["size"];
+  variant?: ButtonProps["variant"];
 }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -74,50 +87,55 @@ export function ShareResourceDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">
+        <Button variant={variant} size={size}>
           <Share2 /> Share
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Share {resourceName}</DialogTitle>
-          <DialogDescription>
-            Private: only you and admins. Team: owning team. Organization: all members.
-          </DialogDescription>
+          <DialogDescription>Choose who can see and use it.</DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Visibility</Label>
-            <select
-              className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-              value={visibility}
-              onChange={(event) => setVisibility(event.target.value)}
-            >
-              <option value="org">Organization</option>
-              <option value="team">Team</option>
-              <option value="private">Private</option>
-            </select>
+            <p className="text-sm font-medium" id="share-visibility-label">
+              Visibility
+            </p>
+            <div role="radiogroup" aria-labelledby="share-visibility-label" className="space-y-2">
+              {VISIBILITY_OPTIONS.map((option) => (
+                <ChoiceCard
+                  key={option.value}
+                  selected={visibility === option.value}
+                  onSelect={() => setVisibility(option.value)}
+                  title={option.title}
+                  description={option.description}
+                />
+              ))}
+            </div>
           </div>
           {visibility === "team" ? (
-            <div className="space-y-1.5">
-              <Label>Owning team</Label>
-              <select
-                className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+            <Field
+              label="Owning team"
+              htmlFor="share-team"
+              hint="Members of this team get access."
+            >
+              <Select
+                id="share-team"
                 value={teamId}
                 onChange={(event) => setTeamId(event.target.value)}
               >
-                <option value="">Select team…</option>
+                <option value="">Select a team</option>
                 {(teams.data ?? []).map((team) => (
                   <option key={team.id} value={team.id}>
                     {team.name}
                   </option>
                 ))}
-              </select>
-            </div>
+              </Select>
+            </Field>
           ) : null}
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)}>
+          <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
           <Button

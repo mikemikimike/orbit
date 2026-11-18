@@ -70,6 +70,7 @@ async fn pi_executes_a_task_and_streams_events() {
         },
         events: Some(events),
         cancel: tokio_util::sync::CancellationToken::new(),
+        pause: Default::default(),
     };
     let outcome = tokio::time::timeout(Duration::from_secs(240), adapter.execute(request))
         .await

@@ -262,6 +262,10 @@ pub async fn run_execution(
         }
     }
 
+    // Shared with the broker: it pauses the run's clock while a person decides on an
+    // approval, so that wait does not eat into the execution timeout.
+    let pause = orbit_contracts::PauseClock::default();
+
     // Policy-enforcing tool broker: only for harnesses that can consume MCP today
     // (OpenCode). It is execution-scoped and dropped at the end of this function.
     let broker = if matches!(harness_kind, HarnessKind::OpenCode | HarnessKind::Pi) {
@@ -271,6 +275,7 @@ pub async fn run_execution(
             &execution,
             &workspace,
             &context.tool_policies,
+            pause.clone(),
         )
         .await
         {
@@ -342,7 +347,13 @@ pub async fn run_execution(
         ExecutionEventKind::Status,
         LogLevel::Info,
         "execution dispatched to harness",
-        serde_json::json!({ "harness": harness_kind.as_str(), "worker": state.worker_id }),
+        // Provider and model as configured on the agent, so a run records what it used.
+        serde_json::json!({
+            "harness": harness_kind.as_str(),
+            "worker": state.worker_id,
+            "provider": spec.model.provider,
+            "model": spec.model.model,
+        }),
     )
     .await;
 
@@ -452,6 +463,7 @@ pub async fn run_execution(
         },
         events: Some(event_tx),
         cancel: cancel.clone(),
+        pause: pause.clone(),
     };
 
     let timeout_seconds = request.resources.timeout_seconds;
@@ -462,17 +474,15 @@ pub async fn run_execution(
             outcome.status = ExecutionStatus::Cancelled;
             outcome
         }
-        result = tokio::time::timeout(
-            Duration::from_secs(timeout_seconds.saturating_add(5)),
-            adapter.execute(request),
-        ) => match result {
-            Ok(Ok(outcome)) => outcome,
-            Ok(Err(err)) => outcome_from_error(err),
-            Err(_) => {
-                let mut outcome = ExecutionOutcome::failed(HarnessError::timeout(timeout_seconds));
-                outcome.status = ExecutionStatus::TimedOut;
-                outcome
-            }
+        // Backstop for an adapter that ignores its own timeout. Same pause-aware clock.
+        _ = pause.deadline(Duration::from_secs(timeout_seconds.saturating_add(5))) => {
+            let mut outcome = ExecutionOutcome::failed(HarnessError::timeout(timeout_seconds));
+            outcome.status = ExecutionStatus::TimedOut;
+            outcome
+        }
+        result = adapter.execute(request) => match result {
+            Ok(outcome) => outcome,
+            Err(err) => outcome_from_error(err),
         }
     };
 

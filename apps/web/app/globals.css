@@ -2,50 +2,89 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * ORBIT design tokens. See docs/development/design-system.md.
+ *
+ * Colours are HSL triplets so Tailwind can apply alpha (`bg-primary/10`).
+ * The frame ("ink": sidebar, phone bars, sign-in) follows the theme: a white rail
+ * on the light canvas, a darker rail on the dark one.
+ */
 @layer base {
   :root {
-    --background: 240 20% 98%;
-    --foreground: 240 12% 10%;
+    --background: 240 20% 97%;
+    --foreground: 240 22% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 240 12% 10%;
-    --primary: 254 70% 55%;
+    --card-foreground: 240 22% 10%;
+    --popover: 0 0% 100%;
+    --muted: 240 16% 94%;
+    --muted-foreground: 240 8% 39%;
+    --subtle: 240 14% 96.5%;
+    --secondary: 240 16% 93%;
+    --secondary-foreground: 240 22% 14%;
+    --accent: 247 80% 96%;
+    --accent-foreground: 247 62% 40%;
+    --border: 240 14% 89%;
+    --border-strong: 240 12% 80%;
+    /* Form-control edges meet 3:1 against their surface (WCAG 1.4.11). */
+    --input: 240 9% 57%;
+    --ring: 247 78% 58%;
+
+    --primary: 247 76% 58%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 6% 94%;
-    --secondary-foreground: 240 12% 20%;
-    --muted: 240 6% 95%;
-    --muted-foreground: 240 5% 42%;
-    --accent: 254 60% 96%;
-    --accent-foreground: 254 50% 35%;
-    --destructive: 0 72% 51%;
+    --destructive: 354 68% 46%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 8% 89%;
-    --input: 240 8% 86%;
-    --ring: 254 70% 55%;
-    --success: 152 60% 38%;
-    --warning: 32 90% 45%;
-    --radius: 0.75rem;
+    --success: 155 68% 28%;
+    --warning: 30 92% 34%;
+    --info: 207 80% 40%;
+
+    /* Frame: sidebar, phone bars, sign-in. */
+    --ink: 0 0% 100%;
+    --ink-raised: 240 16% 94.5%;
+    --ink-border: 240 14% 89%;
+    --ink-foreground: 240 22% 10%;
+    --ink-muted: 240 8% 39%;
+    --ink-accent: 247 76% 58%;
+    --overlay: 240 26% 8%;
+
+    --radius: 0.625rem;
+    --shadow-overlay: 0 1px 2px hsl(240 30% 10% / 0.06), 0 12px 32px -8px hsl(240 30% 10% / 0.18);
   }
 
   .dark {
-    --background: 240 14% 7%;
-    --foreground: 240 10% 94%;
-    --card: 240 12% 10%;
-    --card-foreground: 240 10% 94%;
-    --primary: 254 74% 68%;
-    --primary-foreground: 250 30% 12%;
-    --secondary: 240 8% 16%;
-    --secondary-foreground: 240 10% 90%;
-    --muted: 240 8% 15%;
-    --muted-foreground: 240 6% 62%;
-    --accent: 254 30% 20%;
-    --accent-foreground: 254 60% 85%;
-    --destructive: 0 62% 52%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 240 8% 20%;
-    --input: 240 8% 22%;
-    --ring: 254 74% 68%;
-    --success: 152 50% 48%;
-    --warning: 32 90% 55%;
+    --background: 240 16% 10%;
+    --foreground: 240 20% 93%;
+    --card: 240 15% 13%;
+    --card-foreground: 240 20% 93%;
+    --popover: 240 14% 16%;
+    --muted: 240 12% 18%;
+    --muted-foreground: 240 9% 68%;
+    --subtle: 240 15% 11.5%;
+    --secondary: 240 11% 20%;
+    --secondary-foreground: 240 20% 90%;
+    --accent: 247 38% 22%;
+    --accent-foreground: 247 100% 86%;
+    --border: 240 10% 22%;
+    --border-strong: 240 9% 31%;
+    --input: 240 8% 50%;
+    --ring: 247 100% 76%;
+
+    --primary: 247 100% 76%;
+    --primary-foreground: 240 30% 9%;
+    --destructive: 354 82% 68%;
+    --destructive-foreground: 240 30% 9%;
+    --success: 152 52% 54%;
+    --warning: 38 88% 60%;
+    --info: 205 88% 66%;
+
+    --ink: 240 20% 6.5%;
+    --ink-raised: 240 14% 14%;
+    --ink-border: 240 10% 17%;
+    --ink-foreground: 240 20% 93%;
+    --ink-muted: 240 9% 66%;
+    --ink-accent: 247 100% 78%;
+    --overlay: 240 30% 3%;
+
+    --shadow-overlay: 0 1px 2px hsl(0 0% 0% / 0.4), 0 16px 40px -8px hsl(0 0% 0% / 0.6);
   }
 
   * {
@@ -54,31 +93,114 @@
 
   html {
     -webkit-text-size-adjust: 100%;
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    @apply bg-background font-sans text-sm text-foreground antialiased;
+    font-feature-settings: "calt" 1, "ss01" 0;
+    font-optical-sizing: auto;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
   }
 
   ::selection {
-    background: hsl(var(--primary) / 0.25);
+    background: hsl(var(--primary) / 0.22);
+  }
+
+  /* One focus treatment for everything keyboard-reachable. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  [data-ink] :focus-visible {
+    outline-color: hsl(var(--ink-accent));
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    @apply font-mono;
   }
 }
 
 @layer components {
-  .orbit-grid-bg {
-    background-image:
-      radial-gradient(circle at 20% -10%, hsl(var(--primary) / 0.10), transparent 45%),
-      radial-gradient(circle at 90% 0%, hsl(190 80% 50% / 0.08), transparent 40%);
+  /* Titles and headline figures: same family as the text, tighter and heavier. */
+  .font-display {
+    font-family: theme("fontFamily.sans");
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  /* The sidebar's own scrollbar stays out of sight until the pointer is over it. */
+  .nav-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .nav-scroll:hover,
+  .nav-scroll:focus-within {
+    scrollbar-color: hsl(var(--ink-border)) transparent;
+  }
+  .nav-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+  .nav-scroll::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 3px;
+  }
+  .nav-scroll:hover::-webkit-scrollbar-thumb {
+    background: hsl(var(--ink-border));
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
 
   .log-line {
-    @apply border-b border-border/60 py-1.5 font-mono text-[12px] leading-relaxed;
+    @apply border-b border-border/70 py-2 font-mono text-xs leading-relaxed last:border-b-0;
+  }
+
+  .code-block {
+    @apply overflow-auto rounded-md border bg-subtle p-3 font-mono text-xs leading-relaxed;
   }
 
   .safe-bottom {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Native checkbox, restyled. Used by <Checkbox /> and legacy inputs alike. */
+  input[type="checkbox"]:not([data-unstyled]) {
+    @apply relative h-4 w-4 shrink-0 cursor-pointer appearance-none rounded-[4px] border border-input bg-card align-middle transition-colors;
+  }
+  input[type="checkbox"]:not([data-unstyled]):hover {
+    border-color: hsl(var(--border-strong));
+  }
+  input[type="checkbox"]:not([data-unstyled]):checked {
+    @apply border-primary bg-primary;
+  }
+  input[type="checkbox"]:not([data-unstyled]):checked::after {
+    content: "";
+    position: absolute;
+    left: 4.5px;
+    top: 1.5px;
+    width: 5px;
+    height: 9px;
+    border: solid hsl(var(--primary-foreground));
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  input[type="checkbox"]:not([data-unstyled]):disabled {
+    @apply cursor-not-allowed opacity-50;
   }
 }
 
@@ -89,5 +211,52 @@
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  .scroll-fade-x {
+    mask-image: linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
+  }
+}
+
+/* Status glyph motion: only the satellite moves, and only while work is live. */
+@keyframes orbit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes orbit-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Every <select> gets the control look, whether or not it uses <Select />. */
+@layer base {
+  select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238a8aa0' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.625rem center;
+    padding-right: 2rem !important;
+    cursor: pointer;
+  }
+  select:disabled {
+    cursor: not-allowed;
   }
 }

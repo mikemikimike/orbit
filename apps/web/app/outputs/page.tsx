@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Megaphone, Pencil, Plus, Send, Trash2 } from "lucide-react";
+import { Ellipsis, Megaphone, Pencil, Plus, Send, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Callout } from "@/components/ui/callout";
+import { Card } from "@/components/ui/card";
+import { CheckboxField } from "@/components/ui/checkbox";
+import { useConfirm } from "@/components/ui/confirm";
 import {
   Dialog,
   DialogContent,
@@ -16,10 +19,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
+import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,9 +44,15 @@ import {
   type OutputInput,
   type OutputView,
 } from "@/lib/outputs";
-import { relativeTime } from "@/lib/utils";
+import { relativeTime, titleCase } from "@/lib/utils";
 
 const EVENTS = ["succeeded", "failed", "cancelled"] as const;
+
+const KIND_LABEL: Record<OutputInput["kind"], string> = {
+  slack: "Slack",
+  mattermost: "Mattermost",
+  webhook: "Webhook",
+};
 
 type Form = {
   name: string;
@@ -62,6 +78,7 @@ const EMPTY: Form = {
 
 export default function OutputsPage() {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const outputs = useQuery({ queryKey: ["outputs"], queryFn: listOutputs, staleTime: 15_000 });
   const agents = useAgents({ limit: 100 });
   const teams = useAgentTeams();
@@ -104,6 +121,27 @@ export default function OutputsPage() {
   const test = useMutation({
     mutationFn: testOutput,
     onSuccess: () => toast.success("Test notification sent"),
+    onError: (error) =>
+      toast.error(`Test failed. The destination could not be reached: ${errorMessage(error)}`),
+  });
+
+  // Same update call as the edit form, with every field carried over unchanged. The
+  // webhook URL is omitted, which keeps the stored one.
+  const toggle = useMutation({
+    mutationFn: ({ output, enabled }: { output: OutputView; enabled: boolean }) =>
+      updateOutput(output.id, {
+        name: output.name,
+        kind: output.kind,
+        agentId: output.agentId ?? null,
+        teamId: output.teamId ?? null,
+        events: output.events,
+        template: output.template ?? null,
+        enabled,
+      }),
+    onSuccess: (_result, { enabled }) => {
+      toast.success(enabled ? "Output enabled" : "Output disabled");
+      void queryClient.invalidateQueries({ queryKey: ["outputs"] });
+    },
     onError: (error) => toast.error(errorMessage(error)),
   });
 
@@ -128,19 +166,32 @@ export default function OutputsPage() {
     setOpen(true);
   }
 
-  const targetName = (output: OutputView) =>
+  async function deleteOutputWithConfirm(output: OutputView) {
+    const confirmed = await confirm({
+      title: `Delete ${output.name}?`,
+      description: "Notifications stop and the stored webhook URL is removed. This cannot be undone.",
+      confirmLabel: "Delete output",
+      destructive: true,
+    });
+    if (confirmed) remove.mutate(output.id);
+  }
+
+  const scopeLabel = (output: OutputView) =>
     output.teamId
-      ? (teams.data?.find((team) => team.id === output.teamId)?.name ?? "Team")
+      ? `Team: ${teams.data?.find((team) => team.id === output.teamId)?.name ?? "Unknown team"}`
       : output.agentId
-        ? (agents.data?.items.find((agent) => agent.id === output.agentId)?.name ?? "Agent")
+        ? `Agent: ${agents.data?.items.find((agent) => agent.id === output.agentId)?.name ?? "Unknown agent"}`
         : "All agents";
 
+  const missingWebhook = (outputs.data ?? []).filter((output) => !output.hasWebhook);
+  const webhookLabel =
+    form.kind === "webhook" ? "Webhook URL" : `${KIND_LABEL[form.kind]} incoming webhook URL`;
+
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="space-y-6">
       <PageHeader
-        eyebrow="Notifications"
         title="Outputs"
-        description="Send execution results to Slack, Mattermost or a webhook after a run finishes."
+        description="Send a message to Slack, Mattermost or a webhook when a run finishes."
         actions={
           <Button onClick={openCreate}>
             <Plus /> New output
@@ -148,69 +199,102 @@ export default function OutputsPage() {
         }
       />
 
+      {missingWebhook.length ? (
+        <Callout tone="warning" title="Some outputs have no webhook URL">
+          {missingWebhook.map((output) => output.name).join(", ")} cannot send until you add one.
+        </Callout>
+      ) : null}
+
       {outputs.isLoading ? (
-        <Skeleton className="h-40" />
+        <Card className="overflow-hidden">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="border-b px-5 py-4 last:border-b-0">
+              <Skeleton className="h-10" />
+            </div>
+          ))}
+        </Card>
       ) : outputs.isError ? (
-        <p className="text-sm text-destructive">{errorMessage(outputs.error)}</p>
+        <Callout tone="danger" title="Could not load outputs">
+          {errorMessage(outputs.error)}
+        </Callout>
       ) : !outputs.data?.length ? (
         <EmptyState
-          icon={<Megaphone className="h-6 w-6" />}
-          title="No outputs"
-          description="Create an output to notify Slack, Mattermost or a webhook when an execution succeeds or fails."
-          action={<Button onClick={openCreate}>Create output</Button>}
+          icon={<Megaphone />}
+          title="No outputs yet"
+          description="Add an output to be told in Slack, Mattermost or a webhook when an agent or team run succeeds, fails or is cancelled."
+          action={
+            <Button variant="outline" onClick={openCreate}>
+              <Plus /> New output
+            </Button>
+          }
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <Card className="overflow-hidden">
           {outputs.data.map((output) => (
-            <Card key={output.id}>
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-2">
-                  <CardTitle className="flex min-w-0 items-center gap-2">
-                    <Megaphone className="h-4 w-4 shrink-0 text-primary" />
-                    <span className="truncate">{output.name}</span>
-                  </CardTitle>
-                  <Badge variant={output.enabled ? "success" : "outline"}>
-                    {output.enabled ? "enabled" : "disabled"}
-                  </Badge>
+            <div
+              key={output.id}
+              className="flex flex-col gap-3 border-b px-4 py-4 last:border-b-0 sm:px-5 md:flex-row md:items-center md:gap-5"
+            >
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="min-w-0 truncate text-sm font-medium">{output.name}</p>
+                  <Badge variant="outline">{KIND_LABEL[output.kind]}</Badge>
+                  {!output.hasWebhook ? <Badge variant="warning">No webhook URL</Badge> : null}
                 </div>
-                <p className="text-[11px] text-muted-foreground">
-                  {output.kind} · {targetName(output)} · {output.events.join(", ")}
+                <p className="text-[13px] text-muted-foreground">
+                  {scopeLabel(output)}
+                  <span className="text-muted-foreground/70">, updated {relativeTime(output.updatedAt)}</span>
                 </p>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {!output.hasWebhook ? (
-                  <p className="text-[11px] text-destructive">Webhook URL is missing.</p>
-                ) : null}
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => test.mutate(output.id)}
-                    loading={test.isPending && test.variables === output.id}
-                  >
-                    <Send /> Test
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(output)}>
-                    <Pencil /> Edit
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-destructive"
-                    onClick={() => {
-                      if (window.confirm(`Delete output ${output.name}?`)) remove.mutate(output.id);
-                    }}
-                  >
-                    <Trash2 /> Delete
-                  </Button>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[13px] text-muted-foreground">Sends when a run is</span>
+                  {output.events.length ? (
+                    output.events.map((event) => (
+                      <Badge key={event} variant="secondary">
+                        {titleCase(event).toLowerCase()}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-[13px] text-muted-foreground">never (no events chosen)</span>
+                  )}
                 </div>
-                <p className="text-[10px] text-muted-foreground">
-                  updated {relativeTime(output.updatedAt)}
-                </p>
-              </CardContent>
-            </Card>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <label className="mr-1 flex items-center gap-2 text-[13px] text-muted-foreground">
+                  <Switch
+                    checked={output.enabled}
+                    disabled={toggle.isPending && toggle.variables?.output.id === output.id}
+                    onCheckedChange={(enabled) => toggle.mutate({ output, enabled })}
+                    aria-label={`Send notifications to ${output.name}`}
+                  />
+                  {output.enabled ? "On" : "Off"}
+                </label>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => test.mutate(output.id)}
+                  loading={test.isPending && test.variables === output.id}
+                >
+                  <Send /> Send test
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => openEdit(output)}>
+                  <Pencil /> Edit
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="icon-sm" variant="ghost" aria-label={`More actions for ${output.name}`}>
+                      <Ellipsis />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem destructive onSelect={() => void deleteOutputWithConfirm(output)}>
+                      <Trash2 /> Delete output
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
           ))}
-        </div>
+        </Card>
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -218,23 +302,22 @@ export default function OutputsPage() {
           <DialogHeader>
             <DialogTitle>{editing ? "Edit output" : "New output"}</DialogTitle>
             <DialogDescription>
-              Slack/Mattermost use an incoming webhook URL. The URL is stored encrypted and
-              never returned.
+              Choose where the message goes, what it covers and when it is sent.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Name</Label>
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Name" htmlFor="output-name">
                 <Input
+                  id="output-name"
                   value={form.name}
+                  placeholder="Engineering alerts"
                   onChange={(event) => setForm({ ...form, name: event.target.value })}
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Kind</Label>
-                <select
-                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+              </Field>
+              <Field label="Destination" htmlFor="output-kind">
+                <Select
+                  id="output-kind"
                   value={form.kind}
                   onChange={(event) =>
                     setForm({ ...form, kind: event.target.value as OutputInput["kind"] })
@@ -243,13 +326,38 @@ export default function OutputsPage() {
                   <option value="slack">Slack</option>
                   <option value="mattermost">Mattermost</option>
                   <option value="webhook">Webhook</option>
-                </select>
-              </div>
+                </Select>
+              </Field>
             </div>
-            <div className="space-y-1.5">
-              <Label>Target</Label>
-              <select
-                className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
+
+            <Field
+              label={webhookLabel}
+              htmlFor="output-webhook"
+              hint={
+                editing?.hasWebhook
+                  ? "Stored encrypted and never shown again. Leave blank to keep the current URL."
+                  : form.kind === "webhook"
+                    ? "Stored encrypted. ORBIT sends JSON with the event, execution and text."
+                    : `Stored encrypted. Create it from your ${KIND_LABEL[form.kind]} integrations.`
+              }
+            >
+              <Input
+                id="output-webhook"
+                type="password"
+                autoComplete="off"
+                value={form.webhookUrl}
+                placeholder={editing?.hasWebhook ? "Keep the current URL" : "https://…"}
+                onChange={(event) => setForm({ ...form, webhookUrl: event.target.value })}
+              />
+            </Field>
+
+            <Field
+              label="Applies to"
+              htmlFor="output-scope"
+              hint="An agent sends one message per execution. A team sends one message when its whole run finishes."
+            >
+              <Select
+                id="output-scope"
                 value={
                   form.teamId ? `team:${form.teamId}` : form.agentId ? `agent:${form.agentId}` : ""
                 }
@@ -264,88 +372,73 @@ export default function OutputsPage() {
                   }
                 }}
               >
-                <option value="">All agents (executions)</option>
-                <optgroup label="Agents">
+                <option value="">All agents</option>
+                <optgroup label="One agent">
                   {(agents.data?.items ?? []).map((agent) => (
                     <option key={agent.id} value={`agent:${agent.id}`}>
                       {agent.name}
                     </option>
                   ))}
                 </optgroup>
-                <optgroup label="Agent teams (team runs)">
+                <optgroup label="One agent team">
                   {(teams.data ?? []).map((team) => (
                     <option key={team.id} value={`team:${team.id}`}>
                       {team.name}
                     </option>
                   ))}
                 </optgroup>
-              </select>
-              <p className="text-[11px] text-muted-foreground">
-                Agent targets fire per execution; team targets fire once when a team run
-                finishes.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Send on</Label>
-              <div className="flex flex-wrap gap-3 text-xs">
+              </Select>
+            </Field>
+
+            <fieldset className="space-y-1.5">
+              <legend className="text-[13px] font-medium leading-none">Send when a run is</legend>
+              <div className="grid gap-2 pt-1 sm:grid-cols-3">
                 {EVENTS.map((event) => (
-                  <label key={event} className="flex items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      checked={form.events.includes(event)}
-                      onChange={(checked) =>
-                        setForm({
-                          ...form,
-                          events: checked.target.checked
-                            ? [...form.events, event]
-                            : form.events.filter((item) => item !== event),
-                        })
-                      }
-                    />
-                    {event}
-                  </label>
+                  <CheckboxField
+                    key={event}
+                    title={titleCase(event)}
+                    checked={form.events.includes(event)}
+                    onChange={(changed) =>
+                      setForm({
+                        ...form,
+                        events: changed.target.checked
+                          ? [...form.events, event]
+                          : form.events.filter((item) => item !== event),
+                      })
+                    }
+                  />
                 ))}
               </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>
-                {form.kind === "slack"
-                  ? "Slack incoming webhook URL"
-                  : form.kind === "mattermost"
-                    ? "Mattermost incoming webhook URL"
-                    : "Webhook URL"}
-              </Label>
-              <Input
-                type="password"
-                value={form.webhookUrl}
-                placeholder={editing?.hasWebhook ? "leave blank to keep the current URL" : "https://…"}
-                onChange={(event) => setForm({ ...form, webhookUrl: event.target.value })}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                {form.kind === "webhook"
-                  ? "ORBIT POSTs JSON with the event, execution and text."
-                  : "Use the incoming-webhook URL from your Slack/Mattermost integration."}
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Template (optional)</Label>
+              {form.events.length === 0 ? (
+                <p className="text-[13px] text-destructive" role="alert">
+                  Choose at least one event.
+                </p>
+              ) : null}
+            </fieldset>
+
+            <Field
+              label="Note"
+              optional
+              htmlFor="output-template"
+              hint="Added to the message after the run summary."
+            >
               <Textarea
-                className="min-h-20 text-xs"
+                id="output-template"
+                className="min-h-20"
                 value={form.template}
                 onChange={(event) => setForm({ ...form, template: event.target.value })}
-                placeholder="Optional note shown with the summary"
               />
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <Switch
-                checked={form.enabled}
-                onCheckedChange={(enabled) => setForm({ ...form, enabled })}
-              />
-              Enabled
-            </label>
+            </Field>
+
+            <CheckboxField
+              title="Enabled"
+              description="Turn off to keep the output without sending anything."
+              checked={form.enabled}
+              onChange={(event) => setForm({ ...form, enabled: event.target.checked })}
+            />
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setOpen(false)}>
+            <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button

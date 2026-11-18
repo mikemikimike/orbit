@@ -44,6 +44,7 @@ pub fn execution_request(_adapter: &dyn HarnessAdapter, task: &str) -> Execution
         workspace: Default::default(),
         events: Some(events),
         cancel: tokio_util::sync::CancellationToken::new(),
+        pause: Default::default(),
     }
 }
 

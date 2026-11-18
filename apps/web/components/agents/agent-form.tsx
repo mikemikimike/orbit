@@ -1,29 +1,22 @@
 "use client";
 
-import { useRef, useMemo, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode, useEffect } from "react";
 import Link from "next/link";
-import {
-  AlertTriangle,
-  Bot,
-  Braces,
-  Cable,
-  Check,
-  Clock3,
-  Plus,
-  ShieldCheck,
-  Trash2,
-} from "lucide-react";
+import { Check, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ImplementationBadge } from "@/components/ui/status-badge";
-import { useConnections, useConnectors, useProviders, useHarnesses, useSkills } from "@/lib/queries";
+import { Disclosure } from "@/components/ui/disclosure";
+import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Checkbox, CheckboxField } from "@/components/ui/checkbox";
+import { ChoiceCard } from "@/components/ui/choice-card";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useConnections, useConnectors, useProviders, useSkills, useMeta } from "@/lib/queries";
 import type { AgentDefinition } from "@orbit/contracts";
 import {
   AUTONOMY_LEVELS,
@@ -34,22 +27,106 @@ import { cn, titleCase } from "@/lib/utils";
 import { cronDescription, effectLabel } from "@/lib/presentation";
 
 type Trigger = AgentDefinition["spec"]["triggers"][number];
+type SectionId =
+  | "identity"
+  | "instructions"
+  | "model"
+  | "access"
+  | "triggers"
+  | "autonomy";
 
-const fieldClass = "space-y-1.5";
-const helpClass = "text-[11px] text-muted-foreground";
+const SECTION_TITLES: Record<SectionId, string> = {
+  identity: "Identity",
+  instructions: "Instructions",
+  model: "Model",
+  access: "Connectors and skills",
+  triggers: "Triggers",
+  autonomy: "Autonomy and limits",
+};
+
+/** Which section of the form a schema path belongs to. */
+function sectionForPath(path: string): SectionId {
+  if (path.startsWith("metadata")) return "identity";
+  if (path.startsWith("spec.instructions") || path.startsWith("spec.runDefaults")) return "instructions";
+  if (path.startsWith("spec.model") || path.startsWith("spec.harness")) return "model";
+  if (path.startsWith("spec.connectors") || path.startsWith("spec.skills")) return "access";
+  if (path.startsWith("spec.triggers")) return "triggers";
+  return "autonomy";
+}
+
+/** "spec.resources.timeoutSeconds" becomes "timeout seconds". */
+function fieldWords(path: string): string {
+  const last = path.split(".").filter((part) => !/^\d+$/.test(part)).pop() ?? "";
+  return last
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .trim();
+}
+
+/** One readable sentence per issue, without repeating a field the message already names. */
+function issueText(path: string, rawMessage: string): string {
+  // Schema messages are written for developers; say the same thing plainly.
+  const atLeast = rawMessage.match(/too small.*?>=?\s*(-?\d+)/i);
+  const atMost = rawMessage.match(/too big.*?<=?\s*(-?\d+)/i);
+  const message = atLeast
+    ? `must be at least ${atLeast[1]}`
+    : atMost
+      ? `must be at most ${atMost[1]}`
+      : /invalid input: expected (number|string)/i.test(rawMessage)
+        ? "is missing or not a valid value"
+        : rawMessage;
+  const field = fieldWords(path);
+  const sentence = message.charAt(0).toUpperCase() + message.slice(1);
+  const mentioned = field
+    .split(" ")
+    .filter((word) => word.length > 2)
+    .some((word) => message.toLowerCase().includes(word));
+  if (!field || mentioned) return sentence;
+  return `${field.charAt(0).toUpperCase()}${field.slice(1)}: ${message}`;
+}
+
+function FormSection({
+  id,
+  step,
+  title,
+  description,
+  children,
+}: {
+  id: SectionId;
+  step: number;
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <Card id={`section-${id}`} className="scroll-mt-20">
+      <CardHeader className="flex-row items-start gap-3">
+        <span className="tabular mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+          {step}
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-semibold leading-6">{title}</h2>
+          <p className="text-[13px] text-muted-foreground">{description}</p>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">{children}</CardContent>
+    </Card>
+  );
+}
 
 export function AgentForm({
   initial,
   submitLabel,
   submitting,
   onSubmit,
+  cancelHref = "/agents",
 }: {
   initial?: AgentDefinition;
   submitLabel: string;
   submitting?: boolean;
   onSubmit: (definition: AgentDefinition) => Promise<void> | void;
+  cancelHref?: string;
 }) {
-  const harnesses = useHarnesses();
   const providers = useProviders();
   const connectors = useConnectors();
   const connections = useConnections();
@@ -58,36 +135,27 @@ export function AgentForm({
   const [definition, setDefinition] = useState<AgentDefinition>(() =>
     initial ? structuredClone(initial) : emptyAgentDefinition(),
   );
-  const [harnessConfigText, setHarnessConfigText] = useState(
-    JSON.stringify(initial?.spec.harness?.config ?? {}, null, 2),
-  );
-  const configFileRef = useRef<HTMLInputElement>(null);
-
-  function handleConfigUpload(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      try {
-        JSON.parse(content);
-        setHarnessConfigText(content);
-        toast.success("Config loaded");
-      } catch {
-        toast.error("File must be valid JSON");
-      }
-    };
-    reader.readAsText(file);
-    if (configFileRef.current) configFileRef.current.value = "";
-  }
-  const [configError, setConfigError] = useState<string | null>(null);
+  // Harness config is validated on submit but never stored on the agent.
+  const [harnessConfigText] = useState(JSON.stringify(initial?.spec.harness?.config ?? {}, null, 2));
   const [issues, setIssues] = useState<Array<{ path: string; message: string }>>([]);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [routingOpen, setRoutingOpen] = useState(false);
+  const [limitsOpen, setLimitsOpen] = useState(false);
+  const meta = useMeta();
+  const webhooksEnabled = Boolean((meta.data?.features as { webhookTriggers?: boolean } | undefined)?.webhookTriggers);
+  const issuesRef = useRef<HTMLDivElement>(null);
+  const [failedSubmits, setFailedSubmits] = useState(0);
+  // After a failed submit, move to the summary and focus it: the submit button may be
+  // far below, and focus is what tells a screen reader something needs attention.
+  // An effect (not an animation frame) so it runs once the summary has rendered.
+  useEffect(() => {
+    if (!failedSubmits) return;
+    issuesRef.current?.scrollIntoView({ block: "center" });
+    issuesRef.current?.focus({ preventScroll: true });
+  }, [failedSubmits]);
 
   const formHarness =
     definition.spec.harness ??
     { type: "mock" as const, executionMode: "on_demand" as const, placement: "auto" as const, config: {} };
-  const selectedHarness = harnesses.data?.find((r) => r.kind === formHarness.type);
   const platformProviders = useMemo(
     () => providers.data?.filter((p) => p.kind === "openai_compatible") ?? [],
     [providers.data],
@@ -160,7 +228,7 @@ export function AgentForm({
       type === "schedule"
         ? { type: "schedule", cron: "*/30 * * * *" }
         : type === "event"
-          ? { type: "event", subject: "connector.telegram.message" }
+          ? { type: "event", subject: "" }
           : { type: "webhook" };
     updateSpec({ triggers: [...definition.spec.triggers, trigger] });
   }
@@ -177,18 +245,28 @@ export function AgentForm({
     });
   }
 
-  async function handleSubmit() {
-    let config: unknown = {};
-    if (harnessConfigText.trim()) {
-      try {
-        config = JSON.parse(harnessConfigText);
-      } catch {
-        setConfigError("Harness config must be valid JSON.");
-        setIssues([{ path: "spec.harness.config", message: "invalid JSON" }]);
-        return;
-      }
+  function revealIssues(next: Array<{ path: string; message: string }>) {
+    setIssues(next);
+    if (next.some((issue) => sectionForPath(issue.path) === "model")) setRoutingOpen(true);
+    if (
+      next.some(
+        (issue) =>
+          issue.path.startsWith("spec.resources") ||
+          issue.path.startsWith("spec.autonomy.maxExecutionsPerHour"),
+      )
+    ) {
+      setLimitsOpen(true);
     }
-    setConfigError(null);
+    setFailedSubmits((count) => count + 1);
+  }
+
+  function goToSection(id: SectionId) {
+    const node = document.getElementById(`section-${id}`);
+    node?.scrollIntoView({ behavior: "smooth", block: "start" });
+    node?.querySelector<HTMLElement>("input, textarea, select, button")?.focus({ preventScroll: true });
+  }
+
+  function buildCandidate() {
     const { harness: _legacyHarness, ...portableSpec } = definition.spec;
     const candidate = {
       ...definition,
@@ -201,14 +279,38 @@ export function AgentForm({
         // Harness config is selected per run/worker; never stored on the agent.
       },
     } as unknown as AgentDefinition;
-    const parsed = agentDefinitionSchema.safeParse(candidate);
+    return candidate;
+  }
+
+  // Once a submit has failed, keep the error list honest while the person fixes things.
+  useEffect(() => {
+    if (!failedSubmits || issues.length === 0) return;
+    const parsed = agentDefinitionSchema.safeParse(buildCandidate());
+    const next = parsed.success
+      ? []
+      : parsed.error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message }));
+    if (JSON.stringify(next) !== JSON.stringify(issues)) setIssues(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [definition]);
+
+  async function handleSubmit() {
+    if (harnessConfigText.trim()) {
+      try {
+        JSON.parse(harnessConfigText);
+      } catch {
+        revealIssues([{ path: "spec.harness.config", message: "must be valid JSON" }]);
+        return;
+      }
+    }
+    const parsed = agentDefinitionSchema.safeParse(buildCandidate());
     if (!parsed.success) {
-      const nextIssues = parsed.error.issues.map((issue) => ({
-        path: issue.path.join("."),
-        message: issue.message,
-      }));
-      setIssues(nextIssues);
-      toast.error("Please fix the highlighted fields");
+      revealIssues(
+        parsed.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        })),
+      );
+      toast.error("Fix the highlighted fields");
       return;
     }
     setIssues([]);
@@ -217,333 +319,175 @@ export function AgentForm({
 
   const issueFor = (path: string) => issues.find((issue) => issue.path === path)?.message;
 
+  const editing = Boolean(initial);
+  const spec = definition.spec;
+  const autonomy = AUTONOMY_LEVELS.find((level) => level.level === spec.autonomy.level);
+  const modelSummary =
+    [spec.model.provider, spec.model.model].filter(Boolean).join(" / ") || "Harness default";
+  const summaryRows: Array<{ id: SectionId; label: string; value: string }> = [
+    { id: "identity", label: "Name", value: definition.metadata.name.trim() || "Not set" },
+    {
+      id: "instructions",
+      label: "Instructions",
+      value: spec.instructions.system.trim() ? "Written" : "Not set",
+    },
+    { id: "model", label: "Model", value: modelSummary },
+    {
+      id: "access",
+      label: "Connectors",
+      value: spec.connectors.length ? String(spec.connectors.length) : "None",
+    },
+    { id: "access", label: "Skills", value: spec.skills.length ? String(spec.skills.length) : "None" },
+    {
+      id: "triggers",
+      label: "Triggers",
+      value: spec.triggers.length ? String(spec.triggers.length) : "Manual only",
+    },
+    {
+      id: "autonomy",
+      label: "Autonomy",
+      value: autonomy ? `Level ${autonomy.level}, ${autonomy.name.toLowerCase()}` : "Not set",
+    },
+  ];
+
+  const submitButton = (className?: string) => (
+    <Button onClick={handleSubmit} loading={submitting} size="lg" className={className}>
+      {submitLabel}
+    </Button>
+  );
+
   return (
-    <div className="space-y-5 pb-24 lg:pb-0">
-      {issues.length > 0 ? (
-        <Card className="border-destructive/50 bg-destructive/5">
-          <CardContent className="space-y-1 p-4 text-sm text-destructive">
-            <p className="font-medium">The agent definition is not valid yet:</p>
-            <ul className="list-inside list-disc">
-              {issues.slice(0, 6).map((issue) => (
-                <li key={`${issue.path}-${issue.message}`}>
-                  <span className="font-mono text-[11px]">{issue.path}</span>: {issue.message}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      ) : null}
+    <div className="pb-24 lg:pb-0">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+        <div className="min-w-0 space-y-5">
+          {issues.length > 0 ? (
+            <div ref={issuesRef} tabIndex={-1} className="rounded-lg scroll-mt-20 focus-visible:outline-offset-4">
+              <Callout tone="danger" title="Fix these before saving">
+                <ul className="mt-1 space-y-1">
+                  {issues.map((issue) => {
+                    const section = sectionForPath(issue.path);
+                    return (
+                      <li key={`${issue.path}-${issue.message}`}>
+                        <button
+                          type="button"
+                          onClick={() => goToSection(section)}
+                          className="text-left underline decoration-destructive/40 underline-offset-2 hover:decoration-destructive"
+                        >
+                          <span className="font-medium text-foreground">{SECTION_TITLES[section]}:</span>{" "}
+                          {issueText(issue.path, issue.message)}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Callout>
+            </div>
+          ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        <div className="space-y-5 lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bot className="h-4 w-4 text-primary" /> Identity
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2">
-              <div className={cn(fieldClass, "sm:col-span-2")}>
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  value={definition.metadata.name}
-                  placeholder="Release Sentinel"
-                  onChange={(event) =>
-                    setDefinition((current) => ({
-                      ...current,
-                      metadata: { ...current.metadata, name: event.target.value },
-                    }))
-                  }
-                />
-                {issueFor("metadata.name") ? (
-                  <p className="text-[11px] text-destructive">{issueFor("metadata.name")}</p>
-                ) : null}
-              </div>
-              <div className={cn(fieldClass, "sm:col-span-2")}>
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  value={definition.metadata.description}
-                  placeholder="What does this agent do?"
-                  onChange={(event) =>
-                    setDefinition((current) => ({
-                      ...current,
-                      metadata: { ...current.metadata, description: event.target.value },
-                    }))
-                  }
-                />
-              </div>
-            </CardContent>
-          </Card>
+          <FormSection
+            id="identity"
+            step={1}
+            title="Identity"
+            description="How people will find and recognise this agent."
+          >
+            <Field
+              label="Name"
+              htmlFor="agent-name"
+              error={issueFor("metadata.name")}
+              hint="Shown in lists, executions and approvals."
+            >
+              <Input
+                id="agent-name"
+                aria-invalid={issueFor("metadata.name") ? true : undefined}
+                value={definition.metadata.name}
+                placeholder="Release sentinel"
+                onChange={(event) =>
+                  setDefinition((current) => ({
+                    ...current,
+                    metadata: { ...current.metadata, name: event.target.value },
+                  }))
+                }
+              />
+            </Field>
+            <Field
+              label="Description"
+              htmlFor="agent-description"
+              optional
+              hint="A sentence on what this agent is for."
+            >
+              <Textarea
+                id="agent-description"
+                value={definition.metadata.description}
+                placeholder="Watches release branches and reports failing checks."
+                onChange={(event) =>
+                  setDefinition((current) => ({
+                    ...current,
+                    metadata: { ...current.metadata, description: event.target.value },
+                  }))
+                }
+              />
+            </Field>
+          </FormSection>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Braces className="h-4 w-4 text-primary" /> Model
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className={fieldClass}>
-                  <Label>Placement</Label>
-                  <select
-                    className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                    value={formHarness.placement}
-                    onChange={(event) =>
-                      updateSpec({
-                        harness: {
-                          ...formHarness,
-                          placement: event.target
-                            .value as NonNullable<AgentDefinition["spec"]["harness"]>["placement"],
-                        },
-                      })
-                    }
-                  >
-                    <option value="auto">Auto (any matching worker)</option>
-                    <option value="local">Local host worker</option>
-                    <option value="docker">Docker worker</option>
-                    <option value="kubernetes">Kubernetes worker</option>
-                  </select>
-                  <p className={helpClass}>
-                    Routing constraint: only workers of this class claim the execution.
-                  </p>
-                </div>
-                <div className={fieldClass}>
-                  <Label>Execution mode</Label>
-                  <select
-                    className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                    value={formHarness.executionMode}
-                    onChange={(event) =>
-                      updateSpec({
-                        harness: {
-                          ...formHarness,
-                          executionMode: event.target
-                            .value as NonNullable<AgentDefinition["spec"]["harness"]>["executionMode"],
-                        },
-                      })
-                    }
-                  >
-                    <option value="on_demand">On demand</option>
-                    <option value="long_running">Long running (24/7)</option>
-                  </select>
-                  <p className={helpClass}>
-                    On demand: harness is created per execution. Long running: the harness
-                    stays alive between executions (requires a harness that supports
-                    instances, e.g. mock for testing).
-                  </p>
-                </div>
-                <div className={fieldClass}>
-                  <Label>Model management</Label>
-                  <select
-                    className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                    value={definition.spec.model.management}
-                    onChange={(event) =>
-                      updateSpec({
-                        model: {
-                          ...definition.spec.model,
-                          management: event.target
-                            .value as AgentDefinition["spec"]["model"]["management"],
-                        },
-                      })
-                    }
-                  >
-                    <option value="harness">Harness managed</option>
-                    <option value="platform">ORBIT provider</option>
-                  </select>
-                  <p className={helpClass}>
-                    {definition.spec.model.management === "harness"
-                      ? "The harness owns provider inventory and credentials (e.g. OpenCode Go)."
-                      : "ORBIT resolves an OpenAI-compatible endpoint and injects the credential at execution time."}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className={fieldClass}>
-                  <Label>Provider</Label>
-                  {(providers.data ?? []).length > 0 ? (
-                    <select
-                      className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                      value={definition.spec.model.provider ?? ""}
-                      onChange={(event) => {
-                        const selected = (providers.data ?? []).find((p) => {
-                          const config = (p.config ?? {}) as Record<string, unknown>;
-                          const name = String(config.provider ?? p.name);
-                          return name === event.target.value || p.name === event.target.value;
-                        });
-                        const kind = selected?.kind;
-                        const settings = (selected?.config as Record<string, unknown> | undefined)
-                          ?.settings as Record<string, unknown> | undefined;
-                        const catalog = Array.isArray(settings?.models)
-                          ? (settings.models as unknown[]).filter(
-                              (value): value is string => typeof value === "string",
-                            )
-                          : [];
-                        const defaultModel =
-                          String((selected?.config as Record<string, unknown> | undefined)?.model ?? "") ||
-                          catalog[0] ||
-                          "";
-                        updateSpec({
-                          model: {
-                            ...definition.spec.model,
-                            provider: event.target.value || undefined,
-                            model: defaultModel || undefined,
-                            management:
-                              kind === "harness_managed"
-                                ? "harness"
-                                : kind === "openai_compatible"
-                                  ? "platform"
-                                  : definition.spec.model.management,
-                          },
-                        });
-                      }}
-                    >
-                      <option value="">Select a provider…</option>
-                      <optgroup label="Harness-authenticated (worker handles auth)">
-                        {harnessProviders.map((provider) => {
-                          const config = (provider.config ?? {}) as Record<string, unknown>;
-                          const name = String(config.provider ?? provider.name);
-                          return (
-                            <option key={provider.id} value={name}>
-                              {provider.name} · {name}
-                            </option>
-                          );
-                        })}
-                      </optgroup>
-                      <optgroup label="ORBIT-managed (API key stored in ORBIT)">
-                        {platformProviders.map((provider) => (
-                          <option key={provider.id} value={provider.name}>
-                            {provider.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    </select>
-                  ) : (
-                    <Input
-                      value={definition.spec.model.provider ?? ""}
-                      placeholder="e.g. opencode-go (free-form, harness-defined)"
-                      onChange={(event) =>
-                        updateSpec({
-                          model: { ...definition.spec.model, provider: event.target.value || undefined },
-                        })
-                      }
-                    />
-                  )}
-                  {issueFor("spec.model.provider") ? (
-                    <p className="text-[11px] text-destructive">{issueFor("spec.model.provider")}</p>
-                  ) : null}
-                </div>
-                <div className={fieldClass}>
-                  <Label>Model</Label>
-                  {modelOptions.length ? (
-                    <select
-                      className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                      value={definition.spec.model.model ?? ""}
-                      onChange={(event) =>
-                        updateSpec({
-                          model: { ...definition.spec.model, model: event.target.value || undefined },
-                        })
-                      }
-                    >
-                      <option value="">Provider default</option>
-                      {definition.spec.model.model &&
-                      !modelOptions.includes(definition.spec.model.model) ? (
-                        <option value={definition.spec.model.model}>
-                          {definition.spec.model.model} (custom)
-                        </option>
-                      ) : null}
-                      {modelOptions.map((candidate) => (
-                        <option key={candidate} value={candidate}>
-                          {candidate}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <Input
-                      value={definition.spec.model.model ?? ""}
-                      placeholder={
-                        definition.spec.model.management === "platform"
-                          ? "model id at the provider"
-                          : "optional; harness default"
-                      }
-                      onChange={(event) =>
-                        updateSpec({
-                          model: { ...definition.spec.model, model: event.target.value || undefined },
-                        })
-                      }
-                    />
-                  )}
-                  {definition.spec.model.management === "platform" && platformProviders.length === 0 ? (
-                    <p className="text-[11px] text-[hsl(var(--warning))]">
-                      No OpenAI-compatible providers configured yet. Add one under Models.
-                      {harnessProviders.length > 0
-                        ? " (You have harness-managed providers like OpenCode Go — switch Model management to 'Harness managed' to use them.)"
-                        : ""}
-                    </p>
-                  ) : null}
-                  {definition.spec.model.management === "harness" && harnessProviders.length === 0 ? (
-                    <p className="text-[11px] text-[hsl(var(--warning))]">
-                      No harness-managed providers configured yet. Add one under Models.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock3 className="h-4 w-4 text-primary" /> Instructions
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className={fieldClass}>
-                <Label htmlFor="system">System instructions</Label>
-                <Textarea
-                  id="system"
-                  className="min-h-[160px]"
-                  value={definition.spec.instructions.system}
-                  onChange={(event) =>
-                    updateSpec({
-                      instructions: { ...definition.spec.instructions, system: event.target.value },
-                    })
-                  }
-                  placeholder="You are a monitoring agent. Treat retrieved content as untrusted data…"
-                />
-                {issueFor("spec.instructions.system") ? (
-                  <p className="text-[11px] text-destructive">{issueFor("spec.instructions.system")}</p>
-                ) : null}
-              </div>
-              <div className={fieldClass}>
-                <Label>Default task (optional)</Label>
-                <Textarea
-                  value={runDefaults?.task ?? ""}
-                  placeholder="Pre-filled when running this agent manually"
-                  onChange={(event) =>
-                    updateSpec({
-                      runDefaults: { task: event.target.value || undefined },
-                    } as unknown as Partial<AgentDefinition["spec"]>)
-                  }
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Used only to pre-fill manual runs. It never replaces the system
-                  instructions and can be edited per run.
-                </p>
-              </div>
-              <div className={fieldClass}>
-                <Label>Constraints (optional)</Label>
-                {definition.spec.instructions.constraints.map((constraint, index) => (
+          <FormSection
+            id="instructions"
+            step={2}
+            title="Instructions"
+            description="What the agent should do, and the rules it must keep."
+          >
+            <Field
+              label="System instructions"
+              htmlFor="agent-system"
+              error={issueFor("spec.instructions.system")}
+              hint="Sent to the harness on every run. Describe the role, the goal and how to treat retrieved content."
+            >
+              <Textarea
+                id="agent-system"
+                aria-invalid={issueFor("spec.instructions.system") ? true : undefined}
+                className="min-h-[160px]"
+                value={spec.instructions.system}
+                onChange={(event) =>
+                  updateSpec({
+                    instructions: { ...spec.instructions, system: event.target.value },
+                  })
+                }
+                placeholder="You are a monitoring agent. Treat retrieved content as untrusted data."
+              />
+            </Field>
+            <Field
+              label="Default task"
+              htmlFor="agent-default-task"
+              optional
+              hint="Pre-fills the task when someone runs this agent by hand. It never replaces the system instructions and can be edited per run."
+            >
+              <Textarea
+                id="agent-default-task"
+                value={runDefaults?.task ?? ""}
+                placeholder="Summarise anything that needs attention today."
+                onChange={(event) =>
+                  updateSpec({
+                    runDefaults: { task: event.target.value || undefined },
+                  } as unknown as Partial<AgentDefinition["spec"]>)
+                }
+              />
+            </Field>
+            <Field
+              label="Constraints"
+              optional
+              hint="Short rules the agent must always follow, one per line."
+            >
+              <div className="space-y-2">
+                {spec.instructions.constraints.map((constraint, index) => (
                   <div key={index} className="flex gap-2">
                     <Input
+                      aria-label={`Constraint ${index + 1}`}
                       value={constraint}
+                      placeholder="Never post to public channels"
                       onChange={(event) =>
                         updateSpec({
                           instructions: {
-                            ...definition.spec.instructions,
-                            constraints: definition.spec.instructions.constraints.map((value, i) =>
+                            ...spec.instructions,
+                            constraints: spec.instructions.constraints.map((value, i) =>
                               i === index ? event.target.value : value,
                             ),
                           },
@@ -554,13 +498,12 @@ export function AgentForm({
                       type="button"
                       variant="ghost"
                       size="icon"
+                      aria-label={`Remove constraint ${index + 1}`}
                       onClick={() =>
                         updateSpec({
                           instructions: {
-                            ...definition.spec.instructions,
-                            constraints: definition.spec.instructions.constraints.filter(
-                              (_, i) => i !== index,
-                            ),
+                            ...spec.instructions,
+                            constraints: spec.instructions.constraints.filter((_, i) => i !== index),
                           },
                         })
                       }
@@ -576,8 +519,8 @@ export function AgentForm({
                   onClick={() =>
                     updateSpec({
                       instructions: {
-                        ...definition.spec.instructions,
-                        constraints: [...definition.spec.instructions.constraints, ""],
+                        ...spec.instructions,
+                        constraints: [...spec.instructions.constraints, ""],
                       },
                     })
                   }
@@ -585,370 +528,664 @@ export function AgentForm({
                   <Plus /> Add constraint
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </Field>
+          </FormSection>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Cable className="h-4 w-4 text-primary" /> Connectors
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className={helpClass}>
-                Capability allowlists are enforced by ORBIT. Without an allowlist only read
-                capabilities are granted.
-              </p>
+          <FormSection
+            id="model"
+            step={3}
+            title="Model"
+            description="Which model runs the agent and who holds its credentials."
+          >
+            <Field
+              label="Who manages the model"
+              htmlFor="agent-management"
+              hint={
+                spec.model.management === "harness"
+                  ? "The harness owns the provider list and credentials, for example OpenCode Go."
+                  : "ORBIT resolves an OpenAI-compatible endpoint and injects the credential at run time."
+              }
+            >
+              <Select
+                id="agent-management"
+                value={spec.model.management}
+                onChange={(event) =>
+                  updateSpec({
+                    model: {
+                      ...spec.model,
+                      management: event.target.value as AgentDefinition["spec"]["model"]["management"],
+                    },
+                  })
+                }
+              >
+                <option value="harness">The harness</option>
+                <option value="platform">ORBIT provider</option>
+              </Select>
+            </Field>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Provider"
+                htmlFor="agent-provider"
+                error={issueFor("spec.model.provider")}
+                hint={
+                  (providers.data ?? []).length === 0
+                    ? "Name the provider as the harness knows it."
+                    : undefined
+                }
+              >
+                {(providers.data ?? []).length > 0 ? (
+                  <Select
+                    id="agent-provider"
+                aria-invalid={issueFor("spec.model.provider") ? true : undefined}
+                    value={spec.model.provider ?? ""}
+                    onChange={(event) => {
+                      const selected = (providers.data ?? []).find((p) => {
+                        const config = (p.config ?? {}) as Record<string, unknown>;
+                        const name = String(config.provider ?? p.name);
+                        return name === event.target.value || p.name === event.target.value;
+                      });
+                      const kind = selected?.kind;
+                      const settings = (selected?.config as Record<string, unknown> | undefined)
+                        ?.settings as Record<string, unknown> | undefined;
+                      const catalog = Array.isArray(settings?.models)
+                        ? (settings.models as unknown[]).filter(
+                            (value): value is string => typeof value === "string",
+                          )
+                        : [];
+                      const defaultModel =
+                        String((selected?.config as Record<string, unknown> | undefined)?.model ?? "") ||
+                        catalog[0] ||
+                        "";
+                      updateSpec({
+                        model: {
+                          ...spec.model,
+                          provider: event.target.value || undefined,
+                          model: defaultModel || undefined,
+                          management:
+                            kind === "harness_managed"
+                              ? "harness"
+                              : kind === "openai_compatible"
+                                ? "platform"
+                                : spec.model.management,
+                        },
+                      });
+                    }}
+                  >
+                    <option value="">Select a provider</option>
+                    <optgroup label="Signed in through the harness">
+                      {harnessProviders.map((provider) => {
+                        const config = (provider.config ?? {}) as Record<string, unknown>;
+                        const name = String(config.provider ?? provider.name);
+                        return (
+                          <option key={provider.id} value={name}>
+                            {provider.name === name ? name : `${provider.name} (${name})`}
+                          </option>
+                        );
+                      })}
+                    </optgroup>
+                    <optgroup label="API key stored in ORBIT">
+                      {platformProviders.map((provider) => (
+                        <option key={provider.id} value={provider.name}>
+                          {provider.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </Select>
+                ) : (
+                  <Input
+                    id="agent-provider"
+                    value={spec.model.provider ?? ""}
+                    placeholder="opencode-go"
+                    onChange={(event) =>
+                      updateSpec({
+                        model: { ...spec.model, provider: event.target.value || undefined },
+                      })
+                    }
+                  />
+                )}
+              </Field>
+              <Field label="Model" htmlFor="agent-model" optional hint="Leave empty to use the provider's default.">
+                {modelOptions.length ? (
+                  <Select
+                    id="agent-model"
+                    value={spec.model.model ?? ""}
+                    onChange={(event) =>
+                      updateSpec({
+                        model: { ...spec.model, model: event.target.value || undefined },
+                      })
+                    }
+                  >
+                    <option value="">Provider default</option>
+                    {spec.model.model && !modelOptions.includes(spec.model.model) ? (
+                      <option value={spec.model.model}>{spec.model.model} (custom)</option>
+                    ) : null}
+                    {modelOptions.map((candidate) => (
+                      <option key={candidate} value={candidate}>
+                        {candidate}
+                      </option>
+                    ))}
+                  </Select>
+                ) : (
+                  <Input
+                    id="agent-model"
+                    value={spec.model.model ?? ""}
+                    placeholder={
+                      spec.model.management === "platform" ? "Model ID at the provider" : "Harness default"
+                    }
+                    onChange={(event) =>
+                      updateSpec({
+                        model: { ...spec.model, model: event.target.value || undefined },
+                      })
+                    }
+                  />
+                )}
+              </Field>
+            </div>
+
+            {spec.model.management === "platform" && platformProviders.length === 0 ? (
+              <Callout tone="warning" title="No ORBIT providers yet">
+                Add an OpenAI-compatible provider under Model providers.
+                {harnessProviders.length > 0
+                  ? " You can also switch to a model managed by the harness, such as OpenCode Go."
+                  : ""}
+              </Callout>
+            ) : null}
+            {spec.model.management === "harness" && harnessProviders.length === 0 ? (
+              <Callout tone="warning" title="No harness providers yet">
+                Add one under Model providers to pick from a list instead of typing a name.
+              </Callout>
+            ) : null}
+
+            <Disclosure
+              title="Advanced routing"
+              summary="Where runs are placed and how long the harness lives"
+              open={routingOpen}
+              onOpenChange={setRoutingOpen}
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Worker placement"
+                  htmlFor="agent-placement"
+                  hint="Only workers of this kind claim the run."
+                >
+                  <Select
+                    id="agent-placement"
+                    value={formHarness.placement}
+                    onChange={(event) =>
+                      updateSpec({
+                        harness: {
+                          ...formHarness,
+                          placement: event.target
+                            .value as NonNullable<AgentDefinition["spec"]["harness"]>["placement"],
+                        },
+                      })
+                    }
+                  >
+                    <option value="auto">Any matching worker</option>
+                    <option value="local">Local host worker</option>
+                    <option value="docker">Docker worker</option>
+                    <option value="kubernetes">Kubernetes worker</option>
+                  </Select>
+                </Field>
+                <Field
+                  label="Execution mode"
+                  htmlFor="agent-exec-mode"
+                  hint="Long running keeps the harness alive between runs and needs a harness that supports instances."
+                >
+                  <Select
+                    id="agent-exec-mode"
+                    value={formHarness.executionMode}
+                    onChange={(event) =>
+                      updateSpec({
+                        harness: {
+                          ...formHarness,
+                          executionMode: event.target
+                            .value as NonNullable<AgentDefinition["spec"]["harness"]>["executionMode"],
+                        },
+                      })
+                    }
+                  >
+                    <option value="on_demand">On demand, one harness per run</option>
+                    <option value="long_running">Long running, always on</option>
+                  </Select>
+                </Field>
+              </div>
+            </Disclosure>
+          </FormSection>
+
+          <FormSection
+            id="access"
+            step={4}
+            title="Connectors and skills"
+            description="What the agent can reach. ORBIT enforces these lists; without one, only read capabilities are granted."
+          >
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium">Connectors</h3>
+              {(connectors.data ?? []).length === 0 ? (
+                <p className="text-[13px] text-muted-foreground">No connectors are available yet.</p>
+              ) : null}
               {(connectors.data ?? []).map((connector) => {
-                const binding = definition.spec.connectors.find((c) => c.connector === connector.slug);
+                const binding = spec.connectors.find((c) => c.connector === connector.slug);
                 const capabilities = (connector.capabilities ?? []) as Array<{
                   id: string;
                   name: string;
                   effect: string;
                 }>;
+                const matching = (connections.data ?? []).filter(
+                  (connection) => connection.connectorSlug === connector.slug,
+                );
                 return (
-                  <div key={connector.slug} className="rounded-lg border p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium">{connector.name}</p>
-                        <p className="text-[11px] text-muted-foreground">{connector.description}</p>
-                      </div>
-                      <Switch
+                  <div
+                    key={connector.slug}
+                    className={cn("rounded-lg border bg-card", binding && "border-primary/40")}
+                  >
+                    <label className="flex cursor-pointer items-start gap-3 p-3">
+                      <Checkbox
+                        className="mt-0.5"
                         checked={Boolean(binding)}
-                        onCheckedChange={() => toggleConnector(connector.slug)}
-                        aria-label={`Toggle ${connector.name}`}
+                        onChange={() => toggleConnector(connector.slug)}
                       />
-                    </div>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium">{connector.name}</span>
+                        <span className="block text-[13px] text-muted-foreground">
+                          {connector.description}
+                        </span>
+                      </span>
+                    </label>
                     {binding ? (
-                      <div className="mt-3 space-y-2">
-                        <div className="space-y-1">
-                          <Label className="text-[11px] text-muted-foreground">
-                            Connection (required for live reads)
-                          </Label>
-                          <select
-                            className="flex h-8 w-full rounded-md border border-input bg-card px-2 text-xs"
+                      <div className="space-y-4 border-t p-3">
+                        <Field
+                          label="Connection"
+                          htmlFor={`conn-${connector.slug}`}
+                          hint="The saved credentials this agent uses. Without one, live reads are skipped."
+                        >
+                          <Select
+                            id={`conn-${connector.slug}`}
                             value={binding.connectionId ?? ""}
                             onChange={(event) =>
                               updateSpec({
-                                connectors: definition.spec.connectors.map((item) =>
+                                connectors: spec.connectors.map((item) =>
                                   item.connector === connector.slug
-                                    ? {
-                                        ...item,
-                                        connectionId: event.target.value || null,
-                                      }
+                                    ? { ...item, connectionId: event.target.value || null }
                                     : item,
                                 ),
                               })
                             }
                           >
-                            <option value="">No connection (configured reads are skipped)</option>
-                            {(connections.data ?? [])
-                              .filter((connection) => connection.connectorSlug === connector.slug)
-                              .map((connection) => (
-                                <option key={connection.id} value={connection.id}>
-                                  {connection.name} ({connection.status})
-                                </option>
-                              ))}
-                          </select>
-                          {(connections.data ?? []).filter(
-                            (connection) => connection.connectorSlug === connector.slug,
-                          ).length === 0 ? (
-                            <p className="text-[11px] text-[hsl(var(--warning))]">
-                              No {connector.name} connection yet. Add one under Connections.
+                            <option value="">No connection</option>
+                            {matching.map((connection) => (
+                              <option key={connection.id} value={connection.id}>
+                                {connection.name} ({connection.status})
+                              </option>
+                            ))}
+                          </Select>
+                          {matching.length === 0 ? (
+                            <p className="mt-1.5 text-[13px] text-warning">
+                              No {connector.name} connection yet. Add one under Connectors.
                             </p>
                           ) : null}
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                        {capabilities.map((capability) => {
-                          const selected = binding.capabilities.includes(capability.id);
-                          return (
-                            <button
-                              type="button"
-                              key={capability.id}
-                              onClick={() => toggleCapability(connector.slug, capability.id)}
-                              className={cn(
-                                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]",
-                                selected
-                                  ? "border-primary/50 bg-primary/10 text-primary"
-                                  : "text-muted-foreground hover:bg-muted",
-                              )}
-                            >
-                              {selected ? <Check className="h-3 w-3" /> : null}
-                              {capability.name}
-                              {capability.effect !== "read" ? (
-                                <span className="opacity-60">· {effectLabel(capability.effect)}</span>
-                              ) : null}
-                            </button>
-                          );
-                        })}
+                        </Field>
+                        <div className="space-y-1.5">
+                          <p className="text-sm font-medium" id={`caps-${connector.slug}`}>
+                            Allowed capabilities
+                          </p>
+                          <div
+                            role="group"
+                            aria-labelledby={`caps-${connector.slug}`}
+                            className="flex flex-wrap gap-1.5"
+                          >
+                            {capabilities.map((capability) => {
+                              const selected = binding.capabilities.includes(capability.id);
+                              return (
+                                <button
+                                  type="button"
+                                  key={capability.id}
+                                  aria-pressed={selected}
+                                  onClick={() => toggleCapability(connector.slug, capability.id)}
+                                  className={cn(
+                                    "inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] transition-colors",
+                                    selected
+                                      ? "border-primary/50 bg-accent text-accent-foreground"
+                                      : "bg-card text-muted-foreground hover:border-border-strong hover:text-foreground",
+                                  )}
+                                >
+                                  {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                                  {capability.name}
+                                  {capability.effect !== "read" ? (
+                                    <Badge variant="warning">{effectLabel(capability.effect)}</Badge>
+                                  ) : null}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
                     ) : null}
                   </div>
                 );
               })}
-            </CardContent>
-          </Card>
+            </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bot className="h-4 w-4 text-primary" /> Skills
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <p className={helpClass}>
-                Skills are materialized into the workspace before execution
-                (<code className="font-mono">.pi/skills</code> /{" "}
-                <code className="font-mono">.opencode/skills</code>).
-              </p>
+            <div className="space-y-3">
+              <div>
+                <h3 className="text-sm font-medium">Skills</h3>
+                <p className="text-[13px] text-muted-foreground">
+                  Copied into the workspace before each run, so the harness can use them.
+                </p>
+              </div>
               {(skills.data ?? []).length === 0 ? (
-                <p className="text-[11px] text-muted-foreground">
-                  No skills yet. Create them under Skills.
+                <p className="text-[13px] text-muted-foreground">
+                  No skills yet. Create one under Skills.
                 </p>
               ) : (
-                <div className="space-y-1.5">
+                <div className="grid gap-2 sm:grid-cols-2">
                   {(skills.data ?? []).map((skill) => (
-                    <label
+                    <CheckboxField
                       key={skill.id}
-                      className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-xs"
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">{skill.name}</span>
-                        <span className="block truncate text-[10px] text-muted-foreground">
-                          {skill.description || skill.slug}
-                        </span>
-                      </span>
-                      <Switch
-                        checked={definition.spec.skills.includes(skill.slug)}
-                        onCheckedChange={(checked) =>
-                          updateSpec({
-                            skills: checked
-                              ? [...definition.spec.skills, skill.slug]
-                              : definition.spec.skills.filter((slug) => slug !== skill.slug),
-                          })
-                        }
-                      />
-                    </label>
+                      title={skill.name}
+                      description={skill.description || skill.slug}
+                      checked={spec.skills.includes(skill.slug)}
+                      onChange={(event) =>
+                        updateSpec({
+                          skills: event.target.checked
+                            ? [...spec.skills, skill.slug]
+                            : spec.skills.filter((slug) => slug !== skill.slug),
+                        })
+                      }
+                    />
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </FormSection>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock3 className="h-4 w-4 text-primary" /> Triggers
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className={helpClass}>Manual execution is always available. Add schedules or event triggers.</p>
-              {definition.spec.triggers.map((trigger, index) => (
-                <div key={`${trigger.type}-${index}`} className="rounded-lg border p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <Badge variant="secondary">{titleCase(trigger.type)}</Badge>
-                    <Button type="button" variant="ghost" size="icon" onClick={() => removeTrigger(index)}>
-                      <Trash2 />
-                    </Button>
-                  </div>
-                  <div className="mt-2 space-y-2">
-                    {trigger.type === "schedule" ? (
-                      <div className={fieldClass}>
-                        <Label>Cron (UTC, 5 fields)</Label>
-                        <Input
-                          value={trigger.cron}
-                          onChange={(event) =>
-                            updateTrigger(index, { type: "schedule", cron: event.target.value })
-                          }
-                          placeholder="*/30 * * * *"
-                        />
-                        <p className={helpClass}>{cronDescription(trigger.cron)}</p>
-                      </div>
-                    ) : null}
-                    {trigger.type === "event" ? (
-                      <div className={fieldClass}>
-                        <Label>Event subject</Label>
-                        <Input
-                          value={trigger.subject}
-                          onChange={(event) =>
-                            updateTrigger(index, { type: "event", subject: event.target.value })
-                          }
-                          placeholder="connector.telegram.message"
-                        />
-                      </div>
-                    ) : null}
-                    {trigger.type === "webhook" ? (
-                      <p className={helpClass}>
-                        Inbound webhook URLs and HMAC verification arrive with the connector phase.
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => addTrigger("schedule")}>
-                  <Plus /> Schedule
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => addTrigger("event")}>
-                  <Plus /> Event
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => addTrigger("webhook")}>
-                  <Plus /> Webhook
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-5">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-primary" /> Autonomy
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {AUTONOMY_LEVELS.map((level) => {
-                const active = definition.spec.autonomy.level === level.level;
-                return (
-                  <button
+          <FormSection
+            id="triggers"
+            step={5}
+            title="Triggers"
+            description="When the agent runs by itself. You can always run it by hand."
+          >
+            {spec.triggers.length === 0 ? (
+              <p className="text-[13px] text-muted-foreground">
+                No triggers. The agent only runs when someone starts it.
+              </p>
+            ) : null}
+            {spec.triggers.map((trigger, index) => (
+              <div key={`${trigger.type}-${index}`} className="space-y-3 rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Badge variant="secondary">{titleCase(trigger.type)}</Badge>
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Remove ${trigger.type} trigger`}
+                    onClick={() => removeTrigger(index)}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+                {trigger.type === "schedule" ? (
+                  <Field
+                    label="Cron schedule"
+                    htmlFor={`trigger-${index}`}
+                    hint={`Five fields, in UTC. Currently: ${cronDescription(trigger.cron)}`}
+                  >
+                    <Input
+                      id={`trigger-${index}`}
+                      className="font-mono"
+                      value={trigger.cron}
+                      onChange={(event) =>
+                        updateTrigger(index, { type: "schedule", cron: event.target.value })
+                      }
+                      placeholder="*/30 * * * *"
+                    />
+                  </Field>
+                ) : null}
+                {trigger.type === "event" ? (
+                  <Field
+                    label="Event subject"
+                    htmlFor={`trigger-${index}`}
+                    hint="The agent runs when an event with this subject is published."
+                  >
+                    <Input
+                      id={`trigger-${index}`}
+                      className="font-mono"
+                      value={trigger.subject}
+                      onChange={(event) =>
+                        updateTrigger(index, { type: "event", subject: event.target.value })
+                      }
+                      placeholder="connector.telegram.message"
+                    />
+                  </Field>
+                ) : null}
+                {trigger.type === "webhook" ? (
+                  <p className="text-[13px] text-muted-foreground">
+                    Inbound webhook URLs and signature checks are not available yet, so this trigger does not fire.
+                  </p>
+                ) : null}
+              </div>
+            ))}
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => addTrigger("schedule")}>
+                <Plus /> Schedule
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => addTrigger("event")}>
+                <Plus /> Event
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!webhooksEnabled}
+                title={webhooksEnabled ? undefined : "Webhook triggers are not enabled on this installation"}
+                onClick={() => addTrigger("webhook")}
+              >
+                <Plus /> Webhook
+              </Button>
+            </div>
+          </FormSection>
+
+          <FormSection
+            id="autonomy"
+            step={6}
+            title="Autonomy and limits"
+            description="How much the agent may do without a person, enforced by ORBIT rather than by the prompt."
+          >
+            <div className="space-y-2">
+              <p className="text-sm font-medium" id="autonomy-label">
+                Autonomy level
+              </p>
+              <div role="radiogroup" aria-labelledby="autonomy-label" className="grid gap-2 sm:grid-cols-2">
+                {AUTONOMY_LEVELS.map((level) => (
+                  <ChoiceCard
                     key={level.level}
-                    onClick={() =>
+                    selected={spec.autonomy.level === level.level}
+                    onSelect={() =>
+                      updateSpec({ autonomy: { ...spec.autonomy, level: level.level } })
+                    }
+                    title={level.name}
+                    description={level.description}
+                    trailing={<Badge variant="outline">Level {level.level}</Badge>}
+                  />
+                ))}
+              </div>
+            </div>
+            <Field
+              label="Approval mode"
+              htmlFor="agent-approval"
+              hint="Approvals appear in the Approvals queue before the action runs."
+            >
+              <Select
+                id="agent-approval"
+                value={spec.autonomy.approvalMode}
+                onChange={(event) =>
+                  updateSpec({
+                    autonomy: {
+                      ...spec.autonomy,
+                      approvalMode: event.target.value as AgentDefinition["spec"]["autonomy"]["approvalMode"],
+                    },
+                  })
+                }
+              >
+                <option value="auto">Follow the autonomy level</option>
+                <option value="always">Ask for approval every time</option>
+                <option value="writes">Ask before external side effects</option>
+              </Select>
+            </Field>
+
+            <Disclosure
+              title="Run limits"
+              summary="Timeout, concurrency, rate and tokens"
+              open={limitsOpen}
+              onOpenChange={setLimitsOpen}
+            >
+              <p className="text-[13px] text-muted-foreground">
+                Limits apply to each run. Worker CPU and memory are set on the worker profile under
+                Workers.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Timeout" htmlFor="agent-timeout" hint="Seconds before a run is stopped.">
+                  <Input
+                    id="agent-timeout"
+                    type="number"
+                    min={1}
+                    max={86400}
+                    value={spec.resources.timeoutSeconds}
+                    onChange={(event) =>
                       updateSpec({
-                        autonomy: { ...definition.spec.autonomy, level: level.level },
+                        resources: { ...spec.resources, timeoutSeconds: Number(event.target.value) },
                       })
                     }
-                    className={cn(
-                      "w-full rounded-lg border p-2.5 text-left transition-colors",
-                      active ? "border-primary bg-accent/60" : "hover:bg-muted/50",
-                    )}
-                  >
-                    <p className="text-sm font-medium">
-                      L{level.level} · {level.name}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">{level.description}</p>
-                  </button>
-                );
-              })}
-              <div className={fieldClass}>
-                <Label>Approval mode</Label>
-                <select
-                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                  value={definition.spec.autonomy.approvalMode}
-                  onChange={(event) =>
-                    updateSpec({
-                      autonomy: {
-                        ...definition.spec.autonomy,
-                        approvalMode: event.target.value as AgentDefinition["spec"]["autonomy"]["approvalMode"],
-                      },
-                    })
-                  }
+                  />
+                </Field>
+                <Field
+                  label="Concurrent runs"
+                  htmlFor="agent-concurrency"
+                  hint="How many runs of this agent may overlap."
                 >
-                  <option value="auto">Auto (follow autonomy level)</option>
-                  <option value="always">Always require approval</option>
-                  <option value="writes">Approve external side effects</option>
-                </select>
+                  <Input
+                    id="agent-concurrency"
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={spec.resources.maxConcurrentExecutions}
+                    onChange={(event) =>
+                      updateSpec({
+                        resources: {
+                          ...spec.resources,
+                          maxConcurrentExecutions: Number(event.target.value),
+                        },
+                      })
+                    }
+                  />
+                </Field>
+                <Field
+                  label="Runs per hour"
+                  htmlFor="agent-rate"
+                  optional
+                  hint="Leave empty for no limit."
+                >
+                  <Input
+                    id="agent-rate"
+                    type="number"
+                    min={1}
+                    max={10000}
+                    value={spec.autonomy.maxExecutionsPerHour ?? ""}
+                    placeholder="Unlimited"
+                    onChange={(event) =>
+                      updateSpec({
+                        autonomy: {
+                          ...spec.autonomy,
+                          maxExecutionsPerHour: event.target.value ? Number(event.target.value) : undefined,
+                        },
+                      })
+                    }
+                  />
+                </Field>
+                <Field
+                  label="Output tokens"
+                  htmlFor="agent-tokens"
+                  optional
+                  hint="Maximum tokens the model may write per run."
+                >
+                  <Input
+                    id="agent-tokens"
+                    type="number"
+                    min={1}
+                    value={spec.resources.maxOutputTokens ?? ""}
+                    placeholder="Provider default"
+                    onChange={(event) =>
+                      updateSpec({
+                        resources: {
+                          ...spec.resources,
+                          maxOutputTokens: event.target.value ? Number(event.target.value) : undefined,
+                        },
+                      })
+                    }
+                  />
+                </Field>
               </div>
-              <div className={fieldClass}>
-                <Label>Max executions per hour</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={10000}
-                  value={definition.spec.autonomy.maxExecutionsPerHour ?? ""}
-                  placeholder="unlimited"
-                  onChange={(event) =>
-                    updateSpec({
-                      autonomy: {
-                        ...definition.spec.autonomy,
-                        maxExecutionsPerHour: event.target.value
-                          ? Number(event.target.value)
-                          : undefined,
-                      },
-                    })
-                  }
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Execution limits</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-[11px] text-muted-foreground">
-                Timeout and token budget for a single run. Worker CPU and memory are
-                configured on the worker profile under Workers.
-              </p>
-              <div className={fieldClass}>
-                <Label>Timeout (seconds)</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={86400}
-                  value={definition.spec.resources.timeoutSeconds}
-                  onChange={(event) =>
-                    updateSpec({
-                      resources: {
-                        ...definition.spec.resources,
-                        timeoutSeconds: Number(event.target.value),
-                      },
-                    })
-                  }
-                />
-              </div>
-              <div className={fieldClass}>
-                <Label>Max concurrent executions</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={definition.spec.resources.maxConcurrentExecutions}
-                  onChange={(event) =>
-                    updateSpec({
-                      resources: {
-                        ...definition.spec.resources,
-                        maxConcurrentExecutions: Number(event.target.value),
-                      },
-                    })
-                  }
-                />
-              </div>
-              <div className={fieldClass}>
-                <Label>Max output tokens</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={definition.spec.resources.maxOutputTokens ?? ""}
-                  placeholder="provider default"
-                  onChange={(event) =>
-                    updateSpec({
-                      resources: {
-                        ...definition.spec.resources,
-                        maxOutputTokens: event.target.value
-                          ? Number(event.target.value)
-                          : undefined,
-                      },
-                    })
-                  }
-                />
-              </div>
-            </CardContent>
-          </Card>
+            </Disclosure>
+          </FormSection>
         </div>
+
+        {/* Desktop rail: live summary, jump links and the submit button stay in view. */}
+        <aside className="hidden lg:sticky lg:top-6 lg:block">
+          <Card>
+            <CardHeader className="pb-3">
+              <h2 className="text-[15px] font-semibold">Summary</h2>
+              <p className="text-[13px] text-muted-foreground">
+                {editing
+                  ? "Saving creates a new version. Past executions keep the old one."
+                  : "Saving creates version 1 of this agent."}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <ul className="-mx-2 divide-y">
+                {summaryRows.map((row) => (
+                  <li key={row.label}>
+                    <button
+                      type="button"
+                      onClick={() => goToSection(row.id)}
+                      className="flex w-full items-baseline justify-between gap-3 rounded-md px-2 py-2 text-left text-sm hover:bg-muted/60"
+                    >
+                      <span className="text-muted-foreground">{row.label}</span>
+                      <span
+                        className={cn(
+                          "min-w-0 truncate font-medium",
+                          row.value === "Not set" && "text-warning",
+                        )}
+                      >
+                        {row.value}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {issues.length > 0 ? (
+                <p className="text-[13px] text-destructive" role="status">
+                  {issues.length} {issues.length === 1 ? "issue needs" : "issues need"} fixing.
+                </p>
+              ) : null}
+              <div className="space-y-2">
+                {submitButton("w-full")}
+                <Button asChild variant="ghost" className="w-full">
+                  <Link href={cancelHref}>Cancel</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </aside>
       </div>
 
-      <div className="fixed inset-x-0 bottom-14 z-30 border-t bg-background/95 p-3 backdrop-blur lg:static lg:z-auto lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+      {/* Phone and tablet: submit bar pinned above the 56px tab bar. */}
+      <div className="fixed inset-x-0 bottom-14 z-30 border-t bg-background/95 p-3 backdrop-blur lg:hidden">
+        <div className="flex items-center justify-between gap-3">
           <Button asChild variant="ghost">
-            <Link href="/agents">Cancel</Link>
+            <Link href={cancelHref}>Cancel</Link>
           </Button>
-          <Button onClick={handleSubmit} loading={submitting} size="lg">
-            {submitLabel}
-          </Button>
+          {submitButton()}
         </div>
       </div>
     </div>

@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Server, Trash2 } from "lucide-react";
+import { Ellipsis, KeyRound, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Callout } from "@/components/ui/callout";
+import { Card } from "@/components/ui/card";
+import { useConfirm } from "@/components/ui/confirm";
 import {
   Dialog,
   DialogContent,
@@ -15,14 +18,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
+import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createEnvMapping, deleteEnvMapping } from "@/lib/env-mappings";
 import { useConnections, useEnvMappings } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
-import Link from "next/link";
 
 type Row = { envVar: string; connectionId: string; secretKey: string };
 
@@ -30,6 +40,7 @@ const EMPTY_ROW: Row = { envVar: "", connectionId: "", secretKey: "" };
 
 export default function EnvironmentMappingsPage() {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const mappings = useEnvMappings();
   const connections = useConnections();
   const [open, setOpen] = useState(false);
@@ -54,7 +65,7 @@ export default function EnvironmentMappingsPage() {
       });
     },
     onSuccess: () => {
-      toast.success("Environment mapping created");
+      toast.success("Mapping created");
       setOpen(false);
       setName("");
       setDescription("");
@@ -67,7 +78,7 @@ export default function EnvironmentMappingsPage() {
   const remove = useMutation({
     mutationFn: deleteEnvMapping,
     onSuccess: () => {
-      toast.success("Environment mapping deleted");
+      toast.success("Mapping deleted");
       void queryClient.invalidateQueries({ queryKey: ["env-mappings"] });
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -80,12 +91,29 @@ export default function EnvironmentMappingsPage() {
     setOpen(true);
   }
 
+  function updateRow(index: number, patch: Partial<Row>) {
+    setRows((current) => current.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+  }
+
+  async function confirmDelete(id: string, mappingName: string) {
+    const confirmed = await confirm({
+      title: `Delete ${mappingName}?`,
+      description:
+        "Worker profiles that use this mapping stop receiving its variables. This cannot be undone.",
+      confirmLabel: "Delete mapping",
+      destructive: true,
+    });
+    if (confirmed) remove.mutate(id);
+  }
+
+  const connectionName = (id?: string | null) =>
+    (connections.data ?? []).find((connection) => connection.id === id)?.name;
+
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="space-y-6">
       <PageHeader
-        eyebrow="Library"
-        title="Environment mappings"
-        description="Reusable connection or secret mappings shared by worker profiles. Attach them under Workers → profile."
+        title="Environments"
+        description="An environment mapping gives worker processes environment variables whose values come from a connection or a stored secret. Define it once and attach it to as many worker profiles as you like."
         actions={
           <Button onClick={openCreate}>
             <Plus /> New mapping
@@ -94,55 +122,87 @@ export default function EnvironmentMappingsPage() {
       />
 
       {mappings.isLoading ? (
-        <Skeleton className="h-40" />
-      ) : mappings.isError ? (
-        <p className="text-sm text-destructive">{errorMessage(mappings.error)}</p>
-      ) : !mappings.data?.length ? (
-        <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-          No reusable mappings yet. Create one, then attach it to one or more worker profiles
-          on the <Link href="/workers" className="text-primary hover:underline">Workers</Link> page.
-        </div>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {mappings.data.map((mapping) => (
-            <Card key={mapping.id}>
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-2">
-                  <CardTitle className="flex min-w-0 items-center gap-2">
-                    <Server className="h-4 w-4 shrink-0 text-primary" />
-                    <span className="truncate">{mapping.name}</span>
-                  </CardTitle>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="text-destructive"
-                    aria-label={`Delete ${mapping.name}`}
-                    onClick={() => {
-                      if (window.confirm(`Delete mapping ${mapping.name}?`)) {
-                        remove.mutate(mapping.id);
-                      }
-                    }}
-                  >
-                    <Trash2 />
-                  </Button>
-                </div>
-                {mapping.description ? (
-                  <p className="text-[11px] text-muted-foreground">{mapping.description}</p>
-                ) : null}
-              </CardHeader>
-              <CardContent className="space-y-1 text-xs">
-                {mapping.mappings.map((entry, index) => (
-                  <div key={index} className="flex items-center justify-between gap-2">
-                    <code className="font-mono">{entry.envVar}</code>
-                    <span className="truncate text-[11px] text-muted-foreground">
-                      {entry.connectionId ? "connection" : entry.secretKey ? "secret" : "—"}
-                    </span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+        <Card className="overflow-hidden">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="border-b px-5 py-4 last:border-b-0">
+              <Skeleton className="h-12" />
+            </div>
           ))}
-        </div>
+        </Card>
+      ) : mappings.isError ? (
+        <Callout tone="danger" title="Mappings could not be loaded">
+          {errorMessage(mappings.error)}
+        </Callout>
+      ) : !mappings.data?.length ? (
+        <EmptyState
+          icon={<KeyRound />}
+          title="No reusable mappings yet"
+          description="Create one, then attach it to worker profiles in the profile's advanced settings."
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button variant="outline" onClick={openCreate}>
+                <Plus /> New mapping
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/workers">Go to workers</Link>
+              </Button>
+            </div>
+          }
+        />
+      ) : (
+        <Card className="overflow-hidden">
+          <ul>
+            {mappings.data.map((mapping) => (
+              <li key={mapping.id} className="border-b px-4 py-4 last:border-b-0 sm:px-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-semibold">{mapping.name}</p>
+                    {mapping.description ? (
+                      <p className="mt-0.5 text-[13px] text-muted-foreground">{mapping.description}</p>
+                    ) : null}
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={`More actions for ${mapping.name}`}
+                      >
+                        <Ellipsis />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        destructive
+                        onSelect={() => void confirmDelete(mapping.id, mapping.name)}
+                      >
+                        <Trash2 /> Delete mapping
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <ul className="mt-3 divide-y rounded-lg border bg-subtle/50">
+                  {mapping.mappings.map((entry, index) => {
+                    const source = entry.connectionId
+                      ? `From connection ${connectionName(entry.connectionId) ?? "(unknown)"}`
+                      : entry.secretKey
+                        ? "From a stored secret"
+                        : "No source set";
+                    return (
+                      <li
+                        key={index}
+                        className="flex flex-col gap-0.5 px-3 py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
+                      >
+                        <code className="break-all font-mono text-[13px]">{entry.envVar}</code>
+                        <span className="break-words text-[13px] text-muted-foreground">{source}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -150,109 +210,102 @@ export default function EnvironmentMappingsPage() {
           <DialogHeader>
             <DialogTitle>New environment mapping</DialogTitle>
             <DialogDescription>
-              One reusable resource can hold several env vars. Attach it to any number of
-              worker profiles.
+              One mapping can hold several variables. Attach it to any number of worker profiles.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>Name</Label>
-              <Input
-                value={name}
-                placeholder="GitLab + notifications"
-                onChange={(event) => setName(event.target.value)}
-              />
+          <div className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Name" htmlFor="em-name">
+                <Input
+                  id="em-name"
+                  value={name}
+                  placeholder="GitLab and notifications"
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </Field>
+              <Field label="Description" htmlFor="em-description" optional>
+                <Input
+                  id="em-description"
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                />
+              </Field>
             </div>
-            <div className="space-y-1.5">
-              <Label>Description</Label>
-              <Input
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Mappings</Label>
+
+            <div className="space-y-3 border-t pt-4">
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h3 className="text-[15px] font-semibold">Variables</h3>
+                  <p className="mt-0.5 text-[13px] text-muted-foreground">
+                    Take a value from a connection, or reference a stored secret. Inline mappings on
+                    a worker profile override these.
+                  </p>
+                </div>
                 <Button
                   type="button"
                   size="sm"
-                  variant="ghost"
+                  variant="outline"
                   onClick={() => setRows((current) => [...current, EMPTY_ROW])}
                 >
-                  <Plus /> Add mapping
+                  <Plus /> Add variable
                 </Button>
               </div>
-              {rows.map((row, index) => (
-                <div
-                  key={index}
-                  className="grid gap-2 rounded-lg border p-2 sm:grid-cols-[1fr_1fr_1fr_auto]"
-                >
-                  <Input
-                    value={row.envVar}
-                    placeholder="ENV_VAR_NAME"
-                    className="font-mono text-xs"
-                    onChange={(event) =>
-                      setRows((current) =>
-                        current.map((item, i) =>
-                          i === index ? { ...item, envVar: event.target.value } : item,
-                        ),
-                      )
-                    }
-                  />
-                  <select
-                    className="flex h-9 w-full rounded-lg border border-input bg-card px-2 text-xs"
-                    value={row.connectionId}
-                    onChange={(event) =>
-                      setRows((current) =>
-                        current.map((item, i) =>
-                          i === index ? { ...item, connectionId: event.target.value } : item,
-                        ),
-                      )
-                    }
-                  >
-                    <option value="">No connection</option>
-                    {(connections.data ?? []).map((connection) => (
-                      <option key={connection.id} value={connection.id}>
-                        {connection.name} · {connection.connectorSlug}
-                      </option>
-                    ))}
-                  </select>
-                  <Input
-                    value={row.secretKey}
-                    placeholder="secret ref (optional)"
-                    className="text-xs"
-                    onChange={(event) =>
-                      setRows((current) =>
-                        current.map((item, i) =>
-                          i === index ? { ...item, secretKey: event.target.value } : item,
-                        ),
-                      )
-                    }
-                  />
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    onClick={() =>
-                      setRows((current) => current.filter((_, i) => i !== index))
-                    }
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
-              <p className="text-[11px] text-muted-foreground">
-                Use a connection for its credential, or reference a stored secret. Inline
-                mappings on a worker profile override these.
-              </p>
+              <ul className="space-y-2">
+                {rows.map((row, index) => (
+                  <li key={index} className="rounded-lg border bg-card p-3">
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+                      <Field label="Variable" htmlFor={`em-${index}-var`}>
+                        <Input
+                          id={`em-${index}-var`}
+                          value={row.envVar}
+                          placeholder="ENV_VAR_NAME"
+                          className="font-mono text-[13px]"
+                          onChange={(event) => updateRow(index, { envVar: event.target.value })}
+                        />
+                      </Field>
+                      <Field label="Connection" htmlFor={`em-${index}-conn`}>
+                        <Select
+                          id={`em-${index}-conn`}
+                          value={row.connectionId}
+                          onChange={(event) => updateRow(index, { connectionId: event.target.value })}
+                        >
+                          <option value="">No connection</option>
+                          {(connections.data ?? []).map((connection) => (
+                            <option key={connection.id} value={connection.id}>
+                              {connection.name} ({connection.connectorSlug})
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label="Secret reference" htmlFor={`em-${index}-secret`} optional>
+                        <Input
+                          id={`em-${index}-secret`}
+                          value={row.secretKey}
+                          onChange={(event) => updateRow(index, { secretKey: event.target.value })}
+                        />
+                      </Field>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="justify-self-start sm:justify-self-auto"
+                        aria-label={`Remove variable ${row.envVar || index + 1}`}
+                        onClick={() => setRows((current) => current.filter((_, i) => i !== index))}
+                      >
+                        <X />
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setOpen(false)}>
+            <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button onClick={() => create.mutate()} loading={create.isPending} disabled={!name.trim()}>
-              Create
+              Create mapping
             </Button>
           </DialogFooter>
         </DialogContent>
