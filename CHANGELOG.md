@@ -8,6 +8,13 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- Pi worker auth Secret is copied from a read-only seed volume into a writable
+  `/home/orbit/.pi/agent` by an init container. Pi no longer fails with
+  "Credential store read failed ... read-only file system".
+
+
 ### Added
 
 - Run dialogs for agents and Agent Teams expose an optional harness override, so one
