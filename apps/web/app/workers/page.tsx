@@ -463,7 +463,7 @@ function WorkersPageInner() {
                     <Badge variant="outline">auth: {profile.authSecretName}</Badge>
                   ) : null}
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     size="sm"
                     variant="secondary"
@@ -496,40 +496,48 @@ function WorkersPageInner() {
                       <RotateCw /> Relaunch
                     </Button>
                   ) : null}
-                  <ExportResourceButton
-                    resource="worker_profiles"
-                    resourceId={profile.id}
-                    name={profile.name}
-                  />
-                  <Button size="sm" onClick={() => setBootstrapProfile(profile)}>
-                    <Boxes /> Bootstrap
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => openEdit(profile)}
-                  >
+                  <Button size="sm" variant="ghost" onClick={() => openEdit(profile)}>
                     <Pencil /> Edit
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => toggle.mutate({ id: profile.id, enabled: !profile.enabled })}
-                  >
-                    {profile.enabled ? "Disable" : "Enable"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-destructive"
-                    disabled={profile.enabled}
-                    title={profile.enabled ? "Disable the profile before deleting it" : undefined}
-                    onClick={() => {
-                      if (window.confirm(`Delete profile ${profile.name}?`)) remove.mutate(profile.id);
-                    }}
-                  >
-                    <Trash2 /> Delete
-                  </Button>
+                  <details className="relative">
+                    <summary className="cursor-pointer list-none rounded-md border px-3 py-1.5 text-xs hover:bg-muted">
+                      More
+                    </summary>
+                    <div className="absolute right-0 z-20 mt-1 w-44 space-y-1 rounded-lg border bg-card p-1 shadow-lg">
+                      <div onClick={() => setBootstrapProfile(profile)} className="cursor-pointer rounded px-2 py-1.5 text-xs hover:bg-muted">
+                        Bootstrap output
+                      </div>
+                      <div onClick={() => void navigator.clipboard?.writeText(profile.id)} className="cursor-pointer rounded px-2 py-1.5 text-xs hover:bg-muted">
+                        Copy profile ID
+                      </div>
+                      <div
+                        className="cursor-pointer rounded px-2 py-1.5 text-xs hover:bg-muted"
+                        onClick={() => toggle.mutate({ id: profile.id, enabled: !profile.enabled })}
+                      >
+                        {profile.enabled ? "Disable" : "Enable"}
+                      </div>
+                      <ExportResourceButton
+                        resource="worker_profiles"
+                        resourceId={profile.id}
+                        name={profile.name}
+                      />
+                      <div
+                        className={
+                          profile.enabled
+                            ? "cursor-not-allowed rounded px-2 py-1.5 text-xs text-muted-foreground"
+                            : "cursor-pointer rounded px-2 py-1.5 text-xs text-destructive hover:bg-muted"
+                        }
+                        title={profile.enabled ? "Disable the profile before deleting it" : undefined}
+                        onClick={() => {
+                          if (!profile.enabled && window.confirm(`Delete profile ${profile.name}?`)) {
+                            remove.mutate(profile.id);
+                          }
+                        }}
+                      >
+                        Delete
+                      </div>
+                    </div>
+                  </details>
                 </div>
                 <p className="text-[10px] text-muted-foreground">
                   updated {relativeTime(profile.updatedAt)}
