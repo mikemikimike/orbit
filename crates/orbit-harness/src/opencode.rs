@@ -288,6 +288,13 @@ fn write_open_code_tool_permissions(
         config = serde_json::json!({});
     }
     let root = config.as_object_mut().unwrap();
+    // OpenCode's websearch plugin reads a root `websearch` setting; `false` removes the
+    // provider prompt/tool entirely. `tools`/`permission` alone still advertised it.
+    if web_search {
+        root.remove("websearch");
+    } else {
+        root.insert("websearch".into(), serde_json::json!(false));
+    }
     let permission = root
         .entry("permission")
         .or_insert_with(|| serde_json::json!({}));
@@ -1077,6 +1084,7 @@ mod permission_tests {
         assert_eq!(config["permission"]["webfetch"], "allow");
         assert_eq!(config["tools"]["websearch"], false);
         assert_eq!(config["tools"]["webfetch"], true);
+        assert_eq!(config["websearch"], false);
         let _ = std::fs::remove_dir_all(dir);
     }
 }

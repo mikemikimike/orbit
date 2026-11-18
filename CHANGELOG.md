@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
+## [Unreleased]
+
+### Fixed
+
+- OpenCode Web Search is disabled through the root `websearch: false` setting, which
+  removes the provider prompt/tool. `tools`/`permission` alone still allowed the model to
+  trigger the interactive provider request.
+
 ## [0.16.1] - 2026-11-18
 
 ### Fixed
