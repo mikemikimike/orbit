@@ -36,7 +36,10 @@ pub struct AgentMetadata {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentSpec {
-    pub harness: HarnessSpec,
+    /// Deprecated compatibility field. New agent versions omit it; runtime selection is
+    /// per execution/trigger/team step.
+    #[serde(default, rename = "harness", skip_serializing_if = "Option::is_none")]
+    pub harness: Option<HarnessSpec>,
     #[serde(default)]
     pub model: ModelSpec,
     pub instructions: Instructions,
@@ -380,14 +383,16 @@ impl AgentSpec {
         let mut report = ValidationReport::default();
 
         // Harness
-        if !self.harness.config.is_object() && !self.harness.config.is_null() {
-            report.push("spec.harness.config", "harness config must be an object");
-        }
-        if self.harness.kind == HarnessKind::Generic && self.harness.config.is_null() {
-            report.push(
-                "spec.harness.config",
-                "generic harnesses require an explicit config object",
-            );
+        if let Some(harness) = &self.harness {
+            if !harness.config.is_object() && !harness.config.is_null() {
+                report.push("spec.harness.config", "harness config must be an object");
+            }
+            if harness.kind == HarnessKind::Generic && harness.config.is_null() {
+                report.push(
+                    "spec.harness.config",
+                    "generic harnesses require an explicit config object",
+                );
+            }
         }
 
         // Instructions
@@ -562,9 +567,9 @@ impl AgentSpec {
         report
     }
 
-    /// Stable identifier of the harness configuration, used in execution records.
-    pub fn harness_kind(&self) -> HarnessKind {
-        self.harness.kind
+    /// Legacy harness kind, when reading old agent versions.
+    pub fn harness_kind(&self) -> Option<HarnessKind> {
+        self.harness.as_ref().map(|harness| harness.kind)
     }
 }
 
@@ -582,7 +587,7 @@ mod tests {
 
     fn minimal_spec() -> AgentSpec {
         AgentSpec {
-            harness: HarnessSpec::new(HarnessKind::Mock),
+            harness: Some(HarnessSpec::new(HarnessKind::Mock)),
             model: ModelSpec::default(),
             instructions: Instructions {
                 system: "Be helpful.".into(),
@@ -631,7 +636,10 @@ spec:
         let definition = AgentDefinition::from_yaml(yaml).expect("valid yaml");
         let report = definition.validate();
         assert!(report.is_valid(), "{report:?}");
-        assert_eq!(definition.spec.harness.kind, HarnessKind::OpenCode);
+        assert_eq!(
+            definition.spec.harness.as_ref().map(|harness| harness.kind),
+            Some(HarnessKind::OpenCode)
+        );
         assert_eq!(definition.spec.connectors.len(), 2);
         assert_eq!(definition.spec.triggers.len(), 1);
         let roundtrip = AgentDefinition::from_yaml(&definition.to_yaml().unwrap()).unwrap();

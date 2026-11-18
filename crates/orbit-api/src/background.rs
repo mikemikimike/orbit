@@ -212,11 +212,26 @@ async fn fire_trigger_inner(state: &AppState, trigger: Trigger) -> anyhow::Resul
         "agentVersion": version.version,
     });
 
-    let harness_kind = trigger
+    let harness_kind = match trigger
         .harness_kind
         .as_deref()
         .and_then(|value| value.parse::<orbit_domain::HarnessKind>().ok())
-        .unwrap_or(spec.harness.kind);
+        .or_else(|| spec.harness.as_ref().map(|harness| harness.kind))
+    {
+        Some(kind) => kind,
+        None => match state.default_harness().await {
+            Some(kind) => kind,
+            None => {
+                tracing::warn!(trigger_id = %trigger.id, "scheduled trigger skipped: no harness configured");
+                return Ok(());
+            }
+        },
+    };
+    let placement = spec
+        .harness
+        .as_ref()
+        .map(|harness| harness.placement.as_str())
+        .unwrap_or("auto");
     let idempotency_key = format!("trigger:{}:{}", trigger.id, fired_at.timestamp_millis());
     let execution = state
         .store
@@ -227,7 +242,7 @@ async fn fire_trigger_inner(state: &AppState, trigger: Trigger) -> anyhow::Resul
             agent_name: &agent.name,
             harness_kind,
             trigger_source: TriggerSource::Schedule,
-            placement: spec.harness.placement.as_str(),
+            placement,
             trigger_id: Some(trigger.id),
             input,
             skills: &[],

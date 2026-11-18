@@ -119,7 +119,7 @@ pub async fn run_execution(
     let harness_kind = execution
         .harness_kind
         .parse::<orbit_domain::HarnessKind>()
-        .unwrap_or(spec.harness.kind);
+        .unwrap_or(HarnessKind::Mock);
 
     let adapter = match state.registry.require(harness_kind) {
         Ok(adapter) => adapter,
@@ -378,7 +378,11 @@ pub async fn run_execution(
 
     // Add the MCP bridge details to the harness config. This stays in memory only; the
     // execution-scoped token is invalid as soon as the broker is dropped.
-    let mut harness_config = spec.harness.config.clone();
+    let mut harness_config = spec
+        .harness
+        .as_ref()
+        .map(|harness| harness.config.clone())
+        .unwrap_or_else(|| serde_json::json!({}));
     if harness_kind == HarnessKind::OpenCode {
         if !harness_config.is_object() {
             harness_config = serde_json::json!({});
@@ -435,7 +439,11 @@ pub async fn run_execution(
         extra_env,
         session: SessionRequest {
             session_ref: execution.session_ref.clone(),
-            mode: spec.harness.execution_mode,
+            mode: spec
+                .harness
+                .as_ref()
+                .map(|harness| harness.execution_mode)
+                .unwrap_or(orbit_domain::ExecutionMode::OnDemand),
         },
         workspace: orbit_contracts::WorkspaceSpec {
             root: workspace.to_string_lossy().to_string(),

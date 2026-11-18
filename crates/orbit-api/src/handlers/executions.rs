@@ -235,14 +235,30 @@ pub async fn execute_agent(
         }
     }
 
-    // Harness override: use the specified harness instead of the agent's stored one.
-    let harness_kind = if let Some(override_kind) = &body.harness_override {
-        override_kind
-            .parse::<orbit_domain::HarnessKind>()
-            .unwrap_or(spec.harness.kind)
-    } else {
-        spec.harness.kind
+    // Harness resolution: explicit request -> legacy agent version -> org default.
+    let requested_harness = body.harness.as_deref().or(body.harness_override.as_deref());
+    let harness_kind = match requested_harness {
+        Some(value) => value.parse::<orbit_domain::HarnessKind>().map_err(|_| {
+            ApiError::validation(vec![orbit_domain::ValidationIssue::new(
+                "harness",
+                "unknown harness",
+            )])
+        })?,
+        None => match spec.harness.as_ref().map(|harness| harness.kind) {
+            Some(kind) => kind,
+            None => state.default_harness().await.ok_or_else(|| {
+                ApiError::validation(vec![orbit_domain::ValidationIssue::new(
+                    "harness",
+                    "agent has no legacy harness and no default harness is configured",
+                )])
+            })?,
+        },
     };
+    let placement = spec
+        .harness
+        .as_ref()
+        .map(|harness| harness.placement.as_str())
+        .unwrap_or("auto");
 
     let idempotency_key = headers
         .get("idempotency-key")
@@ -308,7 +324,7 @@ pub async fn execute_agent(
             agent_name: &agent.name,
             harness_kind,
             trigger_source: TriggerSource::Manual,
-            placement: spec.harness.placement.as_str(),
+            placement,
             trigger_id: None,
             input,
             skills: &skills,
@@ -329,7 +345,7 @@ pub async fn execute_agent(
             serde_json::json!({
                 "executionId": execution.id,
                 "agentId": agent.id,
-                "harness": spec.harness.kind.as_str(),
+                "harness": harness_kind.as_str(),
             }),
         )
         .with_org(auth.org_id)
@@ -349,12 +365,11 @@ pub async fn execute_agent(
             orbit_domain::LogLevel::Info,
             &format!(
                 "execution queued; waiting for a {} worker (placement: {})",
-                spec.harness.kind,
-                spec.harness.placement.as_str()
+                harness_kind, placement
             ),
             &serde_json::json!({
-                "harness": spec.harness.kind.as_str(),
-                "placement": spec.harness.placement.as_str(),
+                "harness": harness_kind.as_str(),
+                "placement": placement,
             }),
         )
         .await;

@@ -79,6 +79,21 @@ impl AppState {
         Ok(())
     }
 
+    /// Organization default harness, when configured.
+    pub async fn default_harness(&self) -> Option<orbit_domain::HarnessKind> {
+        self.store
+            .get_platform_setting("harness_default")
+            .await
+            .ok()
+            .flatten()
+            .and_then(|value| {
+                value
+                    .get("default")
+                    .and_then(|default| default.as_str())
+                    .and_then(|name| name.parse().ok())
+            })
+    }
+
     /// Reject a premium action when the license does not grant the feature.
     pub fn require_feature(&self, feature: &str) -> Result<(), crate::error::ApiError> {
         self.license.require_feature(feature).map_err(|message| {

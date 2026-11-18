@@ -310,12 +310,12 @@ fn demo_definition(
             labels: Default::default(),
         },
         spec: AgentSpec {
-            harness: HarnessSpec {
+            harness: Some(HarnessSpec {
                 kind: HarnessKind::Mock,
                 execution_mode: orbit_domain::ExecutionMode::OnDemand,
                 placement: orbit_domain::PlacementTarget::Auto,
                 config: json!({ "stepDelayMs": 120 }),
-            },
+            }),
             model: ModelSpec {
                 management: ModelManagement::Harness,
                 provider: Some("mock".into()),

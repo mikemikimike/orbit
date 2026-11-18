@@ -392,13 +392,13 @@ async fn build_context(
     merge_team_connections(state, org_id, execution, &mut spec).await;
     if let Some(record) = state
         .store
-        .get_harness_by_kind(org_id, spec.harness.kind.as_str())
+        .get_harness_by_kind(org_id, &execution.harness_kind)
         .await?
     {
         if !record.enabled {
             return Err(ApiError::conflict(format!(
                 "harness '{}' is disabled",
-                spec.harness.kind
+                execution.harness_kind
             )));
         }
     }
