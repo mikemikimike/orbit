@@ -438,7 +438,8 @@ function WorkersPageInner() {
                 </div>
                 <p className="text-[11px] text-muted-foreground">
                   {titleCase(profile.harnessKind)} · {profile.target} ·{" "}
-                  {profile.executionDriver} · {profile.image}:{profile.imageTag}
+                  {profile.executionDriver} · {profile.image}:
+                  {profile.imageTag || `${platformVersion ?? "platform"} (auto)`}
                 </p>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -449,7 +450,7 @@ function WorkersPageInner() {
                       : "all agents"}
                   </Badge>
                   <Badge variant="secondary">{profile.skillSlugs.length} skills</Badge>
-                  {platformVersion && profile.imageTag && profile.imageTag !== platformVersion ? (
+                  {profile.imageTag && platformVersion && profile.imageTag !== platformVersion ? (
                     <Badge
                       variant="warning"
                       title={`Profile uses ${profile.imageTag}; platform is ${platformVersion}. Edit and relaunch to update.`}
