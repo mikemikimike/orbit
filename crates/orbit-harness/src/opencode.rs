@@ -287,9 +287,8 @@ fn write_open_code_tool_permissions(
     if !config.is_object() {
         config = serde_json::json!({});
     }
-    let permission = config
-        .as_object_mut()
-        .unwrap()
+    let root = config.as_object_mut().unwrap();
+    let permission = root
         .entry("permission")
         .or_insert_with(|| serde_json::json!({}));
     if let Some(map) = permission.as_object_mut() {
@@ -301,6 +300,13 @@ fn write_open_code_tool_permissions(
             "webfetch".into(),
             serde_json::json!(if web_fetch { "allow" } else { "deny" }),
         );
+    }
+    // Hiding the tools is stronger than denying them: a denied tool is still advertised
+    // to the model, which then retries it and fails the run.
+    let tools = root.entry("tools").or_insert_with(|| serde_json::json!({}));
+    if let Some(map) = tools.as_object_mut() {
+        map.insert("websearch".into(), serde_json::json!(web_search));
+        map.insert("webfetch".into(), serde_json::json!(web_fetch));
     }
     std::fs::write(
         &path,
@@ -1069,6 +1075,8 @@ mod permission_tests {
                 .unwrap();
         assert_eq!(config["permission"]["websearch"], "deny");
         assert_eq!(config["permission"]["webfetch"], "allow");
+        assert_eq!(config["tools"]["websearch"], false);
+        assert_eq!(config["tools"]["webfetch"], true);
         let _ = std::fs::remove_dir_all(dir);
     }
 }

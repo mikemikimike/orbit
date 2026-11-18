@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
+## [Unreleased]
+
+### Fixed
+
+- OpenCode Web Search/WebFetch are now hidden from the model via `tools.* = false`, not
+  only permission-denied. A denied tool was still advertised and caused repeated failing
+  tool calls.
+
 ## [0.16.0] - 2026-11-18
 
 ### Added
