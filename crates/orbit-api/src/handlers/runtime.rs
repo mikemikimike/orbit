@@ -21,6 +21,9 @@ pub struct StartRuntimeRequest {
     pub harness: Option<String>,
     #[serde(default)]
     pub task: Option<String>,
+    /// Delay between monitor runs. Default 60 seconds, minimum 5.
+    #[serde(default)]
+    pub interval_seconds: Option<u32>,
 }
 
 async fn managed_agent(
@@ -105,6 +108,7 @@ pub async fn start(
         .map(str::to_string)
         .or_else(|| spec.run_defaults.task.clone())
         .unwrap_or_else(|| "Continue with your configured task.".into());
+    let interval_seconds = body.interval_seconds.unwrap_or(60).clamp(5, 86_400);
     let runtime = state
         .store
         .create_agent_runtime(
@@ -112,6 +116,7 @@ pub async fn start(
             agent_id,
             &task,
             harness.as_str(),
+            interval_seconds as i32,
             Some(auth.user_id),
         )
         .await?;

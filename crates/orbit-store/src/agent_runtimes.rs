@@ -18,6 +18,7 @@ pub struct AgentRuntime {
     pub last_execution_id: Option<Uuid>,
     pub last_error: Option<String>,
     pub next_run_at: DateTime<Utc>,
+    pub interval_seconds: i32,
     pub last_heartbeat_at: DateTime<Utc>,
     pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
@@ -32,12 +33,13 @@ impl Store {
         agent_id: Uuid,
         task: &str,
         harness_kind: &str,
+        interval_seconds: i32,
         created_by: Option<Uuid>,
     ) -> StoreResult<AgentRuntime> {
         sqlx::query_as::<_, AgentRuntime>(
             r#"
-            INSERT INTO agent_runtimes (id, org_id, agent_id, task, harness_kind, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO agent_runtimes (id, org_id, agent_id, task, harness_kind, interval_seconds, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING *
             "#,
         )
@@ -46,6 +48,7 @@ impl Store {
         .bind(agent_id)
         .bind(task)
         .bind(harness_kind)
+        .bind(interval_seconds)
         .bind(created_by)
         .fetch_one(&self.pool)
         .await
