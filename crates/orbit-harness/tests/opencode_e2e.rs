@@ -33,6 +33,7 @@ fn request(model: &str) -> ExecutionRequest {
             provenance: InputProvenance::manual("e2e-test"),
         },
         model: None,
+        subagent_models: Vec::new(),
         grants: vec![],
         autonomy: AutonomyLevel::OBSERVE,
         resources: ResourceLimits {

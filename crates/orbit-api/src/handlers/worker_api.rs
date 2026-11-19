@@ -28,14 +28,14 @@ use crate::error::ApiError;
 use crate::state::AppState;
 use crate::worker_auth::WorkerAuth;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkerSecret {
     pub secret_ref: String,
     pub value: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkerModel {
     pub selection: ModelSelection,
@@ -57,12 +57,22 @@ impl WorkerModel {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkerSubagentModel {
+    pub agent_id: Uuid,
+    pub model: Option<WorkerModel>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkerExecutionContext {
     pub execution: ExecutionRecord,
     pub spec: AgentSpec,
     pub model: Option<WorkerModel>,
+    /// Resolved models for native subagents, keyed by their agent id.
+    #[serde(default)]
+    pub subagent_models: Vec<WorkerSubagentModel>,
     pub grants: Vec<GrantedCapability>,
     pub skills: Vec<Skill>,
     /// Effective tool policy rules (org defaults + agent rules), enforced by the worker
@@ -404,6 +414,27 @@ async fn build_context(
         }
     }
     let model = resolve_model(&state.store, org_id, &spec).await?;
+    let mut subagent_models = Vec::new();
+    for (agent_id, name) in team_subagents(execution) {
+        let agent = state
+            .store
+            .get_agent(org_id, agent_id)
+            .await
+            .map_err(|_| ApiError::conflict(format!("subagent '{name}' no longer exists")))?;
+        let version = state
+            .store
+            .get_current_version(org_id, &agent)
+            .await
+            .map_err(|_| ApiError::conflict(format!("subagent '{name}' has no current version")))?;
+        let sub_spec: AgentSpec = serde_json::from_value(version.spec).map_err(|error| {
+            ApiError::internal(format!("subagent '{name}' spec is invalid: {error}"))
+        })?;
+        let resolved = resolve_model(&state.store, org_id, &sub_spec).await?;
+        subagent_models.push(WorkerSubagentModel {
+            agent_id,
+            model: resolved,
+        });
+    }
     let grants = resolve_grants(&state.store, org_id, &spec).await;
     let mut slugs = spec.skills.clone();
     slugs.extend(execution.skills.iter().cloned());
@@ -426,6 +457,7 @@ async fn build_context(
         execution: execution.clone(),
         spec,
         model,
+        subagent_models,
         grants,
         skills,
         tool_policies,
@@ -443,6 +475,29 @@ fn team_ids(execution: &ExecutionRecord, key: &str) -> Vec<Uuid> {
             items
                 .iter()
                 .filter_map(|item| item.as_str().and_then(|id| id.parse().ok()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn team_subagents(execution: &ExecutionRecord) -> Vec<(Uuid, String)> {
+    execution
+        .input
+        .get("team")
+        .and_then(|team| team.get("subagents"))
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let agent_id = item.get("agentId")?.as_str()?.parse().ok()?;
+                    let name = item
+                        .get("name")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("subagent")
+                        .to_string();
+                    Some((agent_id, name))
+                })
                 .collect()
         })
         .unwrap_or_default()

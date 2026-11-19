@@ -825,6 +825,7 @@ impl HarnessAdapter for PiHarnessAdapter {
             },
             input: request.input,
             model: request.model,
+            subagent_models: Vec::new(),
             grants: vec![],
             autonomy: AutonomyLevel::OBSERVE,
             resources: request.resources,

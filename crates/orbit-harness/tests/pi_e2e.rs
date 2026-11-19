@@ -49,6 +49,7 @@ async fn pi_executes_a_task_and_streams_events() {
             provenance: InputProvenance::manual("e2e-test"),
         },
         model: None,
+        subagent_models: Vec::new(),
         grants: vec![],
         autonomy: AutonomyLevel::OBSERVE,
         resources: ResourceLimits {

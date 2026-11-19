@@ -667,6 +667,7 @@ async fn native_subagents(
             _ => None,
         };
         subagents.push(serde_json::json!({
+            "agentId": agent.id,
             "name": agent.name,
             "slug": agent.slug,
             "description": agent.description,

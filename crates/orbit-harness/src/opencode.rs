@@ -409,7 +409,13 @@ fn write_open_code_provider_config(
     }
     provider.insert("options".into(), serde_json::Value::Object(options));
 
-    let mut models = serde_json::Map::new();
+    let mut models = config
+        .get("provider")
+        .and_then(|providers| providers.get(&provider_name))
+        .and_then(|provider| provider.get("models"))
+        .and_then(serde_json::Value::as_object)
+        .cloned()
+        .unwrap_or_default();
     models.insert(
         endpoint.model.clone(),
         serde_json::json!({ "name": endpoint.model }),
@@ -682,6 +688,14 @@ impl OpenCodeHarnessAdapter {
                 HarnessError::new(
                     HarnessErrorKind::Internal,
                     format!("could not write provider config: {error}"),
+                )
+            })?;
+        }
+        for model in &request.subagent_models {
+            write_open_code_provider_config(&workspace, model).map_err(|error| {
+                HarnessError::new(
+                    HarnessErrorKind::Internal,
+                    format!("could not write subagent provider config: {error}"),
                 )
             })?;
         }
@@ -992,6 +1006,7 @@ impl HarnessAdapter for OpenCodeHarnessAdapter {
             },
             input: request.input,
             model: request.model,
+            subagent_models: Vec::new(),
             grants: vec![],
             autonomy: orbit_domain::AutonomyLevel::OBSERVE,
             resources: request.resources,
@@ -1139,6 +1154,7 @@ mod tests {
                 provenance: InputProvenance::external("x"),
             },
             model: None,
+            subagent_models: Vec::new(),
             grants: vec![],
             autonomy: orbit_domain::AutonomyLevel::OBSERVE,
             resources: orbit_domain::ResourceLimits::default(),

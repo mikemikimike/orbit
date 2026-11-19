@@ -269,6 +269,9 @@ pub struct ExecutionRequest {
     /// and use their own inventory.
     #[serde(default)]
     pub model: Option<crate::provider::ResolvedModel>,
+    /// Resolved models for native subagents (credentials stay in-memory).
+    #[serde(default)]
+    pub subagent_models: Vec<crate::provider::ResolvedModel>,
     #[serde(default)]
     pub grants: Vec<orbit_domain::GrantedCapability>,
     pub autonomy: orbit_domain::AutonomyLevel,
