@@ -148,6 +148,41 @@ impl PiSettings {
     }
 }
 
+/// Create a temporary Pi agent directory with a platform OpenAI-compatible provider.
+/// The API key is referenced through the environment; no secret is written to disk.
+fn write_platform_models(
+    model: &orbit_contracts::ResolvedModel,
+) -> std::io::Result<std::path::PathBuf> {
+    let endpoint = match (&model.selection, &model.endpoint) {
+        (orbit_contracts::ModelSelection::Platform { .. }, Some(endpoint)) => endpoint,
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "not a platform model",
+            ))
+        }
+    };
+    let dir = std::env::temp_dir().join(format!("orbit-pi-platform-{}", uuid::Uuid::now_v7()));
+    std::fs::create_dir_all(&dir)?;
+    let config = serde_json::json!({
+        "$schema": "https://pi.dev/schemas/models.schema.json",
+        "providers": {
+            "orbit-platform": {
+                "name": "ORBIT platform provider",
+                "baseUrl": endpoint.base_url,
+                "api": "openai-completions",
+                "apiKey": "$OPENAI_API_KEY",
+                "models": [{ "id": endpoint.model, "name": endpoint.model }]
+            }
+        }
+    });
+    std::fs::write(
+        dir.join("models.json"),
+        serde_json::to_string_pretty(&config)?,
+    )?;
+    Ok(dir)
+}
+
 impl PiHarnessAdapter {
     pub fn descriptor() -> HarnessDescriptor {
         HarnessDescriptor {
@@ -465,19 +500,36 @@ impl PiHarnessAdapter {
             &system_append,
             &session_dir,
         );
-        if is_platform {
+        let platform_agent_dir = if is_platform {
+            let dir = request
+                .model
+                .as_ref()
+                .ok_or_else(|| {
+                    HarnessError::new(HarnessErrorKind::InvalidConfig, "platform model is missing")
+                })
+                .and_then(|model| {
+                    write_platform_models(model).map_err(|error| {
+                        HarnessError::new(
+                            HarnessErrorKind::InvalidConfig,
+                            format!("could not write Pi platform models: {error}"),
+                        )
+                    })
+                })?;
             let mut new_args = Vec::new();
             let mut i = 0;
             while i < args.len() {
                 if args[i] == "--model" {
                     new_args.push("--provider".to_string());
-                    new_args.push("openai".to_string());
+                    new_args.push("orbit-platform".to_string());
                 }
                 new_args.push(args[i].clone());
                 i += 1;
             }
             args = new_args;
-        }
+            Some(dir)
+        } else {
+            None
+        };
 
         let mut command = Command::new(settings.binary());
         command.args(&args);
@@ -485,6 +537,12 @@ impl PiHarnessAdapter {
         // Worker-profile connection mappings, resolved by the control plane.
         command.envs(&request.extra_env);
         command.env("PWD", &workspace);
+        // Pi must not perform model-catalog/version network calls in headless or
+        // airgapped execution. Provider requests still go to the configured endpoint.
+        command.env("PI_OFFLINE", "1");
+        if let Some(dir) = &platform_agent_dir {
+            command.env("PI_CODING_AGENT_DIR", dir);
+        }
         // Platform-managed providers: inject endpoint + credential via env vars.
         // Pi's built-in OpenAI provider reads OPENAI_API_KEY and OPENAI_BASE_URL.
         if let Some(model) = &request.model {
@@ -842,5 +900,41 @@ mod tests {
         assert_eq!(text.trim(), "hello");
         assert_eq!(usage.input_tokens, Some(10));
         assert_eq!(usage.output_tokens, Some(4));
+    }
+}
+
+#[cfg(test)]
+mod platform_model_tests {
+    use super::*;
+
+    #[test]
+    fn platform_models_use_configured_endpoint() {
+        let model = orbit_contracts::ResolvedModel {
+            selection: orbit_contracts::ModelSelection::Platform {
+                provider_id: uuid::Uuid::now_v7(),
+                provider_name: "corp".into(),
+                model: "internal-model".into(),
+            },
+            endpoint: Some(orbit_contracts::ModelEndpoint {
+                base_url: "http://llm.internal/v1".into(),
+                model: "internal-model".into(),
+                headers: Default::default(),
+                request_params: serde_json::json!({}),
+                compat: Default::default(),
+                context_window: None,
+                max_output_tokens: None,
+            }),
+            credential: None,
+        };
+        let dir = write_platform_models(&model).unwrap();
+        let config: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("models.json")).unwrap())
+                .unwrap();
+        let provider = &config["providers"]["orbit-platform"];
+        assert_eq!(provider["baseUrl"], "http://llm.internal/v1");
+        assert_eq!(provider["api"], "openai-completions");
+        assert_eq!(provider["models"][0]["id"], "internal-model");
+        assert_eq!(provider["apiKey"], "$OPENAI_API_KEY");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
