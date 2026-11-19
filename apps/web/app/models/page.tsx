@@ -820,7 +820,7 @@ export default function ModelsPage() {
             )}
           </div>
 
-          {editing ? <ResourceAccessFields resource="providers" resourceId={editing.id} /> : null}
+          <ResourceAccessFields resource="providers" resourceId={editing?.id} />
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog}>
               Cancel

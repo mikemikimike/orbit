@@ -6,7 +6,6 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { AgentForm } from "@/components/agents/agent-form";
-import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -100,15 +99,13 @@ export default function EditAgentPage() {
         title={`Edit ${agent.data.name}`}
         description="Saving creates a new immutable version. Past executions keep the configuration they ran with."
       />
-      <div className="max-w-3xl">
-        <ResourceAccessFields resource="agents" resourceId={agentId} />
-      </div>
       <AgentForm
         initial={initial}
         submitLabel="Save changes"
         cancelHref={`/agents/${agentId}`}
         submitting={submitting}
         onSubmit={handleSubmit}
+        resourceId={agentId}
       />
     </div>
   );

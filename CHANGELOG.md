@@ -15,6 +15,10 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
   bordered surfaces, an orbit status glyph whose shape encodes state, and shared
   primitives (`Section`, `Field`, `Callout`, `Segmented`, `ChoiceCard`, `DescriptionList`,
   `DropdownMenu`, `useConfirm`).
+- Access controls (0.19.0 license gating) use the redesigned access field: without a license
+  that includes `teams` and `resource_permissions`, edit forms show a one-line note instead of
+  the controls and make no sharing requests. Agent access now sits at the end of the agent form,
+  and agent teams gained access settings.
 - Navigation labels: Dashboard is now **Overview**, Work is the standing **Start work**
   action, Providers is **Model providers**, Teams is **Access teams**. Routes are unchanged.
 - Overview, Agents, Executions, execution detail, agent detail, Approvals, Start work,

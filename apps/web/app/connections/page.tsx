@@ -712,7 +712,7 @@ export default function ConnectionsPage() {
                 </Field>
               </Disclosure>
 
-            {editing ? <ResourceAccessFields resource="connections" resourceId={editing.id} /> : null}
+            <ResourceAccessFields resource="connections" resourceId={editing?.id} />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel

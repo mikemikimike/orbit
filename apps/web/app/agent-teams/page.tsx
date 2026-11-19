@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { exportResource } from "@/components/export-resource-button";
 import { Badge } from "@/components/ui/badge";
 import { Disclosure } from "@/components/ui/disclosure";
+import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
@@ -1250,6 +1251,7 @@ export default function AgentTeamsPage() {
               </div>
             </FormSection>
           </div>
+          <ResourceAccessFields resource="agent_teams" resourceId={editing?.id} />
           <DialogFooter className="sm:items-center">
             {blocker ? <p className="text-[13px] text-muted-foreground sm:mr-auto">{blocker}</p> : null}
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Disclosure } from "@/components/ui/disclosure";
+import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -120,12 +121,15 @@ export function AgentForm({
   submitting,
   onSubmit,
   cancelHref = "/agents",
+  resourceId,
 }: {
   initial?: AgentDefinition;
   submitLabel: string;
   submitting?: boolean;
   onSubmit: (definition: AgentDefinition) => Promise<void> | void;
   cancelHref?: string;
+  /** The saved agent, so its access can be set; omitted while creating. */
+  resourceId?: string;
 }) {
   const providers = useProviders();
   const harnesses = useHarnesses();
@@ -1178,6 +1182,8 @@ export function AgentForm({
               </div>
             </Disclosure>
           </FormSection>
+
+          <ResourceAccessFields resource="agents" resourceId={resourceId} />
         </div>
 
         {/* Desktop rail: live summary, jump links and the submit button stay in view. */}

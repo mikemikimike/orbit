@@ -507,7 +507,7 @@ export default function SkillsPage() {
               ) : null}
             </div>
           </div>
-          {editing ? <ResourceAccessFields resource="skills" resourceId={editing.id} /> : null}
+          <ResourceAccessFields resource="skills" resourceId={editing?.id} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel

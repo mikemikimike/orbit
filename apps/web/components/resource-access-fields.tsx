@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
+import { Lock } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -12,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { listAccessTeams } from "@/lib/access-teams";
 import { request } from "@/lib/http";
 import { errorMessage } from "@orbit/api-client";
+import { useLicense } from "@/lib/queries";
 
 type Sharing = { visibility: string; ownerTeamId?: string | null };
 
@@ -35,17 +37,21 @@ export function ResourceAccessFields({
   const queryClient = useQueryClient();
   const labelId = useId();
   const teamFieldId = useId();
+  const license = useLicense();
+  const features = license.data?.license.features ?? [];
+  // Team access is an enterprise feature: without it the sharing API refuses.
+  const enabled = features.includes("teams") && features.includes("resource_permissions");
   const [visibility, setVisibility] = useState("org");
   const [teamId, setTeamId] = useState("");
   const teams = useQuery({
     queryKey: ["access-teams"],
     queryFn: listAccessTeams,
-    enabled: Boolean(resourceId),
+    enabled: enabled && Boolean(resourceId),
   });
   const sharing = useQuery({
     queryKey: ["sharing", resource, resourceId],
     queryFn: () => request<Sharing>(`/api/v1/sharing/${resource}/${resourceId}`),
-    enabled: Boolean(resourceId),
+    enabled: enabled && Boolean(resourceId),
   });
 
   useEffect(() => {
@@ -68,6 +74,21 @@ export function ResourceAccessFields({
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
+
+  if (license.isLoading) return null;
+
+  if (!enabled) {
+    return (
+      <div className="flex gap-2.5 rounded-lg border bg-subtle px-3 py-2.5 text-[13px] text-muted-foreground">
+        <Lock aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <p>
+          <span className="font-medium text-foreground">Access</span> · Visible to the whole
+          organization. Team and private access need an enterprise license with teams and resource
+          permissions.
+        </p>
+      </div>
+    );
+  }
 
   if (!resourceId) {
     return (

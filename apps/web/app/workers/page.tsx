@@ -1621,7 +1621,7 @@ function WorkersPageInner() {
             </div>
           </div>
 
-          {editing ? <ResourceAccessFields resource="worker_profiles" resourceId={editing.id} /> : null}
+          <ResourceAccessFields resource="worker_profiles" resourceId={editing?.id} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
