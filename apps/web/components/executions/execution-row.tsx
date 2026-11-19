@@ -1,10 +1,29 @@
 import Link from "next/link";
-import { ArrowRight, Clock3 } from "lucide-react";
 import { ExecutionStatusBadge } from "@/components/ui/status-badge";
-import { formatDuration, relativeTime, titleCase, truncate } from "@/lib/utils";
+import { executionStatusMeta } from "@/components/ui/status";
+import { cn, formatDuration, relativeTime, titleCase } from "@/lib/utils";
 import type { ExecutionRecord } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
+export function executionTask(execution: ExecutionRecord): string {
+  const input = execution.input;
+  return input && typeof input === "object" && "task" in input
+    ? String((input as { task?: unknown }).task ?? "")
+    : "";
+}
+
+export function executionTitle(execution: ExecutionRecord): string {
+  const input = execution.input;
+  const name =
+    input && typeof input === "object" && "name" in input
+      ? String((input as { name?: unknown }).name ?? "")
+      : "";
+  return name || execution.agentName;
+}
+
+/**
+ * One execution in a list. Status leads (it is what people scan for), then what
+ * ran, then when and how long. Collapses to two lines on a phone.
+ */
 export function ExecutionRow({
   execution,
   showAgent = true,
@@ -14,39 +33,48 @@ export function ExecutionRow({
   showAgent?: boolean;
   className?: string;
 }) {
-  const task =
-    typeof execution.input === "object" && execution.input && "task" in execution.input
-      ? String((execution.input as { task?: unknown }).task ?? "")
-      : "";
-  const workName =
-    typeof execution.input === "object" && execution.input && "name" in execution.input
-      ? String((execution.input as { name?: unknown }).name ?? "")
-      : "";
+  const task = executionTask(execution);
+  const title = showAgent ? executionTitle(execution) : task || "Execution";
+  const detail = showAgent ? task || "No task recorded" : titleCase(execution.triggerSource);
+  const status = executionStatusMeta(execution.status);
 
   return (
     <Link
       href={`/executions/${execution.id}`}
       className={cn(
-        "group flex items-center gap-3 border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/40 sm:px-5",
+        "group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50 focus-visible:outline-offset-[-2px] sm:grid-cols-[8.5rem_minmax(0,1fr)_auto] sm:px-5",
         className,
       )}
     >
-      <ExecutionStatusBadge status={execution.status} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">
-          {workName || (showAgent ? execution.agentName : truncate(task || "Execution", 80))}
-        </p>
-        <p className="truncate text-[11px] text-muted-foreground">
-          {showAgent ? truncate(task || "No task recorded", 90) : titleCase(execution.triggerSource)}
-          {" · "}
-          {relativeTime(execution.createdAt)}
+      <ExecutionStatusBadge status={execution.status} className="hidden sm:inline-flex" />
+      <ExecutionStatusBadge status={execution.status} hideLabel className="h-4 w-4 sm:hidden" />
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium">{title}</p>
+        <p className="truncate text-[13px] text-muted-foreground">
+          <span className="sm:hidden">{status.label} · </span>
+          {detail}
         </p>
       </div>
-      <div className="hidden shrink-0 items-center gap-1 text-[11px] text-muted-foreground sm:flex">
-        <Clock3 className="h-3 w-3" />
-        {formatDuration(execution.startedAt, execution.finishedAt)}
+      <div className="tabular shrink-0 text-right text-[13px] text-muted-foreground">
+        <p>{relativeTime(execution.createdAt)}</p>
+        <p className="hidden text-xs sm:block">
+          {execution.startedAt ? formatDuration(execution.startedAt, execution.finishedAt) : "Not started"}
+        </p>
       </div>
-      <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
     </Link>
+  );
+}
+
+/** Column labels for a full executions list (shown from `sm`, where the columns exist). */
+export function ExecutionListHeader({ showAgent = true }: { showAgent?: boolean }) {
+  return (
+    <div
+      aria-hidden
+      className="hidden grid-cols-[8.5rem_minmax(0,1fr)_auto] gap-x-3 border-b bg-subtle px-5 py-2 text-xs font-medium text-muted-foreground sm:grid"
+    >
+      <span>Status</span>
+      <span>{showAgent ? "Execution" : "Task"}</span>
+      <span className="text-right">Started and duration</span>
+    </div>
   );
 }

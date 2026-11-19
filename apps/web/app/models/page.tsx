@@ -2,11 +2,29 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Boxes, Pencil, Plus, Trash2, Zap } from "lucide-react";
+import {
+  Boxes,
+  Cpu,
+  Download,
+  KeyRound,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Server,
+  Trash2,
+  Zap,
+} from "lucide-react";
 import { toast } from "sonner";
 
+import { ResourceAccessFields } from "@/components/resource-access-fields";
+import { Badge } from "@/components/ui/badge";
+import { Disclosure } from "@/components/ui/disclosure";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Callout } from "@/components/ui/callout";
+import { Card } from "@/components/ui/card";
+import { CheckboxField } from "@/components/ui/checkbox";
+import { ChoiceCard } from "@/components/ui/choice-card";
+import { useConfirm } from "@/components/ui/confirm";
 import {
   Dialog,
   DialogContent,
@@ -15,14 +33,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
-import { ExportResourceButton } from "@/components/export-resource-button";
-import { ResourceAccessFields } from "@/components/resource-access-fields";
+import { Section } from "@/components/ui/section";
+import { Select } from "@/components/ui/select";
+import { exportResource } from "@/components/export-resource-button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
+import { Status, type StatusMeta } from "@/components/ui/status";
 import { api, API_BASE_URL, getAccessToken } from "@/lib/api";
 import { queryKeys, unwrap, useProviders } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
@@ -65,17 +90,78 @@ const EMPTY_FORM: ProviderForm = {
   harnessKind: "opencode",
 };
 
+const KIND_LABEL: Record<string, string> = {
+  openai_compatible: "OpenAI-compatible",
+  harness_managed: "Harness-managed",
+};
+
+const HARNESS_LABEL: Record<string, string> = {
+  opencode: "OpenCode",
+  claude_code: "Claude Code",
+  pi: "Pi",
+};
+
+const COMPAT_FLAGS: Array<{
+  key: "tools" | "streaming" | "jsonMode" | "vision" | "modelsEndpoint";
+  title: string;
+  description: string;
+}> = [
+  { key: "tools", title: "Tool calling", description: "The endpoint supports function and tool calls." },
+  { key: "streaming", title: "Streaming", description: "Responses can be streamed token by token." },
+  { key: "jsonMode", title: "JSON mode", description: "The endpoint can force valid JSON output." },
+  { key: "vision", title: "Vision", description: "Accepts images as input." },
+  { key: "modelsEndpoint", title: "Models endpoint", description: "Lists models at /models." },
+];
+
+interface TestResult {
+  ok: boolean;
+  latencyMs?: number;
+  modelCount?: number;
+  error?: string;
+  at: number;
+}
+
+const parseModels = (value: string) =>
+  value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const catalogOf = (config: Record<string, unknown>): string[] => {
+  const models = (config.settings as Record<string, unknown> | undefined)?.models;
+  return Array.isArray(models) ? (models as string[]) : [];
+};
+
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+function testStatus(result: TestResult | undefined): StatusMeta {
+  if (!result) return { label: "Not tested yet", tone: "neutral", shape: "ring" };
+  if (result.ok) {
+    return {
+      label: `Reachable in ${result.latencyMs ?? 0} ms`,
+      tone: "success",
+      shape: "solid",
+    };
+  }
+  return { label: "Test failed", tone: "danger", shape: "cross" };
+}
+
 export default function ModelsPage() {
   const providers = useProviders();
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ProviderView | null>(null);
   const [form, setForm] = useState<ProviderForm>(EMPTY_FORM);
   const [probing, setProbing] = useState<string | null>(null);
   const [probingDraft, setProbingDraft] = useState(false);
+  const [draftResult, setDraftResult] = useState<TestResult | null>(null);
+  // The API does not store probe results, so we remember this session's tests per provider.
+  const [results, setResults] = useState<Record<string, TestResult>>({});
 
   const save = useMutation({
     mutationFn: async () => {
+      const catalog = parseModels(form.models);
       const config =
         form.kind === "openai_compatible"
           ? {
@@ -95,36 +181,14 @@ export default function ModelsPage() {
                 embeddings: false,
                 modelsEndpoint: form.modelsEndpoint,
               },
-              settings: {
-                ...(form.models
-                  .split(",")
-                  .map((value) => value.trim())
-                  .filter(Boolean).length
-                  ? {
-                      models: form.models
-                        .split(",")
-                        .map((value) => value.trim())
-                        .filter(Boolean),
-                    }
-                  : {}),
-              },
+              // No `settings` here: the API rejects unknown fields for this kind.
             }
           : {
               harness: form.harnessKind,
               provider: form.harnessProvider.trim() || undefined,
               model: form.model.trim() || undefined,
               settings: {
-                ...(form.models
-                  .split(",")
-                  .map((value) => value.trim())
-                  .filter(Boolean).length
-                  ? {
-                      models: form.models
-                        .split(",")
-                        .map((value) => value.trim())
-                        .filter(Boolean),
-                    }
-                  : {}),
+                ...(catalog.length ? { models: catalog } : {}),
               },
             };
 
@@ -153,9 +217,7 @@ export default function ModelsPage() {
     },
     onSuccess: () => {
       toast.success(editing ? "Provider updated" : "Provider created");
-      setOpen(false);
-      setEditing(null);
-      setForm(EMPTY_FORM);
+      closeDialog();
       void queryClient.invalidateQueries({ queryKey: queryKeys.providers });
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -183,15 +245,29 @@ export default function ModelsPage() {
           params: { path: { provider_id: provider.id } },
         }),
       );
+      setResults((current) => ({
+        ...current,
+        [provider.id]: {
+          ok: result.ok,
+          latencyMs: result.latencyMs,
+          modelCount: result.models.length,
+          error: result.error ?? undefined,
+          at: Date.now(),
+        },
+      }));
       if (result.ok) {
         toast.success(
-          `Reachable in ${result.latencyMs}ms · ${result.models.length} model(s) discovered`,
+          `Reachable in ${result.latencyMs} ms. ${plural(result.models.length, "model", "models")} found.`,
         );
         void queryClient.invalidateQueries({ queryKey: queryKeys.providers });
       } else {
-        toast.error(result.error ?? "Probe failed");
+        toast.error(result.error ?? "Test failed");
       }
     } catch (error) {
+      setResults((current) => ({
+        ...current,
+        [provider.id]: { ok: false, error: errorMessage(error), at: Date.now() },
+      }));
       toast.error(errorMessage(error));
     } finally {
       setProbing(null);
@@ -200,7 +276,7 @@ export default function ModelsPage() {
 
   async function probeDraft() {
     if (!form.baseUrl.trim()) {
-      toast.error("Base URL is required to test the connection");
+      toast.error("Enter a base URL to test the connection");
       return;
     }
     setProbingDraft(true);
@@ -235,11 +311,14 @@ export default function ModelsPage() {
         ok?: boolean;
         latencyMs?: number;
         models?: string[];
-        error?: string;
+        error?: string | { message?: string };
         message?: string;
       };
+      // The error may be a string (probe result) or the API's error envelope.
+      const failure =
+        typeof result.error === "string" ? result.error : (result.error?.message ?? result.message);
       if (!response.ok) {
-        throw new Error(result.error ?? result.message ?? `HTTP ${response.status}`);
+        throw new Error(failure ?? `The server answered HTTP ${response.status}`);
       }
       if (result.ok) {
         const models = result.models ?? [];
@@ -248,22 +327,33 @@ export default function ModelsPage() {
           models: current.models || models.join(", "),
           model: current.model || models[0] || "",
         }));
+        setDraftResult({ ok: true, latencyMs: result.latencyMs ?? 0, modelCount: models.length, at: Date.now() });
         toast.success(
-          `Reachable in ${result.latencyMs ?? 0}ms · ${models.length} model(s) discovered`,
+          `Reachable in ${result.latencyMs ?? 0} ms. ${plural(models.length, "model", "models")} found.`,
         );
       } else {
-        toast.error(result.error ?? "Probe failed");
+        setDraftResult({ ok: false, error: failure ?? "The endpoint did not answer", at: Date.now() });
+        toast.error(`Test failed: ${failure ?? "the endpoint did not answer"}`);
       }
     } catch (error) {
+      setDraftResult({ ok: false, error: errorMessage(error), at: Date.now() });
       toast.error(errorMessage(error));
     } finally {
       setProbingDraft(false);
     }
   }
 
+  function closeDialog() {
+    setOpen(false);
+    setEditing(null);
+    setForm(EMPTY_FORM);
+    setDraftResult(null);
+  }
+
   function openCreate() {
     setEditing(null);
     setForm(EMPTY_FORM);
+    setDraftResult(null);
     setOpen(true);
   }
 
@@ -271,15 +361,14 @@ export default function ModelsPage() {
     const config = (provider.config ?? {}) as Record<string, unknown>;
     const compat = (config.compat ?? {}) as Record<string, boolean>;
     setEditing(provider);
+    setDraftResult(null);
     setForm({
       ...EMPTY_FORM,
       name: provider.name,
       kind: provider.kind as ProviderForm["kind"],
       baseUrl: String(config.baseUrl ?? ""),
       model: String(config.model ?? ""),
-      models: Array.isArray((config.settings as Record<string, unknown> | undefined)?.models)
-        ? ((config.settings as Record<string, unknown>).models as string[]).join(", ")
-        : "",
+      models: catalogOf(config).join(", "),
       contextWindow: config.contextWindow ? String(config.contextWindow) : "",
       maxOutputTokens: config.maxOutputTokens ? String(config.maxOutputTokens) : "",
       tools: Boolean(compat.tools),
@@ -293,12 +382,25 @@ export default function ModelsPage() {
     setOpen(true);
   }
 
+  async function deleteProvider(provider: ProviderView) {
+    const ok = await confirm({
+      title: `Delete provider ${provider.name}?`,
+      description:
+        "Agents that use it will no longer be able to run until you pick another provider. This cannot be undone.",
+      confirmLabel: "Delete provider",
+      destructive: true,
+    });
+    if (ok) remove.mutate(provider.id);
+  }
+
+  const modelChoices = parseModels(form.models);
+  const isOpenAi = form.kind === "openai_compatible";
+
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="space-y-6">
       <PageHeader
-        eyebrow="Model layer"
-        title="Providers &amp; models"
-        description="Configure OpenAI-compatible endpoints or harness-managed providers. Credentials are encrypted at rest and never returned by the API."
+        title="Model providers"
+        description="Where agents get their models: any OpenAI-compatible endpoint, or a provider managed by a harness. Credentials are encrypted and never shown again."
         actions={
           <Button onClick={openCreate}>
             <Plus /> Add provider
@@ -307,378 +409,425 @@ export default function ModelsPage() {
       />
 
       {providers.isLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {Array.from({ length: 2 }).map((_, index) => (
-            <Skeleton key={index} className="h-40 rounded-xl" />
+        <Card className="overflow-hidden">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="border-b px-5 py-4 last:border-b-0">
+              <Skeleton className="h-14" />
+            </div>
           ))}
-        </div>
+        </Card>
       ) : providers.isError ? (
-        <p className="text-sm text-destructive">{errorMessage(providers.error)}</p>
+        <Callout tone="danger" title="Could not load providers">
+          {errorMessage(providers.error)}
+        </Callout>
       ) : !providers.data?.length ? (
         <EmptyState
-          icon={<Boxes className="h-6 w-6" />}
-          title="No providers configured"
-          description="Add a vLLM, LiteLLM, API gateway or any OpenAI-compatible endpoint. Providers are separate from harnesses so agents can mix them freely."
+          icon={<Boxes />}
+          title="No model providers yet"
+          description="Add vLLM, LiteLLM, an API gateway or any OpenAI-compatible endpoint. Providers are separate from harnesses, so agents can mix them freely."
           action={
-            <Button onClick={openCreate}>
+            <Button variant="outline" onClick={openCreate}>
               <Plus /> Add provider
             </Button>
           }
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {providers.data.map((provider) => {
-            const config = (provider.config ?? {}) as Record<string, unknown>;
-            return (
-              <Card key={provider.id}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <CardTitle className="truncate">{provider.name}</CardTitle>
-                      <p className="text-[11px] text-muted-foreground">
-                        {provider.kind.replace("_", " ")} · updated {relativeTime(provider.updatedAt)}
-                      </p>
+        <Section title="Providers" count={providers.data.length}>
+          <Card className="overflow-hidden">
+            {providers.data.map((provider) => {
+              const config = (provider.config ?? {}) as Record<string, unknown>;
+              const catalog = catalogOf(config);
+              const result = results[provider.id];
+              const testable = provider.kind === "openai_compatible";
+              const model = String(config.model ?? "");
+              return (
+                <div
+                  key={provider.id}
+                  className="flex flex-col gap-3 border-b px-4 py-4 last:border-b-0 sm:px-5 lg:flex-row lg:items-start lg:justify-between"
+                >
+                  <div className="min-w-0 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-medium">{provider.name}</p>
+                      <Badge variant="outline">{KIND_LABEL[provider.kind] ?? provider.kind}</Badge>
+                      {provider.enabled ? null : <Badge variant="secondary">Disabled</Badge>}
                     </div>
-                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
-                      {provider.enabled ? "enabled" : "disabled"}
-                    </span>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-1 text-xs">
-                    {provider.kind === "openai_compatible" ? (
-                      <>
-                        <p className="truncate font-mono text-[11px] text-muted-foreground">
-                          {String(config.baseUrl ?? "—")}
-                        </p>
-                        <p className="text-muted-foreground">
-                          model: <span className="font-mono">{String(config.model ?? "—")}</span>
-                        </p>
-                        <p className="text-muted-foreground">
-                          catalog:{" "}
-                          <span className="font-mono">
-                            {Array.isArray((config.settings as Record<string, unknown> | undefined)?.models)
-                              ? ((config.settings as Record<string, unknown>).models as string[]).length
-                              : 0}{" "}
-                            models
-                          </span>
-                        </p>
-                      </>
+
+                    {testable ? (
+                      <p className="truncate font-mono text-xs text-muted-foreground" title={String(config.baseUrl ?? "")}>
+                        {String(config.baseUrl ?? "No base URL")}
+                      </p>
                     ) : (
-                      <>
-                        <p className="text-muted-foreground">
-                          harness: <span className="font-mono">{String(config.harness ?? "—")}</span>
-                        </p>
-                        <p className="text-muted-foreground">
-                          provider: <span className="font-mono">{String(config.provider ?? "—")}</span>
-                        </p>
-                        <p className="text-muted-foreground">
-                          model: <span className="font-mono">{String(config.model ?? "harness default")}</span>
-                        </p>
-                        {Array.isArray((config.settings as Record<string, unknown> | undefined)?.models) &&
-                        ((config.settings as Record<string, unknown>).models as string[]).length ? (
-                          <p
-                            className="text-muted-foreground"
-                            title={((config.settings as Record<string, unknown>).models as string[]).join(", ")}
-                          >
-                            catalog:{" "}
-                            <span className="font-mono">
-                              {((config.settings as Record<string, unknown>).models as string[]).length} models
-                            </span>
+                      <p className="text-[13px] text-muted-foreground">
+                        Runs through {HARNESS_LABEL[String(config.harness)] ?? String(config.harness ?? "a harness")}
+                        {config.provider ? (
+                          <>
+                            {" as "}
+                            <span className="font-mono text-xs">{String(config.provider)}</span>
+                          </>
+                        ) : null}
+                      </p>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
+                      <span>
+                        Default model:{" "}
+                        {model ? (
+                          <span className="break-all font-mono text-xs text-foreground">{model}</span>
+                        ) : (
+                          <span>{testable ? "not set" : "harness default"}</span>
+                        )}
+                      </span>
+                      <span>{plural(catalog.length, "model", "models")} in catalog</span>
+                      <span
+                        className="inline-flex items-center gap-1"
+                        title={provider.hasCredential ? "A credential is stored. It is never shown." : undefined}
+                      >
+                        <KeyRound className="h-3.5 w-3.5" aria-hidden />
+                        {provider.hasCredential
+                          ? "Credential set"
+                          : testable
+                            ? "No credential"
+                            : "Authenticated by the harness"}
+                      </span>
+                    </div>
+
+                    {testable ? (
+                      <div className="space-y-0.5">
+                        <Status meta={testStatus(result)} />
+                        {result?.ok === false && result.error ? (
+                          <p className="break-words text-[13px] text-destructive">{result.error}</p>
+                        ) : null}
+                        {result?.ok ? (
+                          <p className="text-[13px] text-muted-foreground">
+                            {plural(result.modelCount ?? 0, "model", "models")} found, tested{" "}
+                            {relativeTime(new Date(result.at).toISOString())}
                           </p>
                         ) : null}
-                      </>
-                    )}
-                    <p className="text-muted-foreground">
-                      credential: {provider.hasCredential ? "configured (encrypted)" : "none"}
-                    </p>
+                      </div>
+                    ) : null}
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {provider.kind === "openai_compatible" ? (
+
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    {testable ? (
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => probe(provider)}
+                        onClick={() => void probe(provider)}
                         loading={probing === provider.id}
                       >
-                        <Zap /> Test &amp; discover
+                        <Zap /> Test
                       </Button>
                     ) : null}
-                    <ExportResourceButton
-                      resource="providers"
-                      resourceId={provider.id}
-                      name={provider.name}
-                    />
                     <Button size="sm" variant="ghost" onClick={() => openEdit(provider)}>
                       <Pencil /> Edit
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive"
-                      onClick={() => {
-                        if (window.confirm(`Delete provider ${provider.name}?`)) {
-                          remove.mutate(provider.id);
-                        }
-                      }}
-                    >
-                      <Trash2 /> Delete
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={`More actions for ${provider.name}`}
+                        >
+                          <MoreHorizontal />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => void exportResource("providers", provider.id, provider.name)}>
+                          <Download /> Export as JSON
+                        </DropdownMenuItem>
+                        <DropdownMenuItem destructive onSelect={() => void deleteProvider(provider)}>
+                          <Trash2 /> Delete provider
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                </div>
+              );
+            })}
+          </Card>
+        </Section>
       )}
 
       <Dialog
         open={open}
         onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) {
-            setEditing(null);
-            setForm(EMPTY_FORM);
-          }
+          if (next) setOpen(true);
+          else closeDialog();
         }}
       >
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit provider" : "Add provider"}</DialogTitle>
+            <DialogTitle>{editing ? `Edit ${editing.name}` : "Add provider"}</DialogTitle>
             <DialogDescription>
-              Credentials are write-only: rotate them here and the API never returns the value.
+              {editing
+                ? "Change how ORBIT reaches this provider. The type cannot be changed."
+                : "Choose how agents will reach models, then fill in the details."}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Name</Label>
-                <Input
-                  value={form.name}
-                  placeholder="Company gateway"
-                  onChange={(event) => setForm({ ...form, name: event.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Provider type</Label>
-                <select
-                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm disabled:opacity-60"
-                  value={form.kind}
-                  disabled={Boolean(editing)}
-                  onChange={(event) =>
-                    setForm({ ...form, kind: event.target.value as ProviderForm["kind"] })
-                  }
-                >
-                  <option value="openai_compatible">OpenAI-compatible endpoint</option>
-                  <option value="harness_managed">Harness-managed (e.g. OpenCode Go)</option>
-                </select>
-              </div>
+          <div className="space-y-4">
+            <div role="radiogroup" aria-label="Provider type" className="grid gap-2 sm:grid-cols-2">
+              <ChoiceCard
+                selected={isOpenAi}
+                disabled={Boolean(editing)}
+                onSelect={() => setForm({ ...form, kind: "openai_compatible" })}
+                icon={<Server />}
+                title="OpenAI-compatible endpoint"
+                description="vLLM, LiteLLM, a gateway, or any /v1 API."
+              />
+              <ChoiceCard
+                selected={!isOpenAi}
+                disabled={Boolean(editing)}
+                onSelect={() => setForm({ ...form, kind: "harness_managed" })}
+                icon={<Cpu />}
+                title="Harness-managed"
+                description="The harness signs in itself, for example OpenCode Go."
+              />
             </div>
 
-            {form.kind === "openai_compatible" ? (
+            <Field label="Name" htmlFor="provider-name">
+              <Input
+                id="provider-name"
+                value={form.name}
+                placeholder="Company gateway"
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+              />
+            </Field>
+
+            {isOpenAi ? (
               <>
-                <div className="space-y-1.5">
-                  <Label>Base URL</Label>
+                <Field
+                  label="Base URL"
+                  htmlFor="provider-base-url"
+                  hint="The root of the API, usually ending in /v1. No fixed provider list: any compatible gateway works."
+                >
                   <Input
+                    id="provider-base-url"
+                    className="font-mono"
                     value={form.baseUrl}
                     placeholder="https://gateway.example.com/v1"
                     onChange={(event) => setForm({ ...form, baseUrl: event.target.value })}
                   />
-                  <p className="text-[11px] text-muted-foreground">
-                    No hardcoded provider list: vLLM, LiteLLM, APISIX, OpenRouter-style gateways all work.
-                  </p>
+                </Field>
+
+                <Field
+                  label="Credential"
+                  htmlFor="provider-credential"
+                  optional
+                  hint={
+                    editing
+                      ? editing.hasCredential
+                        ? "A credential is stored. Leave blank to keep it, or enter a new one to replace it."
+                        : "No credential is stored. Enter one to add it."
+                      : "Stored encrypted. You will not be able to read it again."
+                  }
+                >
+                  <Input
+                    id="provider-credential"
+                    type="password"
+                    value={form.credential}
+                    autoComplete="new-password"
+                    onChange={(event) => setForm({ ...form, credential: event.target.value })}
+                  />
+                </Field>
+
+                <Field
+                  label="Model catalog"
+                  htmlFor="provider-models"
+                  optional
+                  hint={
+                    modelChoices.length
+                      ? "Comma-separated. These fill the model pickers in agent and worker forms."
+                      : "Test the connection to fetch models automatically, or type them separated by commas."
+                  }
+                >
+                  <div className="flex gap-2">
+                    <Input
+                      id="provider-models"
+                      className="min-w-0 flex-1"
+                      value={form.models}
+                      placeholder="qwen3-coder, llama-3.3-70b"
+                      onChange={(event) => setForm({ ...form, models: event.target.value })}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void probeDraft()}
+                      loading={probingDraft}
+                      disabled={!form.baseUrl.trim()}
+                    >
+                      <Zap /> Test and fetch
+                    </Button>
+                  </div>
+                  {draftResult ? (
+                    <div className="pt-1">
+                      <Status meta={testStatus(draftResult)} />
+                      {draftResult.ok ? null : (
+                        <p className="break-words text-[13px] text-destructive">{draftResult.error}</p>
+                      )}
+                    </div>
+                  ) : null}
+                </Field>
+
+                <Field label="Default model" htmlFor="provider-model" hint="Used when an agent does not pick a model.">
+                  {modelChoices.length ? (
+                    <Select
+                      id="provider-model"
+                      value={form.model}
+                      onChange={(event) => setForm({ ...form, model: event.target.value })}
+                    >
+                      <option value="">Choose a model</option>
+                      {modelChoices.map((candidate) => (
+                        <option key={candidate} value={candidate}>
+                          {candidate}
+                        </option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <Input
+                      id="provider-model"
+                      className="font-mono"
+                      value={form.model}
+                      placeholder="qwen3-coder"
+                      onChange={(event) => setForm({ ...form, model: event.target.value })}
+                    />
+                  )}
+                </Field>
+
+                <Disclosure title="Advanced settings" summary="Limits and what the endpoint supports">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="Context window" htmlFor="provider-context" optional hint="In tokens.">
+                        <Input
+                          id="provider-context"
+                          type="number"
+                          inputMode="numeric"
+                          value={form.contextWindow}
+                          onChange={(event) => setForm({ ...form, contextWindow: event.target.value })}
+                        />
+                      </Field>
+                      <Field label="Max output" htmlFor="provider-max-output" optional hint="In tokens.">
+                        <Input
+                          id="provider-max-output"
+                          type="number"
+                          inputMode="numeric"
+                          value={form.maxOutputTokens}
+                          onChange={(event) => setForm({ ...form, maxOutputTokens: event.target.value })}
+                        />
+                      </Field>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {COMPAT_FLAGS.map((flag) => (
+                        <CheckboxField
+                          key={flag.key}
+                          title={flag.title}
+                          description={flag.description}
+                          checked={form[flag.key]}
+                          onChange={(event) => setForm({ ...form, [flag.key]: event.target.checked })}
+                        />
+                      ))}
+                    </div>
+                  </Disclosure>
+              </>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Harness" htmlFor="provider-harness">
+                    <Select
+                      id="provider-harness"
+                      value={form.harnessKind}
+                      onChange={(event) => setForm({ ...form, harnessKind: event.target.value })}
+                    >
+                      <option value="opencode">OpenCode</option>
+                      <option value="claude_code">Claude Code</option>
+                      <option value="pi">Pi</option>
+                    </Select>
+                  </Field>
+                  <Field
+                    label="Provider name in the harness"
+                    htmlFor="provider-harness-name"
+                  >
+                    <Input
+                      id="provider-harness-name"
+                      className="font-mono"
+                      value={form.harnessProvider}
+                      placeholder="opencode-go"
+                      onChange={(event) => setForm({ ...form, harnessProvider: event.target.value })}
+                    />
+                  </Field>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="space-y-1.5 sm:col-span-1">
-                    <Label>Default model</Label>
-                    {form.models.split(",").map((value) => value.trim()).filter(Boolean).length ? (
-                      <select
-                        className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                        value={form.model}
-                        onChange={(event) => setForm({ ...form, model: event.target.value })}
-                      >
-                        <option value="">Select a model</option>
-                        {form.models
-                          .split(",")
-                          .map((value) => value.trim())
-                          .filter(Boolean)
-                          .map((candidate) => (
+
+                <Field
+                  label="Credential"
+                  htmlFor="provider-credential"
+                  optional
+                  hint={
+                    editing
+                      ? editing.hasCredential
+                        ? "A credential is stored. Leave blank to keep it, or enter a new one to replace it."
+                        : "No credential is stored. The harness normally signs in itself."
+                      : "The harness normally signs in itself. Stored encrypted if you add one."
+                  }
+                >
+                  <Input
+                    id="provider-credential"
+                    type="password"
+                    value={form.credential}
+                    autoComplete="new-password"
+                    onChange={(event) => setForm({ ...form, credential: event.target.value })}
+                  />
+                </Field>
+
+                <Disclosure title="Models" summary="Default model and catalog">
+                    <Field
+                      label="Model catalog"
+                      htmlFor="provider-models"
+                      optional
+                      hint="Comma-separated. These fill the model pickers in agent and worker forms. Leave empty to allow any model the harness defines."
+                    >
+                      <Input
+                        id="provider-models"
+                        value={form.models}
+                        placeholder="deepseek-v4-pro, claude-sonnet-4"
+                        onChange={(event) => setForm({ ...form, models: event.target.value })}
+                      />
+                    </Field>
+                    <Field label="Default model" htmlFor="provider-model" optional>
+                      {modelChoices.length ? (
+                        <Select
+                          id="provider-model"
+                          value={form.model}
+                          onChange={(event) => setForm({ ...form, model: event.target.value })}
+                        >
+                          <option value="">Harness default</option>
+                          {modelChoices.map((candidate) => (
                             <option key={candidate} value={candidate}>
                               {candidate}
                             </option>
                           ))}
-                      </select>
-                    ) : (
-                      <Input
-                        value={form.model}
-                        placeholder="qwen3-coder"
-                        onChange={(event) => setForm({ ...form, model: event.target.value })}
-                      />
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Context window</Label>
-                    <Input
-                      type="number"
-                      value={form.contextWindow}
-                      placeholder="optional"
-                      onChange={(event) => setForm({ ...form, contextWindow: event.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Max output</Label>
-                    <Input
-                      type="number"
-                      value={form.maxOutputTokens}
-                      placeholder="optional"
-                      onChange={(event) => setForm({ ...form, maxOutputTokens: event.target.value })}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label>Model catalog</Label>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={probeDraft}
-                      loading={probingDraft}
-                      disabled={!form.baseUrl.trim()}
-                    >
-                      <Zap /> Fetch models
-                    </Button>
-                  </div>
-                  <Input
-                    value={form.models}
-                    placeholder="qwen3-coder, llama-3.3-70b"
-                    onChange={(event) => setForm({ ...form, models: event.target.value })}
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    {form.models.trim()
-                      ? "Comma-separated models drive the agent and worker model selectors."
-                      : "Fetch models or Test connection to populate this and turn Default model into a dropdown."}
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-2 rounded-lg border p-3 text-sm sm:grid-cols-3">
-                  {[
-                    ["tools", "Tool calling"],
-                    ["streaming", "Streaming"],
-                    ["jsonMode", "JSON mode"],
-                    ["vision", "Vision"],
-                    ["modelsEndpoint", "/models endpoint"],
-                  ].map(([key, label]) => (
-                    <label key={key} className="flex items-center gap-2 text-xs">
-                      <Switch
-                        checked={form[key as keyof ProviderForm] as boolean}
-                        onCheckedChange={(value) => setForm({ ...form, [key]: value })}
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
+                        </Select>
+                      ) : (
+                        <Input
+                          id="provider-model"
+                          className="font-mono"
+                          value={form.model}
+                          placeholder="Harness default"
+                          onChange={(event) => setForm({ ...form, model: event.target.value })}
+                        />
+                      )}
+                    </Field>
+                  </Disclosure>
               </>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label>Harness</Label>
-                  <select
-                    className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                    value={form.harnessKind}
-                    onChange={(event) => setForm({ ...form, harnessKind: event.target.value })}
-                  >
-                    <option value="opencode">OpenCode</option>
-                    <option value="claude_code">Claude Code</option>
-                    <option value="pi">Pi</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Harness provider name</Label>
-                  <Input
-                    value={form.harnessProvider}
-                    placeholder="opencode-go"
-                    onChange={(event) => setForm({ ...form, harnessProvider: event.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Default model (optional)</Label>
-                  {form.models.split(",").map((value) => value.trim()).filter(Boolean).length ? (
-                    <select
-                      className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-                      value={form.model}
-                      onChange={(event) => setForm({ ...form, model: event.target.value })}
-                    >
-                      <option value="">Harness default</option>
-                      {form.models
-                        .split(",")
-                        .map((value) => value.trim())
-                        .filter(Boolean)
-                        .map((candidate) => (
-                          <option key={candidate} value={candidate}>
-                            {candidate}
-                          </option>
-                        ))}
-                    </select>
-                  ) : (
-                    <Input
-                      value={form.model}
-                      placeholder="harness default"
-                      onChange={(event) => setForm({ ...form, model: event.target.value })}
-                    />
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Model catalog (optional)</Label>
-                  <Input
-                    value={form.models}
-                    placeholder="deepseek-v4-pro, claude-sonnet-4"
-                    onChange={(event) => setForm({ ...form, models: event.target.value })}
-                  />
-                </div>
-                <p className="text-[11px] text-muted-foreground sm:col-span-2">
-                  Comma-separated models populate the model selectors in agent and worker forms.
-                  Leave the catalog empty to allow any harness-defined model. Harness-managed
-                  providers are authenticated by their harness; ORBIT stores only the credential
-                  reference.
-                </p>
-              </div>
             )}
-
-            <div className="space-y-1.5">
-              <Label>{editing ? "Replace credential (optional)" : "Credential (optional)"}</Label>
-              <Input
-                type="password"
-                value={form.credential}
-                placeholder="sk-…"
-                autoComplete="new-password"
-                onChange={(event) => setForm({ ...form, credential: event.target.value })}
-              />
-            </div>
           </div>
+
           <ResourceAccessFields resource="providers" resourceId={editing?.id} />
-          <DialogFooter className="gap-2 sm:justify-between">
-            <div>
-              {form.kind === "openai_compatible" ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={probeDraft}
-                  loading={probingDraft}
-                  disabled={!form.baseUrl.trim()}
-                >
-                  Test &amp; fetch models
-                </Button>
-              ) : null}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!form.name.trim()}>
-                {editing ? "Save changes" : "Create provider"}
-              </Button>
-            </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog}>
+              Cancel
+            </Button>
+            <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!form.name.trim()}>
+              {editing ? "Save changes" : "Add provider"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -27,6 +27,8 @@ export function formatDateTime(value?: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+    // 24-hour, matching the timeline and logs, so one page never mixes clocks.
+    hourCycle: "h23",
   });
 }
 

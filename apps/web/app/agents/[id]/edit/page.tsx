@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
-import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 import { AgentForm } from "@/components/agents/agent-form";
@@ -54,7 +53,7 @@ export default function EditAgentPage() {
     return (
       <EmptyState
         title="Configuration cannot be loaded"
-        description={parsedSpec.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join(" · ")}
+        description={parsedSpec.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}
         action={<Button asChild><Link href={`/agents/${agentId}`}>Back to agent</Link></Button>}
       />
     );
@@ -73,14 +72,18 @@ export default function EditAgentPage() {
   async function handleSubmit(definition: AgentDefinition) {
     setSubmitting(true);
     try {
-      unwrap(
+      const updated = unwrap(
         await api.PATCH("/api/v1/agents/{agent_id}", {
           params: { path: { agent_id: agentId } },
           body: { definition: toAgentDefinitionBody(definition) },
         }),
       );
       await queryClient.invalidateQueries({ queryKey: queryKeys.agent(agentId) });
-      toast.success("New version created");
+      // Name, description and labels are saved in place; only a changed spec is a new version.
+      const version = (updated as { currentVersion?: number }).currentVersion;
+      toast.success(
+        version && version > agent.data!.currentVersion ? `Version ${version} created` : "Agent saved",
+      );
       router.push(`/agents/${agentId}`);
     } catch (error) {
       toast.error(errorMessage(error));
@@ -90,22 +93,16 @@ export default function EditAgentPage() {
   }
 
   return (
-    <div className="space-y-5 animate-fade-in">
-      <div>
-        <Button asChild variant="ghost" size="sm" className="-ml-2 mb-2">
-          <Link href={`/agents/${agentId}`}>
-            <ArrowLeft /> {agent.data.name}
-          </Link>
-        </Button>
-        <PageHeader
-          eyebrow={`Editing version ${agent.data.currentVersion} → new version`}
-          title="Agent Studio"
-          description="Saving creates an immutable version. Historical executions keep their original configuration."
-        />
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        back={{ href: `/agents/${agentId}`, label: agent.data.name }}
+        title={`Edit ${agent.data.name}`}
+        description="Saving creates a new immutable version. Past executions keep the configuration they ran with."
+      />
       <AgentForm
         initial={initial}
-        submitLabel="Save new version"
+        submitLabel="Save changes"
+        cancelHref={`/agents/${agentId}`}
         submitting={submitting}
         onSubmit={handleSubmit}
         resourceId={agentId}

@@ -16,10 +16,13 @@ const config: Config = {
     extend: {
       colors: {
         border: "hsl(var(--border))",
+        "border-strong": "hsl(var(--border-strong))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        subtle: "hsl(var(--subtle))",
+        popover: "hsl(var(--popover))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -46,14 +49,26 @@ const config: Config = {
         },
         success: "hsl(var(--success))",
         warning: "hsl(var(--warning))",
+        info: "hsl(var(--info))",
+        overlay: "hsl(var(--overlay))",
+        ink: {
+          DEFAULT: "hsl(var(--ink))",
+          raised: "hsl(var(--ink-raised))",
+          border: "hsl(var(--ink-border))",
+          foreground: "hsl(var(--ink-foreground))",
+          muted: "hsl(var(--ink-muted))",
+          accent: "hsl(var(--ink-accent))",
+        },
       },
       borderRadius: {
+        xl: "calc(var(--radius) + 2px)",
         lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        md: "calc(var(--radius) - 3px)",
+        sm: "calc(var(--radius) - 5px)",
       },
       fontFamily: {
         sans: [
+          '"Archivo Variable"',
           "ui-sans-serif",
           "system-ui",
           "-apple-system",
@@ -63,11 +78,42 @@ const config: Config = {
           "Arial",
           "sans-serif",
         ],
-        mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        mono: [
+          '"JetBrains Mono Variable"',
+          "ui-monospace",
+          "SFMono-Regular",
+          "Menlo",
+          "monospace",
+        ],
+      },
+      fontSize: {
+        // 12px is the floor for anything a person has to read.
+        xs: ["0.75rem", { lineHeight: "1.125rem" }],
+        sm: ["0.875rem", { lineHeight: "1.3125rem" }],
+        base: ["1rem", { lineHeight: "1.5rem" }],
+        lg: ["1.125rem", { lineHeight: "1.625rem" }],
+        xl: ["1.3125rem", { lineHeight: "1.75rem" }],
+        "2xl": ["1.625rem", { lineHeight: "2rem" }],
+        "3xl": ["2rem", { lineHeight: "2.375rem" }],
+      },
+      boxShadow: {
+        overlay: "var(--shadow-overlay)",
       },
       keyframes: {
-        "fade-in": {
-          from: { opacity: "0", transform: "translateY(4px)" },
+        "overlay-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        "dialog-in": {
+          from: { opacity: "0", transform: "translate(-50%, calc(-50% + 6px)) scale(0.985)" },
+          to: { opacity: "1", transform: "translate(-50%, -50%) scale(1)" },
+        },
+        "sheet-in": {
+          from: { transform: "translateY(100%)" },
+          to: { transform: "translateY(0)" },
+        },
+        "menu-in": {
+          from: { opacity: "0", transform: "translateY(-3px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
         "pulse-soft": {
@@ -76,8 +122,13 @@ const config: Config = {
         },
       },
       animation: {
-        "fade-in": "fade-in 200ms ease-out",
+        "overlay-in": "overlay-in 140ms ease-out",
+        "dialog-in": "dialog-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1)",
+        "sheet-in": "sheet-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1)",
+        "menu-in": "menu-in 120ms ease-out",
         "pulse-soft": "pulse-soft 1.6s ease-in-out infinite",
+        // Kept as a no-op alias so legacy `animate-fade-in` classes do not flash.
+        "fade-in": "none",
       },
     },
   },

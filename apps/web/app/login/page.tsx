@@ -3,76 +3,84 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { KeyRound, ShieldCheck } from "lucide-react";
+import { KeyRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getAccessToken, setAccessToken } from "@/lib/api";
 import { beginOidcLogin } from "@/lib/oidc";
 import { useMe, useMeta } from "@/lib/queries";
 
 export default function LoginPage() {
   const meta = useMeta();
-  const me = useMe();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
   const auth = (meta.data?.auth ?? {}) as { mode?: string; issuer?: string };
   const oidc = auth.mode === "oidc";
 
+  const me = useMe();
   useEffect(() => {
     if (!getAccessToken()) return;
     if (me.isSuccess) {
       router.replace("/");
     } else if (me.isError) {
-      // Expired/foreign token: clear it instead of treating it as a session.
+      // Expired or foreign token: clear it instead of treating it as a session.
       setAccessToken(null);
     }
   }, [me.isSuccess, me.isError, router]);
 
+  function startSignIn() {
+    setError(null);
+    setStarting(true);
+    void beginOidcLogin(new URLSearchParams(window.location.search).get("next") ?? "/").catch(
+      (reason) => {
+        setStarting(false);
+        setError(reason instanceof Error ? reason.message : String(reason));
+      },
+    );
+  }
+
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-md items-center">
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-primary" /> Sign in to ORBIT
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {oidc ? (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Continue with your organization identity provider.
-              </p>
-              {auth.issuer ? (
-                <p className="break-all text-[11px] text-muted-foreground">{auth.issuer}</p>
-              ) : null}
-              <Button
-                className="w-full"
-                onClick={() =>
-                  void beginOidcLogin(
-                    new URLSearchParams(window.location.search).get("next") ?? "/",
-                  ).catch((reason) =>
-                    setError(reason instanceof Error ? reason.message : String(reason)),
-                  )
-                }
-              >
-                <KeyRound /> Continue with SSO
-              </Button>
-            </>
-          ) : (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Development authentication is active. Continue to the control plane, or
-                configure OIDC/Dex/Keycloak for production.
-              </p>
-              <Button asChild className="w-full">
-                <Link href="/">Continue to ORBIT</Link>
-              </Button>
-            </>
-          )}
-          {error ? <p className="text-xs text-destructive">{error}</p> : null}
-        </CardContent>
-      </Card>
+    <div className="w-full max-w-sm rounded-xl border border-ink-border bg-ink p-6 shadow-overlay sm:p-8">
+      <h1 className="font-display text-2xl leading-tight text-ink-foreground">Sign in to ORBIT</h1>
+
+      {meta.isLoading ? (
+        <div className="mt-5 space-y-3" aria-busy="true">
+          <Skeleton className="h-4 w-3/4 bg-ink-border" />
+          <Skeleton className="h-9 w-full bg-ink-border" />
+        </div>
+      ) : oidc ? (
+        <div className="mt-2 space-y-5">
+          <p className="text-sm text-ink-muted">
+            Continue with your organization&apos;s identity provider.
+          </p>
+          <Button className="w-full" onClick={startSignIn} loading={starting}>
+            <KeyRound /> Continue with single sign-on
+          </Button>
+          {auth.issuer ? (
+            <p className="break-all text-center text-xs text-ink-muted">
+              Provider: <span className="font-mono">{auth.issuer}</span>
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mt-2 space-y-5">
+          <p className="text-sm text-ink-muted">
+            This installation runs in development mode, so there is no password or single
+            sign-on. You will be signed in as the built-in development user.
+          </p>
+          <Button asChild className="w-full">
+            <Link href="/">Continue to ORBIT</Link>
+          </Button>
+        </div>
+      )}
+
+      {error ? (
+        <p role="alert" className="mt-4 break-words rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[13px] text-ink-foreground">
+          Sign-in could not start: {error}
+        </p>
+      ) : null}
     </div>
   );
 }

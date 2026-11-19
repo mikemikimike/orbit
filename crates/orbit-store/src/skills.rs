@@ -9,13 +9,16 @@ impl Store {
         org_id: Uuid,
         access: Option<&crate::access::ResourceAccess>,
     ) -> StoreResult<Vec<Skill>> {
-        let (privileged, user_id, team_ids) = crate::access::binds(access);
+        let (privileged, user_id, team_ids, isolation) = crate::access::binds(access);
         Ok(sqlx::query_as::<_, Skill>(
             r#"
             SELECT * FROM skills
             WHERE org_id = $1
-              AND ($2::bool OR visibility = 'org' OR owner_user_id = $3
-                   OR (visibility = 'team' AND owner_team_id = ANY($4)))
+              AND ($2::bool OR owner_user_id = $3
+                   OR CASE WHEN $5::bool AND owner_team_id IS NOT NULL
+                        THEN owner_team_id = ANY($4)
+                        ELSE visibility = 'org'
+                             OR (visibility = 'team' AND owner_team_id = ANY($4)) END)
             ORDER BY name ASC
             "#,
         )
@@ -23,6 +26,7 @@ impl Store {
         .bind(privileged)
         .bind(user_id)
         .bind(&team_ids)
+        .bind(isolation)
         .fetch_all(&self.pool)
         .await?)
     }

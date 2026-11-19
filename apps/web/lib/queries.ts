@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api, API_BASE_URL, getAccessToken } from "./api";
+import { request } from "./http";
 import { listEnvMappings, workerProfileEnvMappings } from "./env-mappings";
 import { listOutputs } from "./outputs";
 import type {
@@ -157,14 +158,18 @@ export function useDashboard() {
   });
 }
 
-export function useAgents(params: {
-  status?: string;
-  q?: string;
-  limit?: number;
-  cursor?: string;
-} = {}) {
+export function useAgents(
+  params: {
+    status?: string;
+    q?: string;
+    limit?: number;
+    cursor?: string;
+  } = {},
+  options?: { enabled?: boolean },
+) {
   return useQuery<AgentPage>({
     queryKey: queryKeys.agents(params),
+    enabled: options?.enabled ?? true,
     queryFn: async () =>
       unwrap(
         await api.GET("/api/v1/agents", {
@@ -178,6 +183,35 @@ export function useAgents(params: {
           },
         }),
       ),
+    placeholderData: (previous) => previous,
+  });
+}
+
+/**
+ * Every agent, for views that filter and count on the client. The API caps a page
+ * at 100, so this follows `nextCursor` until the whole set is loaded (bounded so a
+ * very large registry cannot stall the page).
+ */
+const ALL_AGENTS_MAX_PAGES = 10;
+
+export function useAllAgents() {
+  return useQuery<AgentPage>({
+    queryKey: queryKeys.agents({ all: true }),
+    queryFn: async () => {
+      const items: AgentPage["items"] = [];
+      let cursor: string | undefined;
+      let total = 0;
+      for (let page = 0; page < ALL_AGENTS_MAX_PAGES; page += 1) {
+        const result = unwrap(
+          await api.GET("/api/v1/agents", { params: { query: { limit: 100, cursor } } }),
+        );
+        items.push(...result.items);
+        total = result.total;
+        cursor = result.nextCursor ?? undefined;
+        if (!cursor || result.items.length === 0 || items.length >= total) break;
+      }
+      return { items, total, nextCursor: cursor ?? null } as AgentPage;
+    },
     placeholderData: (previous) => previous,
   });
 }
@@ -217,7 +251,7 @@ export function useExecutions(params: {
               limit: params.limit,
               cursor: params.cursor,
               status: params.status,
-              agent_id: params.agentId,
+              agentId: params.agentId,
               archived: params.archived,
             },
           },
@@ -234,6 +268,12 @@ export function useExecution(id: string | undefined) {
     queryFn: async () =>
       unwrap(await api.GET("/api/v1/executions/{execution_id}", { params: { path: { execution_id: id! } } })),
     enabled: Boolean(id),
+    // Some status changes (picked up, cancel requested) arrive without an event on the
+    // stream, so keep polling while the run is still going.
+    refetchInterval: (query) =>
+      ["queued", "dispatched", "running", "awaiting_approval"].includes(query.state.data?.status ?? "")
+        ? 5_000
+        : false,
   });
 }
 
@@ -248,6 +288,20 @@ export function useExecutionEvents(id: string | undefined, options?: { enabled?:
       ),
     enabled: Boolean(id) && (options?.enabled ?? true),
   });
+}
+
+/**
+ * The organization's default harness, used when an agent has none of its own.
+ * `known` is false while loading or when the caller may not read the setting.
+ */
+export function useDefaultHarness() {
+  const query = useQuery({
+    queryKey: ["harness-settings"],
+    queryFn: () => request<{ defaultHarness?: string | null }>("/api/v1/settings/harness"),
+    staleTime: 60_000,
+    retry: false,
+  });
+  return { defaultHarness: query.data?.defaultHarness ?? null, known: query.isSuccess };
 }
 
 export function useHarnesses() {

@@ -18,7 +18,7 @@ use orbit_contracts::{
 };
 use orbit_domain::{
     AgentSpec, CapabilityEffect, ExecutionEventKind, ExecutionStatus, GrantedCapability, LogLevel,
-    ModelManagement, ToolPolicyRule,
+    ModelManagement, ToolPolicyRule, TriggerSpec,
 };
 use orbit_store::{
     Approval, Connection, ConnectorRecord, ExecutionRecord, Skill, Store, WorkerProfile,
@@ -390,6 +390,7 @@ async fn build_context(
     let mut spec: AgentSpec = serde_json::from_value(version.spec)
         .map_err(|error| ApiError::internal(format!("stored agent spec is invalid: {error}")))?;
     merge_team_connections(state, org_id, execution, &mut spec).await;
+    omit_fields_workers_ignore(&mut spec);
     if let Some(record) = state
         .store
         .get_harness_by_kind(org_id, &execution.harness_kind)
@@ -639,11 +640,26 @@ pub async fn running(
     Path(execution_id): Path<Uuid>,
     crate::extract::ApiJson(body): crate::extract::ApiJson<RunningRequest>,
 ) -> Result<StatusCode, ApiError> {
-    ensure_execution(&state, &auth, execution_id).await?;
-    state
+    let execution = ensure_execution(&state, &auth, execution_id).await?;
+    let updated = state
         .store
         .mark_execution_running(execution_id, body.session_ref.as_deref())
         .await?;
+    // The platform may have ended a run its worker took too long to start (or that was
+    // cancelled meanwhile). Refuse, so the worker stops instead of running the harness
+    // for an execution everyone else already sees as finished.
+    if updated.is_none() {
+        let current = state
+            .store
+            .get_execution(execution.org_id, execution_id)
+            .await?;
+        if ExecutionStatus::parse(&current.status).is_some_and(|status| status.is_terminal()) {
+            return Err(ApiError::conflict(format!(
+                "execution already ended with status {}",
+                current.status
+            )));
+        }
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1243,4 +1259,38 @@ pub async fn resolve_env(
         }
     }
     Ok(Json(resolved))
+}
+
+/// Workers never read triggers, and workers older than the schedule `task` field refuse
+/// it (`TriggerSpec` denies unknown fields). Leaving it out keeps those workers able to
+/// claim runs of a scheduled agent while a platform upgrade rolls out.
+fn omit_fields_workers_ignore(spec: &mut AgentSpec) {
+    for trigger in &mut spec.triggers {
+        if let TriggerSpec::Schedule { task, .. } = trigger {
+            *task = None;
+        }
+    }
+}
+
+#[cfg(test)]
+mod worker_payload_tests {
+    use super::*;
+
+    #[test]
+    fn schedule_task_is_left_out_of_worker_payloads() {
+        let mut spec: AgentSpec = serde_json::from_value(serde_json::json!({
+            "instructions": { "system": "Help." },
+            "triggers": [
+                { "type": "manual" },
+                { "type": "schedule", "cron": "0 8 * * 1-5", "task": "Summarise new issues" }
+            ]
+        }))
+        .expect("valid spec");
+        omit_fields_workers_ignore(&mut spec);
+        let json = serde_json::to_value(&spec).unwrap();
+        assert_eq!(
+            json["triggers"][1],
+            serde_json::json!({ "type": "schedule", "cron": "0 8 * * 1-5" })
+        );
+    }
 }

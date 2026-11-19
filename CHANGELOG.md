@@ -6,6 +6,113 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
+## [Unreleased]
+
+### Changed
+
+- Web UI redesigned on a documented design system (`docs/development/design-system.md`):
+  theme-aware sidebar with regrouped, foldable navigation, bundled Archivo and JetBrains Mono fonts, flat
+  bordered surfaces, an orbit status glyph whose shape encodes state, and shared
+  primitives (`Section`, `Field`, `Callout`, `Segmented`, `ChoiceCard`, `DescriptionList`,
+  `DropdownMenu`, `useConfirm`).
+- Access controls (0.19.0 license gating) use the redesigned access field: without a license
+  that includes `teams` and `resource_permissions`, edit forms show a one-line note instead of
+  the controls and make no sharing requests. Agent access now sits at the end of the agent form,
+  and agent teams gained access settings.
+- The access field always shows the owning team (optional unless visibility is Team) and,
+  when strict team isolation is on, explains that only that team's members can see the
+  resource and how to share it with everyone.
+- Navigation labels: Dashboard is now **Overview**, Work is the standing **Start work**
+  action, Providers is **Model providers**, Teams is **Access teams**. Routes are unchanged.
+- Overview, Agents, Executions, execution detail, agent detail, Approvals, Start work,
+  Agent Studio, Agent teams, Workers, Settings (now tabbed) and the catalogue pages were
+  rebuilt on those primitives. Execution filters live in the URL.
+- **Environments**: mappings can now be edited and duplicated (the API already allowed it).
+  Each mapping is a card showing where every variable comes from and which worker profiles
+  use it; the editor picks one source per variable, suggests a name from the connection and
+  flags invalid or duplicate names.
+
+### Added
+
+- Command palette (`⌘K` / `Ctrl+K`) for pages, agents and common actions.
+- A schedule trigger can carry its own task (`spec.triggers[].task`), used as the task of
+  every run it fires. Editable in Agent Studio; **Start work → On a schedule** creates one.
+- Execution timeline reads as a story: what the agent said, the tools it used, which
+  connector actions were allowed, blocked or sent for approval, and what a person decided.
+  Agent answers render as Markdown. A run that ends without a result shows the agent's
+  last message. Verified against real OpenCode runs.
+- A run paused for approval shows "Needs approval" instead of "Running"; approvals show
+  the repository and how long until they expire.
+- Phone navigation reaches every page through a **More** sheet.
+- Light / Dark / System theme choice in the account menu.
+- **Activate** from the draft notice on an agent.
+- Settings shows the organization default harness, team isolation, and members and roles
+  to users with `settings:write`.
+
+- The 0.18.0 additions carried onto the new design: **Export as JSON** sits in each
+  row's overflow menu, access (visibility and owning team) is an "Access" block in edit
+  forms, and **Run again** uses the rerun endpoint. The separate grid/list toggle for
+  agents is gone: the agent list is always the compact, aligned list.
+
+### Fixed
+
+- Access: with strict team isolation on (the default), lists of agents, skills, worker
+  profiles, connections, providers, triggers, tool policies and agent teams showed non-admins
+  other teams' organization-visible resources, which then returned 404 when opened. List
+  queries now apply the same rule as the detail check.
+- Licenses: the `executions_per_day` limit, spelled as documented in ADR 0010, was ignored
+  because the parser only read `executionsPerDay`. Both spellings are now accepted.
+- **Workers → Edit** crashed on a fresh install: the seeded platform profile stored its
+  inline environment mappings as `{}` instead of a list. The seed now writes `[]` and the
+  editor treats anything but a list as empty.
+- Workers older than the schedule `task` field could not claim runs of an agent with a
+  scheduled task (their `TriggerSpec` refuses unknown fields), leaving the run stuck in
+  `dispatched`. The worker context now leaves that field out; workers never read triggers.
+- A run a live worker took but never started stayed `dispatched` forever, blocked the
+  agent's concurrency, and could not be cancelled. The API now ends it after 10 minutes
+  without activity (`worker_did_not_start`) or 60 seconds after an unanswered cancel, and
+  refuses a late `running` report for an ended run with `409` so the harness never starts.
+- Execution detail kept showing the status from when the page opened: status changes
+  that come without an event (picked up, cancel requested) now arrive by polling while a
+  run is active. A run a worker took but never started is flagged after two minutes.
+- Saving an agent in Agent Studio silently removed its harness, and the placement and
+  execution-mode settings were discarded. Studio now has an optional **Harness** choice:
+  "Choose per run" (each run picks one, or the organization default) or a specific harness
+  with its placement and execution mode, and saving keeps it. New agents start on "Choose
+  per run" instead of the mock harness.
+- Saving an agent whose spec did not change said "New version created"; it now says
+  "Agent saved", or names the version that was created.
+- Environments: "Attach to a worker" opens that worker profile with the mapping already
+  ticked; "Used by" links open the profile.
+- The agent **Executions** tab listed every agent's executions: the web client sent the
+  filter as `agent_id` while the API expects `agentId`.
+- Agent YAML export pointed at `http://localhost:8080` when no public API URL was set; it
+  now goes through the same origin with the session token.
+- Newly created draft agents were hidden by the agent list's default "Active" filter.
+- Execution detail rendered the approval and error notices twice.
+- Running an agent with no harness and no organization default failed with a raw API
+  error; the run dialog now asks for the harness up front.
+- OpenAI-compatible model providers could not be created: the web client sent a
+  `settings` field the API rejects for that kind.
+- An agent's default task was dropped on save because the shared schema did not know
+  `runDefaults`.
+- "Restore" on an archived agent always failed (the API has no such transition); the
+  button is gone and the archive dialog now says archiving cannot be undone.
+- Start work no longer offers options it does not act on (event and connector starts,
+  auto-approve, keep running); they are disabled and say so.
+- New agent teams no longer save a hardcoded repository and description nobody typed.
+- Start work: choosing a harness hid every agent without a harness of its own, and draft
+  agents could not be chosen. It also tried to launch a worker when one was already online.
+- Start work now warns when a repository is entered for an agent that cannot check it out.
+- Time spent waiting for an approval no longer counts toward the execution timeout
+  (`PauseClock` in the harness contract); an approval request now stays open for 15 minutes
+  regardless of the run's remaining time.
+- An action a person rejected is refused if the agent asks for it again in the same run,
+  instead of queueing a second identical approval.
+- OpenCode results contain the answer written after the last tool call, not every remark
+  the agent made along the way.
+- The "dispatched" event records the agent's provider and model, shown in execution details.
+
 ## [0.19.1] - 2026-11-19
 
 ### Fixed

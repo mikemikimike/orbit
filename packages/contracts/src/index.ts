@@ -42,7 +42,13 @@ export const connectorBindingSchema = z.object({
 });
 
 export const triggerSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("schedule"), cron: cronSchema, timezone: z.string().optional() }),
+  z.object({
+    type: z.literal("schedule"),
+    cron: cronSchema,
+    timezone: z.string().optional(),
+    /** What the agent is asked to do each time the schedule fires. */
+    task: z.string().max(20000).optional(),
+  }),
   z.object({ type: z.literal("webhook"), secretRef: z.string().optional() }),
   z.object({ type: z.literal("event"), subject: z.string().min(1, "event subject is required") }),
   z.object({ type: z.literal("manual") }),
@@ -98,6 +104,8 @@ export const agentSpecSchema = z.object({
       retentionDays: z.number().int().min(1).max(3650).optional(),
     })
     .default({ enabled: false, strategy: "none" }),
+  /** Pre-filled task for manual runs (mirrors `RunDefaults` in orbit-domain). */
+  runDefaults: z.object({ task: z.string().optional() }).optional(),
 });
 
 export const agentDefinitionSchema = z.object({
@@ -165,7 +173,6 @@ export function emptyAgentDefinition(): AgentDefinition {
     kind: "Agent",
     metadata: { name: "", description: "", labels: {} },
     spec: {
-      harness: { type: "mock", executionMode: "on_demand", placement: "auto", config: {} },
       model: { management: "harness", params: {} },
       instructions: { system: "", constraints: [] },
       connectors: [],

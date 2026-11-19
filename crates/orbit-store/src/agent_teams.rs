@@ -40,13 +40,16 @@ impl Store {
         org_id: Uuid,
         access: Option<&crate::access::ResourceAccess>,
     ) -> StoreResult<Vec<AgentTeam>> {
-        let (privileged, user_id, team_ids) = crate::access::binds(access);
+        let (privileged, user_id, team_ids, isolation) = crate::access::binds(access);
         Ok(sqlx::query_as::<_, AgentTeam>(
             r#"
             SELECT * FROM agent_teams
             WHERE org_id = $1
-              AND ($2::bool OR visibility = 'org' OR owner_user_id = $3
-                   OR (visibility = 'team' AND owner_team_id = ANY($4)))
+              AND ($2::bool OR owner_user_id = $3
+                   OR CASE WHEN $5::bool AND owner_team_id IS NOT NULL
+                        THEN owner_team_id = ANY($4)
+                        ELSE visibility = 'org'
+                             OR (visibility = 'team' AND owner_team_id = ANY($4)) END)
             ORDER BY created_at DESC
             "#,
         )
@@ -54,6 +57,7 @@ impl Store {
         .bind(privileged)
         .bind(user_id)
         .bind(&team_ids)
+        .bind(isolation)
         .fetch_all(&self.pool)
         .await?)
     }
@@ -175,7 +179,7 @@ impl Store {
         archived: Option<bool>,
         access: Option<&crate::access::ResourceAccess>,
     ) -> StoreResult<Vec<TeamRun>> {
-        let (privileged, user_id, team_ids) = crate::access::binds(access);
+        let (privileged, user_id, team_ids, isolation) = crate::access::binds(access);
         Ok(sqlx::query_as::<_, TeamRun>(
             r#"
             SELECT r.* FROM team_runs r
@@ -184,8 +188,11 @@ impl Store {
               AND ($2::boolean IS NULL
                    OR ($2 = FALSE AND r.archived_at IS NULL)
                    OR ($2 = TRUE AND r.archived_at IS NOT NULL))
-              AND ($3::bool OR t.visibility = 'org' OR t.owner_user_id = $4
-                   OR (t.visibility = 'team' AND t.owner_team_id = ANY($5)))
+              AND ($3::bool OR t.owner_user_id = $4
+                   OR CASE WHEN $6::bool AND t.owner_team_id IS NOT NULL
+                        THEN t.owner_team_id = ANY($5)
+                        ELSE t.visibility = 'org'
+                             OR (t.visibility = 'team' AND t.owner_team_id = ANY($5)) END)
             ORDER BY r.created_at DESC
             LIMIT 100
             "#,
@@ -195,6 +202,7 @@ impl Store {
         .bind(privileged)
         .bind(user_id)
         .bind(&team_ids)
+        .bind(isolation)
         .fetch_all(&self.pool)
         .await?)
     }

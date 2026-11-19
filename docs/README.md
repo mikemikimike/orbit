@@ -17,6 +17,8 @@
 
 ## Reference
 
+- **[Web design system](development/design-system.md)** — tokens, components and UI patterns for `apps/web`
+- **[UI test plan](development/ui-test-plan.md)** — repeatable manual flows for the web experience
 - **[Testing](development/testing.md)** — test expectations per change type
 - **[Kubernetes launcher](development/kubernetes-launcher.md)** — worker launch RBAC
 - **[Threat analysis](security/threat-analysis.md)** — security model

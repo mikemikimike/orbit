@@ -622,7 +622,9 @@ impl PiHarnessAdapter {
         let mut session = session_ref.clone();
         let mut error: Option<String> = None;
         let mut lines = BufReader::new(stdout).lines();
-        let deadline = tokio::time::sleep(timeout);
+        // Active time only: waiting for a human approval does not use up the timeout.
+        let pause = request.pause.clone();
+        let deadline = pause.deadline(timeout);
         tokio::pin!(deadline);
         let mut cancelled = false;
         let mut timed_out = false;
@@ -835,6 +837,7 @@ impl HarnessAdapter for PiHarnessAdapter {
             workspace: request.workspace,
             events: request.events,
             cancel: request.cancel,
+            pause: Default::default(),
         };
         self.run_pi(execution_request, settings, Some(request.session_ref))
             .await

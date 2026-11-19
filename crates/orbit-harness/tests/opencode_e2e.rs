@@ -58,6 +58,7 @@ fn request(model: &str) -> ExecutionRequest {
         },
         events: Some(events),
         cancel: tokio_util::sync::CancellationToken::new(),
+        pause: Default::default(),
     }
 }
 

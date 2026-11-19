@@ -476,6 +476,19 @@ fn write_agent_instructions(workspace: &Path, request: &ExecutionRequest) -> std
     std::fs::write(path, content)
 }
 
+/// Separates assistant text written before a tool call from what follows it.
+const STEP_BOUNDARY: char = '\u{1}';
+
+/// The agent's answer: the text after its last tool call. If the run ended on a tool
+/// call, fall back to the last thing it said, so a result is never silently empty.
+fn final_answer(text: &str) -> String {
+    text.rsplit(STEP_BOUNDARY)
+        .map(str::trim)
+        .find(|segment| !segment.is_empty())
+        .unwrap_or_default()
+        .to_string()
+}
+
 fn truncate(value: &str, limit: usize) -> String {
     if value.len() <= limit {
         value.to_string()
@@ -522,6 +535,11 @@ fn map_open_code_event(
             ))
         }
         "tool_use" => {
+            // Text written before a tool call is commentary on the way to the answer.
+            // Mark the boundary so the result can keep only what came after the last one.
+            if !text.ends_with(STEP_BOUNDARY) {
+                text.push(STEP_BOUNDARY);
+            }
             let tool = part.get("tool").and_then(Value::as_str).unwrap_or("tool");
             let state = part.get("state").cloned().unwrap_or(Value::Null);
             let status = state
@@ -746,7 +764,9 @@ impl OpenCodeHarnessAdapter {
         let mut lines = BufReader::new(stdout).lines();
         let mut timed_out = false;
         let mut cancelled = false;
-        let deadline = tokio::time::sleep(timeout);
+        // Active time only: waiting for a human approval does not use up the timeout.
+        let pause = request.pause.clone();
+        let deadline = pause.deadline(timeout);
         tokio::pin!(deadline);
 
         loop {
@@ -841,7 +861,7 @@ impl OpenCodeHarnessAdapter {
         }
 
         let output = json!({
-            "text": text.trim(),
+            "text": final_answer(&text),
             "sessionRef": session,
             "harness": "opencode",
             "wallTimeMs": usage.wall_time_ms,
@@ -984,6 +1004,7 @@ impl HarnessAdapter for OpenCodeHarnessAdapter {
             workspace: request.workspace,
             events: request.events,
             cancel: request.cancel,
+            pause: Default::default(),
         };
         let (outcome, _, _) = self
             .run_open_code(execution_request, settings, Some(request.session_ref))
@@ -1017,6 +1038,50 @@ mod tests {
             .windows(2)
             .any(|w| w[0] == "--session" && w[1] == "ses_123"));
         assert_eq!(args.last().unwrap(), "do the thing");
+    }
+
+    #[test]
+    fn result_text_is_the_answer_after_the_last_tool_call() {
+        let mut usage = Usage::default();
+        let mut text = String::new();
+        let feed = |line: &str, usage: &mut Usage, text: &mut String| {
+            map_open_code_event(&serde_json::from_str(line).unwrap(), usage, text)
+        };
+        feed(
+            r#"{"type":"text","part":{"text":"Let me look around first."}}"#,
+            &mut usage,
+            &mut text,
+        );
+        feed(
+            r#"{"type":"tool_use","part":{"tool":"read","state":{"status":"running"}}}"#,
+            &mut usage,
+            &mut text,
+        );
+        feed(
+            r#"{"type":"tool_use","part":{"tool":"read","state":{"status":"completed"}}}"#,
+            &mut usage,
+            &mut text,
+        );
+        feed(
+            r#"{"type":"text","part":{"text":"The answer"}}"#,
+            &mut usage,
+            &mut text,
+        );
+        feed(
+            r#"{"type":"text","part":{"text":"is 42."}}"#,
+            &mut usage,
+            &mut text,
+        );
+        assert_eq!(final_answer(&text), "The answer\nis 42.");
+
+        // Ending on a tool call keeps the last thing said instead of returning nothing.
+        feed(
+            r#"{"type":"tool_use","part":{"tool":"todowrite","state":{"status":"completed"}}}"#,
+            &mut usage,
+            &mut text,
+        );
+        assert_eq!(final_answer(&text), "The answer\nis 42.");
+        assert_eq!(final_answer(""), "");
     }
 
     #[test]
@@ -1083,6 +1148,7 @@ mod tests {
             workspace: Default::default(),
             events: None,
             cancel: CancellationToken::new(),
+            pause: Default::default(),
         };
         let prompt = build_prompt(&request);
         assert!(prompt.contains("# Input data (untrusted)"));

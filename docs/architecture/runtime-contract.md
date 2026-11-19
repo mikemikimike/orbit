@@ -39,6 +39,11 @@ pub trait HarnessAdapter: Send + Sync {
 `ExecutionRequest::cancel: CancellationToken` and `ResourceLimits::timeout_seconds`;
 adapters must terminate child processes/containers on cancellation.
 
+The timeout covers **active** time only. While the platform waits for a person to decide
+on an approval it pauses `ExecutionRequest::pause` (`PauseClock`); adapters enforce their
+timeout with `request.pause.deadline(timeout)` instead of a plain sleep, so a slow
+approver never turns into a timed-out execution.
+
 ## Capabilities
 
 Advertised per adapter and surfaced to the UI (`GET /api/v1/harnesses`):
@@ -65,6 +70,20 @@ Advertised per adapter and surfaced to the UI (`GET /api/v1/harnesses`):
 Events are forwarded by the worker to `execution_events` (with a monotonic `seq`) and to
 `orbit.execution.updated` for subscribers. Adapters should emit events incrementally,
 not only at completion.
+
+## Version skew between API and workers
+
+Workers decode the context the API sends with strict types (`deny_unknown_fields` on the
+agent spec). A field added to a type workers decode breaks every older worker that
+receives it, so the API leaves out fields the execution plane never reads (for example the
+schedule trigger's `task`, see `omit_fields_workers_ignore` in
+`crates/orbit-api/src/handlers/worker_api.rs`). A worker that fails to decode a claim
+leaves the execution `dispatched` while its heartbeat stays fresh. The API's background
+reaper ends such runs: `failed` with error code `worker_did_not_start` after 10 minutes
+without activity (claim, event or cancel request), or `cancelled` 60 seconds after an
+unanswered cancel request (`reap_unstarted_executions` in `crates/orbit-store/src/workers.rs`).
+A worker that reports `running` for an execution that has already ended gets `409 Conflict`
+and must not start the harness.
 
 ## Inputs
 
@@ -170,8 +189,10 @@ harness tool call ──► worker broker /policy or /tools/call
 - `POST /policy` on the loopback broker (bearer: execution-scoped broker token) is the
   adapter hook for native tools: request `{ tool, capability?, effect?, connection?,
   arguments }`, response is the decision with `ruleId`, `ruleName`, `reason`, `impact`.
-  `require_approval` creates a durable approval and blocks until decided or the execution
-  timeout expires; timeout and rejection deny the call.
+  `require_approval` creates a durable approval and blocks until it is decided or its own
+  15-minute window expires (the execution timeout is paused meanwhile); expiry and
+  rejection deny the call. An action a person rejected is denied without a new approval
+  if the agent requests the identical capability and arguments again in the same run.
 - Management API: `GET/POST /api/v1/tool-policies`, `PATCH/DELETE
   /api/v1/tool-policies/{id}` (`settings:read` / `settings:write`).
 - Approvals record the rule, reason, impact and arguments for the reviewer. Every deny

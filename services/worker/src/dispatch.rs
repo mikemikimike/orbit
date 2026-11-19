@@ -158,7 +158,9 @@ pub async fn run(
     })?;
 
     let wait = child.wait();
-    let timeout = Duration::from_secs(execution.timeout_seconds.max(1) as u64 + 180);
+    // The container enforces the real timeout (pausing for approvals); this is only a
+    // backstop, so it allows for one full approval window on top.
+    let timeout = Duration::from_secs(execution.timeout_seconds.max(1) as u64 + 180 + 900);
     let status = match tokio::time::timeout(timeout, wait).await {
         Ok(result) => result?,
         Err(_) => {

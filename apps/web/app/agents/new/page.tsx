@@ -34,11 +34,11 @@ export default function NewAgentPage() {
   }
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="space-y-6">
       <PageHeader
-        eyebrow="Agent Studio"
+        back={{ href: "/agents", label: "Agents" }}
         title="New agent"
-        description="Define identity, harness, model and behaviour. Saving creates immutable version 1."
+        description="Define who the agent is, what it does and how much it may do alone. Saving creates version 1, which is immutable."
       />
       <AgentForm submitLabel="Create agent" submitting={submitting} onSubmit={handleSubmit} />
     </div>

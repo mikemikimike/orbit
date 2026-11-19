@@ -3,8 +3,8 @@ use std::sync::Arc;
 use base64::Engine;
 use orbit_domain::{
     AgentDefinition, AgentMetadata, AgentSpec, AgentStatus, AutonomySpec, ExecutionMode,
-    ExecutionStatus, HarnessKind, HarnessSpec, Instructions, MemorySpec, ModelSpec, ResourceLimits,
-    TriggerSource, TriggerSpec, UserRole,
+    ExecutionStatus, HarnessKind, HarnessSpec, Instructions, LogLevel, MemorySpec, ModelSpec,
+    ResourceLimits, TriggerSource, TriggerSpec, UserRole,
 };
 use orbit_security::{SecretCipher, SecretValue};
 use orbit_store::executions::NewExecution;
@@ -62,6 +62,7 @@ fn definition(name: &str) -> AgentDefinition {
             triggers: vec![TriggerSpec::Schedule {
                 cron: "*/15 * * * *".into(),
                 timezone: None,
+                task: None,
             }],
             autonomy: AutonomySpec {
                 level: 2,
@@ -577,6 +578,144 @@ async fn orphaned_executions_are_failed_and_approvals_expired() {
 }
 
 #[tokio::test]
+async fn unstarted_executions_on_a_live_worker_are_ended() {
+    let Some(store) = test_store().await else {
+        return;
+    };
+    let (org, user) = seed_org(&store).await;
+    let (agent, version) = store
+        .create_agent(org, Some(user), &definition("Unstarted Reaper Agent"))
+        .await
+        .unwrap();
+    store
+        .upsert_worker_heartbeat("worker-skewed", &["mock".into()], "local", Some("test"))
+        .await
+        .unwrap();
+
+    let claimed = |key: &'static str| {
+        let store = &store;
+        let agent = &agent;
+        let version = &version;
+        async move {
+            let execution = store
+                .create_execution(NewExecution {
+                    org_id: org,
+                    agent_id: agent.id,
+                    agent_version_id: version.id,
+                    agent_name: &agent.name,
+                    harness_kind: HarnessKind::Mock,
+                    trigger_source: TriggerSource::Manual,
+                    placement: "auto",
+                    trigger_id: None,
+                    input: serde_json::json!({ "task": "x", "payload": {}, "provenance": { "source": "test", "trusted": true, "receivedAt": chrono::Utc::now() } }),
+                    skills: &[],
+                    timeout_seconds: 30,
+                    requested_by: Some(user),
+                    idempotency_key: Some(key),
+                    team_run_id: None,
+                    team_step_index: None,
+                })
+                .await
+                .unwrap();
+            store
+                .claim_execution(execution.id, "worker-skewed")
+                .await
+                .unwrap();
+            execution
+        }
+    };
+    let age = |id: uuid::Uuid, interval: &'static str| {
+        let store = &store;
+        async move {
+            sqlx::query(&format!(
+                "UPDATE executions SET created_at = now() - interval '{interval}', \
+                 started_at = now() - interval '{interval}', updated_at = now() - interval '{interval}' \
+                 WHERE id = $1"
+            ))
+            .bind(id)
+            .execute(store.pool())
+            .await
+            .unwrap();
+            sqlx::query(&format!(
+                "UPDATE execution_events SET created_at = now() - interval '{interval}' WHERE execution_id = $1"
+            ))
+            .bind(id)
+            .execute(store.pool())
+            .await
+            .unwrap();
+        }
+    };
+
+    // Claimed an hour ago, nothing since: the worker never got it.
+    let silent = claimed("unstarted-silent").await;
+    age(silent.id, "1 hour").await;
+
+    // Claimed an hour ago but still reporting (a long checkout, say): leave it alone.
+    let busy = claimed("unstarted-busy").await;
+    age(busy.id, "1 hour").await;
+    store
+        .append_execution_event(
+            org,
+            busy.id,
+            "status",
+            LogLevel::Info,
+            "checking out repository",
+            &serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+
+    // Cancel requested two minutes ago and ignored: end it as cancelled.
+    let cancelled = claimed("unstarted-cancelled").await;
+    store
+        .request_execution_cancel(org, cancelled.id)
+        .await
+        .unwrap();
+    age(cancelled.id, "2 minutes").await;
+
+    // Started runs belong to the heartbeat reaper, not this one.
+    let running = claimed("unstarted-running").await;
+    store
+        .mark_execution_running(running.id, Some("s"))
+        .await
+        .unwrap();
+    age(running.id, "1 hour").await;
+
+    let reaped = store
+        .reap_unstarted_executions(Some(org), 600, 60)
+        .await
+        .unwrap();
+    let mut ids: Vec<uuid::Uuid> = reaped.iter().map(|row| row.id).collect();
+    ids.sort();
+    let mut expected = vec![silent.id, cancelled.id];
+    expected.sort();
+    assert_eq!(ids, expected, "only the silent and the cancelled run end");
+
+    let silent_now = store.get_execution(org, silent.id).await.unwrap();
+    assert_eq!(silent_now.status, "failed");
+    assert_eq!(silent_now.error.unwrap()["code"], "worker_did_not_start");
+    assert_eq!(
+        store.get_execution(org, cancelled.id).await.unwrap().status,
+        "cancelled"
+    );
+    assert_eq!(
+        store.get_execution(org, busy.id).await.unwrap().status,
+        "dispatched"
+    );
+    assert_eq!(
+        store.get_execution(org, running.id).await.unwrap().status,
+        "running"
+    );
+
+    // A worker that finally reports in cannot revive an ended run.
+    assert!(store
+        .mark_execution_running(silent.id, Some("late"))
+        .await
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test]
 async fn single_execution_mode_can_take_a_dispatched_execution() {
     let Some(store) = test_store().await else {
         return;
@@ -970,6 +1109,84 @@ async fn access_teams_and_ownership_defaults() {
 
     store.remove_team_member(team.id, user).await.unwrap();
     store.delete_access_team(org, team.id).await.unwrap();
+}
+
+#[tokio::test]
+async fn lists_honour_strict_team_isolation() {
+    use orbit_store::access::ResourceAccess;
+
+    let Some(store) = test_store().await else {
+        return;
+    };
+    let (org, owner) = seed_org(&store).await;
+    let viewer = store
+        .create_user(org, "operator@test.local", "Operator", UserRole::Operator)
+        .await
+        .expect("user");
+    let ours = store
+        .create_access_team(org, "Ours", "ours", Some(owner))
+        .await
+        .expect("team");
+    let theirs = store
+        .create_access_team(org, "Theirs", "theirs", Some(owner))
+        .await
+        .expect("team");
+    store
+        .upsert_team_member(ours.id, viewer.id, "member")
+        .await
+        .unwrap();
+
+    let agent = |name: &'static str, visibility: &'static str, team: Option<uuid::Uuid>| {
+        let store = &store;
+        async move {
+            let created = store
+                .create_agent(org, Some(owner), &definition(name))
+                .await
+                .expect("agent")
+                .0;
+            store
+                .set_resource_visibility(org, "agents", created.id, visibility, team)
+                .await
+                .expect("visibility");
+        }
+    };
+    agent("Org, other team", "org", Some(theirs.id)).await;
+    agent("Org, our team", "org", Some(ours.id)).await;
+    agent("Org, no team", "org", None).await;
+    agent("Private, other team", "private", Some(theirs.id)).await;
+
+    let names = |access: ResourceAccess| {
+        let store = &store;
+        async move {
+            let (agents, _, total) = store
+                .list_agents(org, 50, None, None, None, Some(&access))
+                .await
+                .expect("list");
+            let mut names: Vec<String> = agents.into_iter().map(|agent| agent.agent.name).collect();
+            names.sort();
+            assert_eq!(total as usize, names.len(), "count matches the page");
+            names
+        }
+    };
+    let member = ResourceAccess::new(viewer.id, false, vec![ours.id]);
+
+    assert_eq!(
+        names(member.clone()).await,
+        ["Org, no team", "Org, other team", "Org, our team"],
+        "without isolation, organization visibility is enough"
+    );
+    assert_eq!(
+        names(member.with_team_isolation(true)).await,
+        ["Org, no team", "Org, our team"],
+        "with isolation, another team's resources stay hidden"
+    );
+    assert_eq!(
+        names(ResourceAccess::new(owner, true, vec![]).with_team_isolation(true))
+            .await
+            .len(),
+        4,
+        "admins see everything"
+    );
 }
 
 #[tokio::test]

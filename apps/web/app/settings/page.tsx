@@ -1,26 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  BookOpen,
-  Boxes,
-  Cable,
-  Copy,
-  Cpu,
-  KeyRound,
-  LogOut,
-  Plus,
-  Server,
-  ShieldCheck,
-  Trash2,
-} from "lucide-react";
-import Link from "next/link";
+import { Check, Copy, KeyRound, LogOut, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
+import { Disclosure } from "@/components/ui/disclosure";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Callout } from "@/components/ui/callout";
+import { Card } from "@/components/ui/card";
+import { CheckboxField } from "@/components/ui/checkbox";
+import { useConfirm } from "@/components/ui/confirm";
+import { DescriptionList } from "@/components/ui/description-list";
 import {
   Dialog,
   DialogContent,
@@ -29,10 +21,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
+import { Section } from "@/components/ui/section";
+import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { request } from "@/lib/http";
 import { signOut } from "@/lib/session";
@@ -48,18 +45,212 @@ import {
   useHarnesses,
 } from "@/lib/queries";
 import { errorMessage } from "@orbit/api-client";
-import { formatDateTime, relativeTime, titleCase } from "@/lib/utils";
+import { formatDate, formatDateTime, relativeTime, titleCase } from "@/lib/utils";
+import { humanizeIdentifier } from "@/lib/presentation";
+
+/* ----------------------------------------------------------------------------
+ * Shared helpers
+ * ------------------------------------------------------------------------- */
+
+const PERMISSION_LABELS: Record<string, string> = {
+  "agents:read": "View agents",
+  "agents:write": "Create and edit agents",
+  "executions:read": "View executions",
+  "executions:create": "Start executions",
+  "executions:cancel": "Cancel executions",
+  "approvals:decide": "Decide approvals",
+  "harnesses:read": "View harnesses",
+  "providers:read": "View model providers",
+  "providers:write": "Manage model providers",
+  "connections:read": "View connections",
+  "connections:write": "Manage connections",
+  "triggers:write": "Manage triggers",
+  "settings:read": "View settings",
+  "settings:write": "Change settings",
+  "members:read": "View members",
+  "audit:read": "View audit log",
+};
+
+const permissionLabel = (permission: string) => PERMISSION_LABELS[permission] ?? permission;
+
+/** Labels for server identifiers ("apiTokens" → "API tokens", "custom_roles" → "Custom roles"). */
+const humanize = (value: string) => humanizeIdentifier(value);
+
+const TABS = [
+  { id: "account", label: "Account" },
+  { id: "tokens", label: "API tokens" },
+  { id: "sso", label: "Single sign-on" },
+  { id: "members", label: "Members and roles" },
+  { id: "platform", label: "Platform" },
+  { id: "audit", label: "Audit log" },
+] as const;
+type TabId = (typeof TABS)[number]["id"];
+
+function ListSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <Card className="overflow-hidden">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div key={index} className="border-b px-5 py-3.5 last:border-b-0">
+          <Skeleton className="h-9" />
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+/* ----------------------------------------------------------------------------
+ * Page
+ * ------------------------------------------------------------------------- */
 
 export default function SettingsPage() {
   const me = useMe();
-  const meta = useMeta();
-  const license = useLicense();
+  const canManage = me.data?.permissions.includes("settings:write") ?? false;
+  const [tab, setTab] = useState<TabId>("account");
+
+  // The selected tab lives in the URL hash (#tokens) so a tab can be linked to.
+  useEffect(() => {
+    const read = () => {
+      const hash = window.location.hash.slice(1);
+      if (TABS.some((item) => item.id === hash)) setTab(hash as TabId);
+    };
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, []);
+
+  function selectTab(next: string) {
+    setTab(next as TabId);
+    try {
+      window.history.replaceState(null, "", `#${next}`);
+    } catch {
+      // The tab still switches; only the link is lost.
+    }
+  }
+
+  const visibleTabs = TABS.filter((item) => item.id !== "members" || canManage);
+  const activeTab = visibleTabs.some((item) => item.id === tab) ? tab : "account";
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Settings"
+        description="Your account, API access, sign-in, who can do what, and how this installation is set up."
+        actions={
+          <Button variant="outline" onClick={() => signOut()}>
+            <LogOut /> Sign out
+          </Button>
+        }
+      />
+
+      <Tabs value={activeTab} onValueChange={selectTab}>
+        <TabsList aria-label="Settings sections">
+          {visibleTabs.map((item) => (
+            <TabsTrigger key={item.id} value={item.id}>
+              {item.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        <TabsContent value="account">
+          <AccountTab />
+        </TabsContent>
+        <TabsContent value="tokens">
+          <TokensTab />
+        </TabsContent>
+        <TabsContent value="sso">
+          <SsoTab />
+        </TabsContent>
+        {canManage ? (
+          <TabsContent value="members">
+            <MembersTab />
+          </TabsContent>
+        ) : null}
+        <TabsContent value="platform">
+          <PlatformTab />
+        </TabsContent>
+        <TabsContent value="audit">
+          <AuditTab />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------------------
+ * Account
+ * ------------------------------------------------------------------------- */
+
+function AccountTab() {
+  const me = useMe();
+
+  if (me.isLoading) return <Skeleton className="h-64 rounded-xl" />;
+  if (!me.data) {
+    return (
+      <Callout tone="danger" title="Could not load your account">
+        {errorMessage(me.error)}
+      </Callout>
+    );
+  }
+  const { user, organization, permissions, authMethod } = me.data;
+
+  return (
+    <div className="max-w-3xl space-y-5">
+      <div className="grid gap-5 sm:grid-cols-2">
+        <Card className="p-4">
+          <h2 className="mb-3 text-[15px] font-semibold">You</h2>
+          <DescriptionList
+            items={[
+              { label: "Name", value: user.displayName },
+              { label: "Email", value: user.email },
+              { label: "Role", value: <Badge variant="default">{titleCase(user.role)}</Badge> },
+              { label: "Signed in with", value: titleCase(authMethod) },
+            ]}
+          />
+        </Card>
+        <Card className="p-4">
+          <h2 className="mb-3 text-[15px] font-semibold">Organization</h2>
+          <DescriptionList
+            items={[
+              { label: "Name", value: organization.name },
+              { label: "Slug", value: organization.slug, mono: true },
+              { label: "Mode", value: titleCase(organization.mode) },
+            ]}
+          />
+        </Card>
+      </div>
+        <Disclosure
+          title={`What ${titleCase(user.role)} can do`}
+          summary={`${permissions.length} permission${permissions.length === 1 ? "" : "s"}`}
+        >
+          {permissions.length ? (
+            <ul className="grid gap-x-6 gap-y-1.5 text-[13px] sm:grid-cols-2" aria-label="Your permissions">
+              {permissions.map((permission) => (
+                <li key={permission} className="flex items-baseline justify-between gap-3">
+                  <span>{permissionLabel(permission)}</span>
+                  <span className="font-mono text-xs text-muted-foreground">{permission}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">Your role has no permissions.</p>
+          )}
+        </Disclosure>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------------------
+ * API tokens
+ * ------------------------------------------------------------------------- */
+
+function TokensTab() {
   const tokens = useApiTokens();
-  const audit = useAuditLogs();
   const queryClient = useQueryClient();
-  const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
+  const confirm = useConfirm();
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [tokenName, setTokenName] = useState("automation");
   const [createdToken, setCreatedToken] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const createToken = useMutation({
     mutationFn: async () =>
@@ -70,7 +261,8 @@ export default function SettingsPage() {
       ),
     onSuccess: (result) => {
       setCreatedToken(result.token);
-      setTokenDialogOpen(false);
+      setCopied(false);
+      setDialogOpen(false);
       setTokenName("automation");
       void queryClient.invalidateQueries({ queryKey: queryKeys.tokens });
     },
@@ -86,382 +278,196 @@ export default function SettingsPage() {
       ),
     onSuccess: () => {
       toast.success("Token revoked");
+      // The one-time value above may belong to the token just revoked.
+      setCreatedToken(null);
       void queryClient.invalidateQueries({ queryKey: queryKeys.tokens });
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
 
-  function signOutLocal() {
-    signOut();
+  async function copyToken() {
+    if (!createdToken) return;
+    const ok = await copyText(createdToken);
+    if (ok) {
+      setCopied(true);
+      toast.success("Token copied");
+    } else {
+      toast.error("Copying is not available here. Select the token and copy it by hand.");
+    }
   }
 
-  const authMode = String((meta.data?.auth as { mode?: string } | undefined)?.mode ?? "—");
+  async function revoke(id: string, name: string) {
+    const ok = await confirm({
+      title: `Revoke token ${name}?`,
+      description: "Anything that uses it stops working right away. This cannot be undone.",
+      confirmLabel: "Revoke token",
+      destructive: true,
+    });
+    if (ok) revokeToken.mutate(id);
+  }
 
   return (
-    <div className="space-y-5 animate-fade-in">
-      <PageHeader
-        eyebrow="Platform"
-        title="Settings"
-        description="Identity, authentication, API tokens, audit trail and platform metadata."
+    <div className="space-y-6">
+      {createdToken ? (
+        <Callout
+          tone="warning"
+          title="Copy your new token now"
+          icon={<KeyRound />}
+          action={
+            <Button variant="outline" onClick={() => setCreatedToken(null)}>
+              I have saved it
+            </Button>
+          }
+        >
+          <div className="space-y-3 pt-1">
+            <p>You will not see this token again. ORBIT keeps only a hash of it.</p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <code
+                className="block min-w-0 flex-1 select-all break-all rounded-md border bg-card px-3 py-2 font-mono text-xs text-foreground"
+              >
+                {createdToken}
+              </code>
+              <Button onClick={() => void copyToken()} className="shrink-0">
+                {copied ? <Check /> : <Copy />} {copied ? "Copied" : "Copy token"}
+              </Button>
+            </div>
+          </div>
+        </Callout>
+      ) : null}
+
+      <Section
+        title="API tokens"
+        count={tokens.data?.length}
+        description="Tokens let CI, scripts and other clients call the ORBIT API. Send one as a bearer token in the Authorization header."
         actions={
-          <Button variant="outline" onClick={signOutLocal}>
-            <LogOut /> Sign out
-          </Button>
-        }
-      />
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-primary" /> Identity
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            {me.isLoading ? (
-              <Skeleton className="h-24" />
-            ) : me.data ? (
-              <>
-                <Row label="User" value={me.data.user.displayName} />
-                <Row label="Email" value={me.data.user.email} />
-                <Row label="Role" value={titleCase(me.data.user.role)} />
-                <Row label="Organization" value={me.data.organization.name} />
-                <Row label="Org slug" value={me.data.organization.slug} />
-                <Row label="Org mode" value={titleCase(me.data.organization.mode)} />
-                <Row label="Auth method" value={titleCase(me.data.authMethod)} />
-                <div className="pt-2">
-                  <p className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-                    Permissions
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {me.data.permissions.map((permission) => (
-                      <Badge key={permission} variant="outline">
-                        {permission}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <p className="text-destructive">{errorMessage(me.error)}</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Platform</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            {meta.data ? (
-              <>
-                <Row label="Version" value={meta.data.version} />
-                <Row label="API" value={meta.data.apiVersion} />
-                <Row label="Environment" value={meta.data.environment} />
-                <Row label="Auth mode" value={authMode} />
-                <Row label="Event transport" value={meta.data.eventsDriver} />
-                <div className="pt-2">
-                  <p className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-                    Feature readiness
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {Object.entries(meta.data.features).map(([feature, enabled]) => (
-                      <Badge key={feature} variant={enabled ? "success" : "outline"}>
-                        {enabled ? "✓" : "×"} {feature}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <Skeleton className="h-24" />
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <ShortcutCard
-          href="/agents"
-          title="Agents"
-          description="Create and configure agents"
-          icon={<ShieldCheck className="h-4 w-4" />}
-        />
-        <ShortcutCard
-          href="/harnesses"
-          title="Harnesses"
-          description="Capabilities and harness status"
-          icon={<Cpu className="h-4 w-4" />}
-        />
-        <ShortcutCard
-          href="/models"
-          title="Models"
-          description="Providers and credentials"
-          icon={<Boxes className="h-4 w-4" />}
-        />
-        <ShortcutCard
-          href="/connections"
-          title="Connections"
-          description="External service accounts"
-          icon={<Cable className="h-4 w-4" />}
-        />
-        <ShortcutCard
-          href="/skills"
-          title="Skills"
-          description="Reusable SKILL.md packages"
-          icon={<BookOpen className="h-4 w-4" />}
-        />
-        <ShortcutCard
-          href="/workers"
-          title="Workers"
-          description="Bootstrap profiles and targets"
-          icon={<Server className="h-4 w-4" />}
-        />
-      </div>
-
-      <DefaultHarnessCard />
-      <AccessPolicyCard />
-      <UsersRolesCard />
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-primary" /> OIDC / SSO
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-[11px] text-muted-foreground">
-            Configure OpenID Connect for single sign-on. Stored in the platform settings,
-            merged over environment values in OIDC mode and applied when the API starts
-            (restart the API after saving). Leave blank to keep environment defaults.
-          </p>
-          <OidcSettingsForm />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-primary" /> License
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          {license.isLoading ? (
-            <Skeleton className="h-20" />
-          ) : license.data ? (
-            <>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={license.data.license.valid ? "success" : "outline"}>
-                  {license.data.license.tier}
-                </Badge>
-                {license.data.license.customer ? (
-                  <span className="text-xs text-muted-foreground">
-                    {license.data.license.customer}
-                  </span>
-                ) : null}
-                {license.data.license.grace ? (
-                  <Badge variant="outline">grace period</Badge>
-                ) : null}
-              </div>
-              {license.data.license.valid ? (
-                <>
-                  <p className="text-[11px] text-muted-foreground">
-                    Expires {license.data.license.expiresAt ?? "never"}
-                    {typeof license.data.license.daysRemaining === "number"
-                      ? ` · ${license.data.license.daysRemaining} day(s) remaining`
-                      : ""}
-                  </p>
-                  <div className="grid gap-1 text-[11px] text-muted-foreground sm:grid-cols-2">
-                    {Object.entries(license.data.usage).map(([key, value]) => {
-                      const limitKey = key === "executionsToday" ? "executions_per_day" : key;
-                      const limit = license.data?.license.limits[limitKey];
-                      return (
-                        <span key={key}>
-                          {key}: {String(value)}
-                          {limit ? ` / ${String(limit)}` : ""}
-                        </span>
-                      );
-                    })}
-                  </div>
-                  {license.data.warnings.length ? (
-                    <p className="text-[11px] text-[hsl(var(--warning))]">
-                      {license.data.warnings.join(" · ")}
-                    </p>
-                  ) : null}
-                  <p className="text-[11px] text-muted-foreground">
-                    Features: {license.data.license.features.join(", ") || "none"}
-                  </p>
-                </>
-              ) : (
-                <p className="text-[11px] text-muted-foreground">
-                  Community edition. Install an offline license Secret to unlock enterprise
-                  features (see docs/development/licensing.md).
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="text-[11px] text-muted-foreground">License status unavailable.</p>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <KeyRound className="h-4 w-4 text-primary" /> API tokens
-          </CardTitle>
-          <Button size="sm" onClick={() => setTokenDialogOpen(true)}>
+          <Button onClick={() => setDialogOpen(true)}>
             <Plus /> New token
           </Button>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {tokens.isLoading ? (
-            <Skeleton className="h-16" />
-          ) : tokens.data?.length ? (
-            tokens.data.map((token) => (
+        }
+      >
+        {tokens.isLoading ? (
+          <ListSkeleton rows={2} />
+        ) : tokens.isError ? (
+          <Callout tone="danger" title="Could not load tokens">
+            {errorMessage(tokens.error)}
+          </Callout>
+        ) : tokens.data?.length ? (
+          <Card className="overflow-hidden">
+            {tokens.data.map((token) => (
               <div
                 key={token.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
+                className="flex flex-col gap-2 border-b px-4 py-3.5 last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:px-5"
               >
-                <div>
-                  <p className="text-sm font-medium">{token.name}</p>
-                  <p className="font-mono text-[11px] text-muted-foreground">
-                    {token.tokenPrefix}… · {token.scopes.length} scopes
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-sm font-medium">{token.name}</p>
+                    {token.revokedAt ? <Badge variant="secondary">Revoked</Badge> : null}
+                  </div>
+                  <p className="mt-0.5 flex flex-wrap items-baseline gap-x-4 gap-y-0.5 text-[13px] text-muted-foreground">
+                    <span className="font-mono text-xs">{token.tokenPrefix}…</span>
+                    <span>
+                      {token.scopes.length
+                        ? `${token.scopes.length} ${token.scopes.length === 1 ? "scope" : "scopes"}`
+                        : "Inherits your role"}
+                    </span>
+                    <span>
+                      {token.revokedAt
+                        ? `Revoked ${relativeTime(token.revokedAt)}`
+                        : token.lastUsedAt
+                          ? `Used ${relativeTime(token.lastUsedAt)}`
+                          : "Never used"}
+                    </span>
                   </p>
                 </div>
-                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <span>
-                    {token.revokedAt
-                      ? "revoked"
-                      : token.lastUsedAt
-                        ? `used ${relativeTime(token.lastUsedAt)}`
-                        : "never used"}
-                  </span>
-                  {!token.revokedAt ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive"
-                      onClick={() => {
-                        if (window.confirm(`Revoke token ${token.name}?`)) {
-                          revokeToken.mutate(token.id);
-                        }
-                      }}
-                    >
-                      <Trash2 /> Revoke
-                    </Button>
-                  ) : null}
-                </div>
+                {token.revokedAt ? null : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="shrink-0 self-start text-destructive hover:text-destructive sm:self-auto"
+                    onClick={() => void revoke(token.id, token.name)}
+                    loading={revokeToken.isPending && revokeToken.variables === token.id}
+                  >
+                    Revoke
+                  </Button>
+                )}
               </div>
-            ))
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No tokens. Create one for CI, scripts or future native clients.
-            </p>
-          )}
-          <p className="text-[11px] text-muted-foreground">
-            Tokens are shown once and stored hashed. Use them as{" "}
-            <code className="font-mono">Authorization: Bearer orbit_sk_…</code>.
-          </p>
-        </CardContent>
-      </Card>
+            ))}
+          </Card>
+        ) : (
+          <EmptyState
+            icon={<KeyRound />}
+            title="No API tokens yet"
+            description="Create one for CI, scripts or other clients. You see its value once, right after creating it."
+            action={
+              <Button onClick={() => setDialogOpen(true)}>
+                <Plus /> New token
+              </Button>
+            }
+          />
+        )}
+      </Section>
 
-      <Card>
-        <CardHeader className="flex-row items-center justify-between">
-          <CardTitle>Recent audit activity</CardTitle>
-          <Link href="/executions" className="text-xs text-primary hover:underline">
-            See executions
-          </Link>
-        </CardHeader>
-        <CardContent>
-          {audit.isLoading ? (
-            <Skeleton className="h-32" />
-          ) : audit.data?.items.length ? (
-            <div className="space-y-1.5">
-              {audit.data.items.slice(0, 12).map((entry) => (
-                <div
-                  key={entry.id}
-                  className="flex flex-wrap items-center justify-between gap-2 border-b py-1.5 text-xs last:border-b-0"
-                >
-                  <div className="min-w-0">
-                    <span className="font-medium">{entry.action}</span>
-                    <span className="text-muted-foreground">
-                      {" "}
-                      · {entry.actorEmail ?? entry.actorType}
-                      {entry.targetType ? ` · ${entry.targetType}` : ""}
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-muted-foreground">
-                    {formatDateTime(entry.createdAt)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No audit activity yet.</p>
-          )}
-        </CardContent>
-      </Card>
-
-      <Dialog open={tokenDialogOpen} onOpenChange={setTokenDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create API token</DialogTitle>
+            <DialogTitle>New API token</DialogTitle>
             <DialogDescription>
-              The token inherits your current role permissions unless scopes are restricted.
+              The token can do whatever your role can do, unless its scopes are restricted.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-1.5">
-            <Label>Name</Label>
-            <Input
-              value={tokenName}
-              onChange={(event) => setTokenName(event.target.value)}
-              placeholder="ci-deploy"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setTokenDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => createToken.mutate()} loading={createToken.isPending}>
-              Create token
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(createdToken)} onOpenChange={(next) => !next && setCreatedToken(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Token created</DialogTitle>
-            <DialogDescription>
-              Copy it now. It cannot be retrieved again; only its hash is stored.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center gap-2 rounded-lg border bg-muted/40 p-2">
-            <code className="min-w-0 flex-1 break-all font-mono text-xs">{createdToken}</code>
-            <Button
-              size="icon"
-              variant="outline"
-              onClick={async () => {
-                if (!createdToken) return;
-                const copied = await copyText(createdToken);
-                if (copied) toast.success("Copied");
-                else toast.error("Copy is unavailable in this browser context");
-              }}
-            >
-              <Copy />
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setCreatedToken(null)}>Done</Button>
-          </DialogFooter>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!createToken.isPending) createToken.mutate();
+            }}
+          >
+            <Field label="Name" htmlFor="token-name" hint="Say what will use it, for example ci-deploy.">
+              <Input
+                id="token-name"
+                value={tokenName}
+                placeholder="ci-deploy"
+                autoFocus
+                onChange={(event) => setTokenName(event.target.value)}
+              />
+            </Field>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={createToken.isPending}>
+                Create token
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
   );
 }
 
+/* ----------------------------------------------------------------------------
+ * Single sign-on
+ * ------------------------------------------------------------------------- */
+
+function SsoTab() {
+  return (
+    <div className="space-y-6">
+      <Callout tone="info" title="Applied when the API starts">
+        These settings are stored by ORBIT and merged over the environment values in OIDC mode. Restart
+        the API after saving. Fields you leave blank keep the environment defaults.
+      </Callout>
+      <Section
+        title="OpenID Connect"
+        description="Let people sign in with your identity provider, such as Keycloak, Dex or Okta."
+      >
+        <Card className="p-4 sm:p-5">
+          <OidcSettingsForm />
+        </Card>
+      </Section>
+    </div>
+  );
+}
 
 function OidcSettingsForm() {
   const [issuer, setIssuer] = useState("");
@@ -474,6 +480,7 @@ function OidcSettingsForm() {
   const [defaultRole, setDefaultRole] = useState("viewer");
   const [emailClaim, setEmailClaim] = useState("email");
   const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const load = async () => {
     try {
@@ -498,10 +505,23 @@ function OidcSettingsForm() {
 
   if (!loaded) {
     void load();
-    return <p className="text-sm text-muted-foreground">Loading…</p>;
+    return (
+      <div className="space-y-4" aria-busy="true">
+        <Skeleton className="h-9" />
+        <Skeleton className="h-9" />
+        <Skeleton className="h-9" />
+      </div>
+    );
   }
 
   async function save() {
+    // These values take effect on the next restart; a typo here locks people out.
+    if (issuer.trim() && !/^https?:\/\/\S+$/.test(issuer.trim())) {
+      toast.error("The issuer must be a full URL, for example https://accounts.example.com");
+      document.getElementById("oidc-issuer")?.focus();
+      return;
+    }
+    setSaving(true);
     try {
       await api.PUT("/api/v1/settings/oidc", {
         body: {
@@ -518,133 +538,155 @@ function OidcSettingsForm() {
           },
         },
       });
-      toast.success("OIDC settings saved — restart the API to apply");
+      toast.success("Sign-in settings saved. Restart the API to apply them.");
     } catch (error) {
       toast.error(errorMessage(error));
+    } finally {
+      setSaving(false);
     }
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="space-y-1.5 sm:col-span-2">
-        <Label>Issuer URL</Label>
-        <Input value={issuer} onChange={(e) => setIssuer(e.target.value)} placeholder="https://accounts.example.com" />
-      </div>
-      <div className="space-y-1.5">
-        <Label>Client ID</Label>
-        <Input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="orbit-web" />
-      </div>
-      <div className="space-y-1.5">
-        <Label>Redirect URI</Label>
-        <Input value={redirectUri} onChange={(e) => setRedirectUri(e.target.value)} placeholder="http://localhost:3000/auth/callback" />
-      </div>
-      <div className="space-y-1.5">
-        <Label>Scopes</Label>
-        <Input value={scopes} onChange={(e) => setScopes(e.target.value)} placeholder="openid profile email" />
-      </div>
-      <div className="space-y-1.5">
-        <Label>Audience</Label>
-        <Input value={audience} onChange={(e) => setAudience(e.target.value)} placeholder="orbit-api" />
-      </div>
-      <div className="space-y-1.5">
-        <Label>JWKS URL</Label>
-        <Input value={jwksUrl} onChange={(e) => setJwksUrl(e.target.value)} placeholder="https://accounts.example.com/.well-known/jwks.json" />
-      </div>
-      <div className="space-y-1.5">
-        <Label>Default role</Label>
-        <Input value={defaultRole} onChange={(e) => setDefaultRole(e.target.value)} placeholder="viewer" />
-      </div>
-      <div className="space-y-1.5">
-        <Label>Identity claim</Label>
-        <Input value={emailClaim} onChange={(e) => setEmailClaim(e.target.value)} placeholder="email or name" />
-        <p className="text-[11px] text-muted-foreground">
-          Use name when multiple IdP accounts share the same email address.
-        </p>
-      </div>
-      <label className="flex items-start gap-2 rounded-lg border p-3 text-xs sm:col-span-2">
-        <input
-          type="checkbox"
-          className="mt-0.5"
-          checked={autoProvision}
-          onChange={(e) => setAutoProvision(e.target.checked)}
+    <form
+      className="space-y-5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+    >
+      <Field label="Issuer URL" htmlFor="oidc-issuer" hint="The address of your identity provider.">
+        <Input
+          id="oidc-issuer"
+          className="font-mono"
+          value={issuer}
+          onChange={(e) => setIssuer(e.target.value)}
+          placeholder="https://accounts.example.com"
         />
-        <span>
-          <span className="font-medium">Auto-provision users</span>
-          <span className="mt-0.5 block text-muted-foreground">
-            Create a local user on first OIDC login.
-          </span>
-        </span>
-      </label>
-      <div className="sm:col-span-2">
-        <Button onClick={() => void save()}>Save OIDC settings</Button>
+      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Client ID" htmlFor="oidc-client-id">
+          <Input
+            id="oidc-client-id"
+            className="font-mono"
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+            placeholder="orbit-web"
+          />
+        </Field>
+        <Field label="Redirect URI" htmlFor="oidc-redirect" hint="Register this exact address with your provider.">
+          <Input
+            id="oidc-redirect"
+            className="font-mono"
+            value={redirectUri}
+            onChange={(e) => setRedirectUri(e.target.value)}
+            placeholder="http://localhost:3000/auth/callback"
+          />
+        </Field>
+        <Field label="Default role" htmlFor="oidc-role" hint="Role given to people who sign in for the first time.">
+          <Select id="oidc-role" value={defaultRole} onChange={(e) => setDefaultRole(e.target.value)}>
+            {[...new Set([defaultRole, ...BUILTIN_ROLES])].filter(Boolean).map((role) => (
+              <option key={role} value={role}>
+                {humanize(role)}
+              </option>
+            ))}
+          </Select>
+        </Field>
       </div>
+
+      <CheckboxField
+        title="Create users on first sign-in"
+        description="A local user is created the first time someone signs in through your provider."
+        checked={autoProvision}
+        onChange={(e) => setAutoProvision(e.target.checked)}
+      />
+
+      <Disclosure title="Advanced settings" summary="Scopes, audience, JWKS URL and identity claim">
+<div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Scopes" htmlFor="oidc-scopes">
+            <Input
+              id="oidc-scopes"
+              className="font-mono"
+              value={scopes}
+              onChange={(e) => setScopes(e.target.value)}
+              placeholder="openid profile email"
+            />
+          </Field>
+          <Field label="Audience" htmlFor="oidc-audience">
+            <Input
+              id="oidc-audience"
+              className="font-mono"
+              value={audience}
+              onChange={(e) => setAudience(e.target.value)}
+              placeholder="orbit-api"
+            />
+          </Field>
+          <Field label="JWKS URL" htmlFor="oidc-jwks" className="sm:col-span-2">
+            <Input
+              id="oidc-jwks"
+              className="font-mono"
+              value={jwksUrl}
+              onChange={(e) => setJwksUrl(e.target.value)}
+              placeholder="https://accounts.example.com/.well-known/jwks.json"
+            />
+          </Field>
+          <Field
+            label="Identity claim"
+            htmlFor="oidc-claim"
+            hint="Use name when several accounts at your provider share one email address."
+            className="sm:col-span-2"
+          >
+            <Input
+              id="oidc-claim"
+              className="font-mono"
+              value={emailClaim}
+              onChange={(e) => setEmailClaim(e.target.value)}
+              placeholder="email or name"
+            />
+          </Field>
+        </div>
+      </Disclosure>
+
+      <div>
+        <Button type="submit" loading={saving}>
+          Save sign-in settings
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/* ----------------------------------------------------------------------------
+ * Members and roles
+ * ------------------------------------------------------------------------- */
+
+const PERMISSIONS = Object.keys(PERMISSION_LABELS);
+
+type UserRow = {
+  id: string;
+  email: string;
+  displayName: string;
+  role: string;
+  status: string;
+  oidcSubject?: string | null;
+};
+type RoleRow = { id: string; name: string; permissions: string[] };
+const BUILTIN_ROLES = ["owner", "admin", "operator", "viewer"];
+
+function MembersTab() {
+  return (
+    <div className="space-y-8">
+      <AccessPolicySection />
+      <UsersSection />
+      <RolesSection />
     </div>
   );
 }
 
-
-function DefaultHarnessCard() {
+function AccessPolicySection() {
   const queryClient = useQueryClient();
-  const me = useMe();
-  const canManage = me.data?.permissions.includes("settings:write") ?? false;
-  const harnesses = useHarnesses();
-  const settings = useQuery({
-    queryKey: ["harness-settings"],
-    queryFn: () =>
-      request<{ defaultHarness?: string | null }>("/api/v1/settings/harness"),
-    enabled: canManage,
-  });
-  const save = useMutation({
-    mutationFn: (defaultHarness: string) =>
-      request("/api/v1/settings/harness", {
-        method: "PUT",
-        body: JSON.stringify({ defaultHarness: defaultHarness || null }),
-      }),
-    onSuccess: () => {
-      toast.success("Default harness updated");
-      void queryClient.invalidateQueries({ queryKey: ["harness-settings"] });
-    },
-    onError: (error) => toast.error(errorMessage(error)),
-  });
-  if (!canManage) return null;
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Cpu className="h-4 w-4 text-primary" /> Runtime
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <Label>Default harness</Label>
-        <select
-          className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm"
-          value={settings.data?.defaultHarness ?? ""}
-          onChange={(event) => save.mutate(event.target.value)}
-        >
-          <option value="">No default (require explicit selection)</option>
-          {(harnesses.data ?? []).map((harness) => (
-            <option key={harness.kind} value={harness.kind}>
-              {harness.name} · {harness.kind}
-            </option>
-          ))}
-        </select>
-        <p className="text-[11px] text-muted-foreground">
-          Used for trigger/background runs until harness selection is stored on triggers.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function AccessPolicyCard() {
-  const queryClient = useQueryClient();
-  const me = useMe();
-  const canManage = me.data?.permissions.includes("settings:write") ?? false;
   const policy = useQuery({
     queryKey: ["access-settings"],
-    queryFn: () =>
-      request<{ teamIsolation: boolean }>("/api/v1/settings/access"),
-    enabled: canManage,
+    queryFn: () => request<{ teamIsolation: boolean }>("/api/v1/settings/access"),
   });
   const save = useMutation({
     mutationFn: (teamIsolation: boolean) =>
@@ -658,85 +700,44 @@ function AccessPolicyCard() {
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
-  if (!canManage) return null;
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4 text-primary" /> Access policy
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <label className="flex items-start gap-2 rounded-lg border p-3 text-xs">
-          <input
-            type="checkbox"
-            className="mt-0.5"
-            checked={policy.data?.teamIsolation ?? true}
-            disabled={policy.isLoading || save.isPending}
-            onChange={(event) => save.mutate(event.target.checked)}
-          />
-          <span>
-            <span className="font-medium">Strict team isolation</span>
-            <span className="mt-0.5 block text-muted-foreground">
-              Non-admin users only see private resources or resources owned by their access
-              teams. Organization owners/admins still see everything. Existing users are
-              members of the Default team.
-            </span>
-          </span>
-        </label>
-      </CardContent>
-    </Card>
+    <Section title="Team isolation" description="Applies as soon as you change it.">
+      <Card className="flex items-start justify-between gap-4 p-4">
+        <div className="min-w-0">
+          <p id="team-isolation-label" className="text-sm font-medium">
+            Strict team isolation
+          </p>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
+            People who are not admins see only private resources and resources owned by their access
+            teams. Owners and admins still see everything. Existing users are members of the Default
+            team.
+          </p>
+        </div>
+        <Switch
+          aria-labelledby="team-isolation-label"
+          checked={policy.data?.teamIsolation ?? true}
+          disabled={policy.isLoading || save.isPending}
+          onCheckedChange={(checked) => save.mutate(checked)}
+        />
+      </Card>
+    </Section>
   );
 }
 
-const PERMISSIONS = [
-  "agents:read",
-  "agents:write",
-  "executions:read",
-  "executions:create",
-  "executions:cancel",
-  "approvals:decide",
-  "harnesses:read",
-  "providers:read",
-  "providers:write",
-  "connections:read",
-  "connections:write",
-  "triggers:write",
-  "settings:read",
-  "settings:write",
-  "members:read",
-  "audit:read",
-];
-
-type UserRow = {
-  id: string;
-  email: string;
-  displayName: string;
-  role: string;
-  status: string;
-  oidcSubject?: string | null;
-};
-type RoleRow = { id: string; name: string; permissions: string[] };
-const BUILTIN_ROLES = ["owner", "admin", "operator", "viewer"];
-
-function UsersRolesCard() {
+function UsersSection() {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const me = useMe();
-  const canManage = me.data?.permissions.includes("settings:write") ?? false;
+  const currentUserId = (me.data?.user as { id?: string } | undefined)?.id;
   const users = useQuery({
     queryKey: ["users"],
     queryFn: () => request<UserRow[]>("/api/v1/users"),
-    enabled: canManage,
   });
   const roles = useQuery({
     queryKey: ["custom-roles"],
     queryFn: () => request<RoleRow[]>("/api/v1/roles"),
-    enabled: canManage,
   });
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<RoleRow | null>(null);
-  const [name, setName] = useState("");
-  const [permissions, setPermissions] = useState<string[]>([]);
 
   const setRole = useMutation({
     mutationFn: ({ id, role }: { id: string; role: string }) =>
@@ -750,6 +751,84 @@ function UsersRolesCard() {
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
+
+  const roleOptions = [...BUILTIN_ROLES, ...(roles.data ?? []).map((role) => role.name)];
+
+  return (
+    <Section
+      title="People"
+      count={users.data?.length}
+      description="Everyone in this organization. A role change applies as soon as you pick it."
+    >
+      {users.isLoading ? (
+        <ListSkeleton rows={3} />
+      ) : users.isError ? (
+        <Callout tone="danger" title="Could not load people">
+          {errorMessage(users.error)}
+        </Callout>
+      ) : (
+        <Card className="overflow-hidden">
+          {users.data?.map((user) => (
+            <div
+              key={user.id}
+              className="flex flex-col gap-2 border-b px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:px-5"
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate text-sm font-medium">{user.displayName}</p>
+                  {user.status !== "active" ? (
+                    <Badge variant="secondary">{titleCase(user.status)}</Badge>
+                  ) : null}
+                  {user.oidcSubject ? <Badge variant="outline">Single sign-on</Badge> : null}
+                </div>
+                <p className="truncate text-[13px] text-muted-foreground">{user.email}</p>
+              </div>
+              <Select
+                aria-label={`Role for ${user.displayName}`}
+                className="h-8 w-full text-[13px] sm:w-40"
+                value={user.role}
+                disabled={setRole.isPending && setRole.variables?.id === user.id}
+                onChange={async (event) => {
+                  const role = event.target.value;
+                  // Changing your own role can lock you out of this page.
+                  if (user.id === currentUserId) {
+                    const confirmed = await confirm({
+                      title: `Change your own role to ${humanize(role)}?`,
+                      description:
+                        "You may lose access to settings straight away, and only another owner can change it back.",
+                      confirmLabel: "Change my role",
+                      destructive: true,
+                    });
+                    if (!confirmed) return;
+                  }
+                  setRole.mutate({ id: user.id, role });
+                }}
+              >
+                {[...new Set([user.role, ...roleOptions])].map((role) => (
+                  <option key={role} value={role}>
+                    {humanize(role)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ))}
+        </Card>
+      )}
+    </Section>
+  );
+}
+
+function RolesSection() {
+  const queryClient = useQueryClient();
+  const confirm = useConfirm();
+  const roles = useQuery({
+    queryKey: ["custom-roles"],
+    queryFn: () => request<RoleRow[]>("/api/v1/roles"),
+  });
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<RoleRow | null>(null);
+  const [name, setName] = useState("");
+  const [permissions, setPermissions] = useState<string[]>([]);
 
   const saveRole = useMutation({
     mutationFn: () =>
@@ -767,8 +846,7 @@ function UsersRolesCard() {
   });
 
   const removeRole = useMutation({
-    mutationFn: (id: string) =>
-      request(`/api/v1/roles/${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => request(`/api/v1/roles/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       toast.success("Role deleted");
       void queryClient.invalidateQueries({ queryKey: ["custom-roles"] });
@@ -789,183 +867,386 @@ function UsersRolesCard() {
     setOpen(true);
   }
 
-  if (!canManage) return null;
+  async function deleteRole(role: RoleRow) {
+    const ok = await confirm({
+      title: `Delete role ${role.name}?`,
+      description: "People who have this role lose its permissions. This cannot be undone.",
+      confirmLabel: "Delete role",
+      destructive: true,
+    });
+    if (ok) removeRole.mutate(role.id);
+  }
 
-  const roleOptions = [
-    ...BUILTIN_ROLES,
-    ...((roles.data ?? []).map((role) => role.name)),
-  ];
+  const license = useLicense();
+  // Until the license is known, leave the action available; the API still enforces it.
+  const rolesLicensed =
+    !license.isSuccess || Boolean(license.data?.license.features.includes("custom_roles"));
+
+  const missing = !name.trim() ? "Give the role a name." : !permissions.length ? "Choose at least one permission." : null;
 
   return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4 text-primary" /> Users &amp; roles
-        </CardTitle>
-        <Button size="sm" variant="outline" onClick={openCreate}>
+    <Section
+      title="Custom roles"
+      count={roles.data?.length}
+      description="Add your own roles on top of owner, admin, operator and viewer. Permissions add to the organization role; team access is separate."
+      actions={
+        <Button
+          variant="outline"
+          onClick={openCreate}
+          disabled={!rolesLicensed}
+          title={rolesLicensed ? undefined : "Custom roles are a licensed feature"}
+        >
           <Plus /> New role
         </Button>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">Organization users</p>
-          {users.isLoading ? <Skeleton className="h-16" /> : null}
-          {users.data?.map((user) => (
+      }
+    >
+      {roles.isLoading ? (
+        <ListSkeleton rows={1} />
+      ) : roles.isError ? (
+        <Callout tone="danger" title="Could not load roles">
+          {errorMessage(roles.error)}
+        </Callout>
+      ) : roles.data?.length ? (
+        <Card className="overflow-hidden">
+          {roles.data.map((role) => (
             <div
-              key={user.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
+              key={role.id}
+              className="flex flex-col gap-3 border-b px-4 py-3.5 last:border-b-0 sm:flex-row sm:items-start sm:justify-between sm:px-5"
             >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{user.displayName}</p>
-                <p className="truncate text-[11px] text-muted-foreground">
-                  {user.email} · {user.status}
-                  {user.oidcSubject ? " · OIDC" : ""}
-                </p>
+              <div className="min-w-0 space-y-1.5">
+                <p className="text-sm font-medium">{role.name}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {role.permissions.map((permission) => (
+                    <Badge key={permission} variant="outline" title={permission}>
+                      {permissionLabel(permission)}
+                    </Badge>
+                  ))}
+                </div>
               </div>
-              <select
-                className="h-8 rounded-lg border bg-card px-2 text-xs"
-                value={user.role}
-                onChange={(event) =>
-                  setRole.mutate({ id: user.id, role: event.target.value })
-                }
-              >
-                {[...new Set([user.role, ...roleOptions])].map((role) => (
-                  <option key={role} value={role}>
-                    {role}
-                  </option>
-                ))}
-              </select>
+              <div className="flex shrink-0 gap-1">
+                <Button size="sm" variant="outline" onClick={() => openEdit(role)}>
+                  Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => void deleteRole(role)}
+                >
+                  Delete
+                </Button>
+              </div>
             </div>
           ))}
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">Custom roles</p>
-          {(roles.data ?? []).length ? (
-            roles.data!.map((role) => (
-              <div
-                key={role.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{role.name}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">
-                    {role.permissions.join(", ")}
-                  </p>
-                </div>
-                <div className="flex gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(role)}>
-                    Edit
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-destructive"
-                    onClick={() => {
-                      if (window.confirm(`Delete role ${role.name}?`)) {
-                        removeRole.mutate(role.id);
-                      }
-                    }}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No custom roles. Custom roles require the custom_roles license feature.
-            </p>
-          )}
-        </div>
-      </CardContent>
+        </Card>
+      ) : (
+        <EmptyState
+          title="No custom roles"
+          description="Custom roles are a licensed feature. Until a license that includes them is installed, use the built-in roles."
+        />
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit role" : "New custom role"}</DialogTitle>
+            <DialogTitle>{editing ? `Edit role ${editing.name}` : "New custom role"}</DialogTitle>
             <DialogDescription>
-              Permissions are additive to the organization role. Team access is separate.
+              Permissions add to the person&apos;s organization role. Team access is separate.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>Name</Label>
-              <Input value={name} onChange={(event) => setName(event.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Permissions</Label>
-              <div className="grid max-h-56 gap-1 overflow-y-auto rounded-lg border p-3 sm:grid-cols-2">
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!missing && !saveRole.isPending) saveRole.mutate();
+            }}
+          >
+            <Field label="Name" htmlFor="role-name">
+              <Input id="role-name" value={name} onChange={(event) => setName(event.target.value)} />
+            </Field>
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">Permissions</legend>
+              <div className="grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
                 {PERMISSIONS.map((permission) => (
-                  <label key={permission} className="flex items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={permissions.includes(permission)}
-                      onChange={(event) =>
-                        setPermissions((current) =>
-                          event.target.checked
-                            ? [...current, permission]
-                            : current.filter((item) => item !== permission),
-                        )
-                      }
-                    />
-                    {permission}
-                  </label>
+                  <CheckboxField
+                    key={permission}
+                    title={permissionLabel(permission)}
+                    description={<span className="font-mono text-xs">{permission}</span>}
+                    checked={permissions.includes(permission)}
+                    onChange={(event) =>
+                      setPermissions((current) =>
+                        event.target.checked
+                          ? [...current, permission]
+                          : current.filter((item) => item !== permission),
+                      )
+                    }
+                  />
                 ))}
               </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => saveRole.mutate()}
-              loading={saveRole.isPending}
-              disabled={!name.trim() || !permissions.length}
-            >
-              Save role
-            </Button>
-          </DialogFooter>
+            </fieldset>
+            <DialogFooter className="items-center">
+              {missing ? (
+                <p className="text-[13px] text-muted-foreground sm:mr-auto">{missing}</p>
+              ) : null}
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={saveRole.isPending} disabled={Boolean(missing)}>
+                {editing ? "Save role" : "Create role"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
-    </Card>
+    </Section>
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+/* ----------------------------------------------------------------------------
+ * Platform
+ * ------------------------------------------------------------------------- */
+
+function PlatformTab() {
+  const meta = useMeta();
+  const license = useLicense();
+  const authMode = String((meta.data?.auth as { mode?: string } | undefined)?.mode ?? "");
+
   return (
-    <div className="flex items-start justify-between gap-3">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="max-w-[65%] break-all text-right text-xs font-medium">{value}</span>
+    <div className="space-y-8">
+      <Section title="This installation">
+        {meta.isLoading ? (
+          <Skeleton className="h-40 rounded-xl" />
+        ) : meta.data ? (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card className="p-4">
+              <DescriptionList
+                items={[
+                  { label: "Version", value: meta.data.version },
+                  { label: "API version", value: meta.data.apiVersion },
+                  { label: "Environment", value: meta.data.environment },
+                  {
+                    label: "Sign-in mode",
+                    value: authMode ? (authMode === "oidc" ? "Single sign-on (OIDC)" : titleCase(authMode)) : "Unknown",
+                  },
+                  { label: "Event transport", value: meta.data.eventsDriver },
+                ]}
+              />
+            </Card>
+            <Card className="p-4">
+              <h3 className="mb-3 text-[13px] font-medium text-muted-foreground">Features</h3>
+              <ul className="divide-y text-[13px]">
+                {Object.entries(meta.data.features).map(([feature, enabled]) => (
+                  <li
+                    key={feature}
+                    className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0"
+                  >
+                    <span>{humanize(feature)}</span>
+                    <Badge variant={enabled ? "success" : "outline"}>
+                      {enabled ? "Enabled" : "Not enabled"}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </div>
+        ) : (
+          <Callout tone="danger" title="Could not load platform details">
+            {errorMessage(meta.error)}
+          </Callout>
+        )}
+      </Section>
+
+      <DefaultHarnessSection />
+
+      <Section title="License">
+        {license.isLoading ? (
+          <Skeleton className="h-32 rounded-xl" />
+        ) : license.data ? (
+          <LicenseDetails data={license.data} />
+        ) : (
+          <Callout tone="neutral">License status is unavailable.</Callout>
+        )}
+      </Section>
     </div>
   );
 }
 
-function ShortcutCard({
-  href,
-  title,
-  description,
-  icon,
-}: {
-  href: string;
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-}) {
+function LicenseDetails({ data }: { data: NonNullable<ReturnType<typeof useLicense>["data"]> }) {
+  const { license, usage, warnings } = data;
+
+  if (!license.valid) {
+    return (
+      <Callout tone="info" title="Community edition">
+        No valid license is installed. Install an offline license secret to unlock enterprise features
+        (see docs/development/licensing.md).
+      </Callout>
+    );
+  }
+
   return (
-    <Link href={href}>
-      <Card className="h-full transition-colors hover:border-primary/40 hover:bg-muted/40">
-        <CardContent className="flex items-center gap-3 p-4">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            {icon}
-          </span>
-          <div>
-            <p className="text-sm font-medium">{title}</p>
-            <p className="text-[11px] text-muted-foreground">{description}</p>
-          </div>
-        </CardContent>
+    <div className="space-y-3">
+      {warnings.length ? (
+        <Callout tone="warning" title="License warnings">
+          <ul className="list-disc pl-4">
+            {warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </Callout>
+      ) : null}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="p-4">
+          <DescriptionList
+            items={[
+              { label: "Tier", value: <Badge variant="success">{titleCase(license.tier)}</Badge> },
+              license.customer ? { label: "Customer", value: license.customer } : null,
+              license.grace ? { label: "Status", value: <Badge variant="warning">Grace period</Badge> } : null,
+              {
+                label: "Expires",
+                value: license.expiresAt ? formatDate(license.expiresAt) : "Never",
+              },
+              typeof license.daysRemaining === "number"
+                ? { label: "Days remaining", value: license.daysRemaining }
+                : null,
+            ]}
+          />
+        </Card>
+        <Card className="p-4">
+          <h3 className="mb-3 text-[13px] font-medium text-muted-foreground">Usage</h3>
+          <DescriptionList
+            items={Object.entries(usage).map(([key, value]) => {
+              const limitKey = key === "executionsToday" ? "executions_per_day" : key;
+              const limit = license.limits[limitKey];
+              return {
+                label: humanize(key.replace(/([A-Z])/g, " $1").toLowerCase()),
+                value: (
+                  <span className="tabular">
+                    {String(value)}
+                    {limit ? <span className="font-normal text-muted-foreground"> of {String(limit)}</span> : null}
+                  </span>
+                ),
+              };
+            })}
+          />
+        </Card>
+      </div>
+      <div className="space-y-1.5">
+        <h3 className="text-[13px] font-medium text-muted-foreground">Licensed features</h3>
+        {license.features.length ? (
+          <ul className="flex flex-wrap gap-1.5">
+            {license.features.map((feature) => (
+              <li key={feature}>
+                <Badge variant="outline">{humanize(feature)}</Badge>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[13px] text-muted-foreground">None.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DefaultHarnessSection() {
+  const queryClient = useQueryClient();
+  const me = useMe();
+  const canManage = me.data?.permissions.includes("settings:write") ?? false;
+  const harnesses = useHarnesses();
+  const settings = useQuery({
+    queryKey: ["harness-settings"],
+    queryFn: () => request<{ defaultHarness?: string | null }>("/api/v1/settings/harness"),
+    enabled: canManage,
+  });
+  const save = useMutation({
+    mutationFn: (defaultHarness: string) =>
+      request("/api/v1/settings/harness", {
+        method: "PUT",
+        body: JSON.stringify({ defaultHarness: defaultHarness || null }),
+      }),
+    onSuccess: () => {
+      toast.success("Default harness updated");
+      void queryClient.invalidateQueries({ queryKey: ["harness-settings"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+  if (!canManage) return null;
+
+  return (
+    <Section
+      title="Default harness"
+      description="Used for runs started by triggers and in the background, until a harness can be stored on the trigger itself."
+    >
+      <Card className="p-4">
+        <Field label="Harness" htmlFor="default-harness" hint="Saved as soon as you choose.">
+          <Select
+            id="default-harness"
+            className="sm:max-w-sm"
+            value={settings.data?.defaultHarness ?? ""}
+            disabled={settings.isLoading || save.isPending}
+            onChange={(event) => save.mutate(event.target.value)}
+          >
+            <option value="">No default (require an explicit choice)</option>
+            {(harnesses.data ?? [])
+              .filter((harness) => harness.implementationStatus === "available")
+              .map((harness) => (
+              <option key={harness.kind} value={harness.kind}>
+                {harness.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
       </Card>
-    </Link>
+    </Section>
+  );
+}
+
+/* ----------------------------------------------------------------------------
+ * Audit log
+ * ------------------------------------------------------------------------- */
+
+function AuditTab() {
+  const audit = useAuditLogs();
+
+  return (
+    <Section
+      title="Recent activity"
+      description="Who changed what in this organization, newest first."
+    >
+      {audit.isLoading ? (
+        <ListSkeleton rows={5} />
+      ) : audit.isError ? (
+        <Callout tone="danger" title="Could not load the audit log">
+          {errorMessage(audit.error)}
+        </Callout>
+      ) : audit.data?.items.length ? (
+        <Card className="overflow-hidden">
+          {audit.data.items.map((entry) => (
+            <div
+              key={entry.id}
+              className="flex flex-col gap-0.5 border-b px-4 py-3 last:border-b-0 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4 sm:px-5"
+            >
+              <div className="min-w-0">
+                <p className="break-words text-sm font-medium" title={entry.action}>
+                  {humanize(entry.action)}
+                </p>
+                <p className="break-words text-[13px] text-muted-foreground">
+                  By {entry.actorEmail ?? titleCase(entry.actorType)}
+                  {entry.targetType ? `, on ${titleCase(entry.targetType).toLowerCase()}` : ""}
+                </p>
+              </div>
+              <time
+                dateTime={entry.createdAt}
+                className="shrink-0 text-[13px] text-muted-foreground"
+              >
+                {formatDateTime(entry.createdAt)}
+              </time>
+            </div>
+          ))}
+        </Card>
+      ) : (
+        <EmptyState title="No activity yet" description="Changes to agents, connections, roles and tokens appear here." />
+      )}
+    </Section>
   );
 }

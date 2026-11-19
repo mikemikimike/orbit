@@ -212,8 +212,22 @@ async fn fire_trigger_inner(state: &AppState, trigger: Trigger) -> anyhow::Resul
     }
 
     let fired_at = trigger.last_fired_at.unwrap_or_else(Utc::now);
+    // A schedule may carry its own task; otherwise the agent gets a generic prompt.
+    let task = trigger
+        .config
+        .get("task")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|task| !task.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            format!(
+                "Scheduled run for agent '{}'. Perform your configured monitoring task.",
+                agent.name
+            )
+        });
     let input = serde_json::json!({
-        "task": format!("Scheduled run for agent '{}'. Perform your configured monitoring task.", agent.name),
+        "task": task,
         "payload": { "triggerId": trigger.id, "firedAt": fired_at },
         "provenance": {
             "source": "schedule",
@@ -290,43 +304,98 @@ async fn fire_trigger_inner(state: &AppState, trigger: Trigger) -> anyhow::Resul
     Ok(())
 }
 
+/// A worker whose heartbeat stops for this long is considered gone.
+const HEARTBEAT_STALE_SECONDS: i64 = 90;
+/// A claimed run with no activity for this long was never started by its worker. Long
+/// enough for a large repository checkout, which reports only when it finishes.
+const UNSTARTED_SILENT_SECONDS: i64 = 600;
+/// How long a claimed, never-started run may ignore a cancel request.
+const UNSTARTED_CANCEL_SECONDS: i64 = 60;
+
 async fn reap(state: &AppState) {
-    match state.store.reap_orphaned_executions(90).await {
-        Ok(rows) if !rows.is_empty() => {
+    match state
+        .store
+        .reap_orphaned_executions(HEARTBEAT_STALE_SECONDS)
+        .await
+    {
+        Ok(rows) => {
             for execution in rows {
                 tracing::warn!(
                     execution_id = %execution.id,
                     worker_id = ?execution.worker_id,
                     "reaped orphaned execution"
                 );
-                let _ = state
-                    .store
-                    .append_execution_event(
-                        execution.org_id,
-                        execution.id,
-                        "error",
-                        LogLevel::Error,
-                        "worker heartbeat expired; execution marked failed",
-                        &orbit_store::workers::worker_lost_error(),
-                    )
-                    .await;
-                let event = OrbitEvent::new(
-                    subjects::EXECUTION_UPDATED,
-                    "orbit-api-reaper",
-                    serde_json::json!({
-                        "executionId": execution.id,
-                        "agentId": execution.agent_id,
-                        "status": execution.status,
-                    }),
+                report_reaped(
+                    state,
+                    &execution,
+                    "worker heartbeat expired; execution marked failed",
+                    &orbit_store::workers::worker_lost_error(),
                 )
-                .with_org(execution.org_id)
-                .with_idempotency(format!("reap:{}", execution.id));
-                let _ = state.bus.publish(event).await;
+                .await;
             }
         }
-        Ok(_) => {}
         Err(error) => tracing::warn!(%error, "execution reaper failed"),
     }
+
+    match state
+        .store
+        .reap_unstarted_executions(None, UNSTARTED_SILENT_SECONDS, UNSTARTED_CANCEL_SECONDS)
+        .await
+    {
+        Ok(rows) => {
+            for execution in rows {
+                let cancelled = execution.status == ExecutionStatus::Cancelled.as_str();
+                tracing::warn!(
+                    execution_id = %execution.id,
+                    worker_id = ?execution.worker_id,
+                    status = %execution.status,
+                    "ended execution its worker never started"
+                );
+                let message = if cancelled {
+                    "cancelled; the worker that took this execution never started it"
+                } else {
+                    "a worker took this execution but never started it; execution marked failed"
+                };
+                let data = execution.error.clone().unwrap_or_else(
+                    || serde_json::json!({ "code": "worker_did_not_start", "retryable": true }),
+                );
+                report_reaped(state, &execution, message, &data).await;
+            }
+        }
+        Err(error) => tracing::warn!(%error, "unstarted execution reaper failed"),
+    }
+}
+
+/// Record why the platform ended an execution and tell subscribers.
+async fn report_reaped(
+    state: &AppState,
+    execution: &orbit_store::ExecutionRecord,
+    message: &str,
+    data: &serde_json::Value,
+) {
+    let _ = state
+        .store
+        .append_execution_event(
+            execution.org_id,
+            execution.id,
+            "error",
+            LogLevel::Error,
+            message,
+            data,
+        )
+        .await;
+    let event = OrbitEvent::new(
+        subjects::EXECUTION_UPDATED,
+        "orbit-api-reaper",
+        serde_json::json!({
+            "executionId": execution.id,
+            "agentId": execution.agent_id,
+            "status": execution.status,
+        }),
+    )
+    .with_org(execution.org_id)
+    .with_idempotency(format!("reap:{}", execution.id));
+    let _ = state.bus.publish(event).await;
 }
 
 /// Relaunch platform-follow worker profiles when ORBIT_IMAGE_TAG changes. The old token

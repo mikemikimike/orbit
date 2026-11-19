@@ -103,6 +103,8 @@ backend `SecretStore`; API responses redact them (`has_credential: true`).
 validated per kind: a 5-field cron expression for `schedule`, a subject filter for
 `event`, an HMAC secret reference for `webhook`. Triggers can be disabled without being
 deleted, and a trigger auto-disables after `max_failures` consecutive failures.
+A `schedule` trigger may also carry a `task`: the text given to the agent each time it
+fires. Without one the run gets a generic "perform your configured task" prompt.
 
 ### Execution
 Lifecycle:

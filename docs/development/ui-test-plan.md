@@ -13,14 +13,15 @@ Time: ~25 minutes for flows 1–5, plus ~25 minutes for flows 6–14.
 
 ---
 
-## Flow 1 — First-run dashboard (2 min)
+## Flow 1 — First-run overview (2 min)
 
 | Step | Expected |
 |---|---|
-| Open `/` | Dashboard renders; four stat cards; recent executions or empty state |
-| Check seeded agents | “Agent pulse” and agent cards show demo agents |
-| Resize to 390×844 | Bottom navigation appears; no horizontal scrolling; cards stack |
-| Click an agent card | Agent detail opens without a page error |
+| Open `/` | Overview renders; one status strip with four figures (running, executions 24 h, failed 24 h, agents); recent executions or empty state |
+| Check seeded agents | The “Agents” list shows the demo agents with their status |
+| Resize to 390×844 | Bottom tab bar appears (Overview, Executions, Approvals, Agents, More); **More** lists every page; no horizontal scrolling |
+| Press `⌘K` / `Ctrl+K` | Command palette opens; typing an agent or page name and Enter navigates |
+| Click an agent | Agent detail opens without a page error |
 
 **Watch for:** console errors, skeleton that never resolves, `401/500` in the network tab.
 
@@ -30,30 +31,36 @@ Time: ~25 minutes for flows 1–5, plus ~25 minutes for flows 6–14.
 
 1. **Agents → New agent**
 2. Identity: name `UI Smoke Agent`, description “UI test”.
-3. Harness: **Mock**; model management **Harness**; leave provider/model empty.
-4. Instructions: “You are a concise test agent. Summarize the task.”
+3. Instructions: “You are a concise test agent. Summarize the task.”
+4. Model: managed by **The harness**; leave provider/model empty.
 5. Add a **Schedule** trigger (`*/30 * * * *`) and leave it enabled.
-6. Autonomy: **L2 Recommend**; timeout 120s; concurrency 1.
+6. Autonomy: **Recommend** (level 2); under **Run limits** set timeout 120s, concurrency 1.
 7. **Create agent** → redirected to detail page.
 
 Expected:
-- Status `Draft`, version 1, trigger listed.
-- No validation toast.
+- Status `Draft`, version 1, trigger listed, and a “This agent is a draft” notice with **Activate**.
+- No validation summary. The summary rail in the form shows “Not set” for missing required input.
+- The agent is visible in **Agents** under the default “All” filter.
 
 Then:
 8. **Activate** → status `Active`.
-9. **Run agent** → task “Summarize the current ORBIT deployment.” → **Queue execution**.
+9. **Run agent** → task “Summarize the current ORBIT deployment.” → choose harness **Mock** (required
+   when the agent has no harness and no organization default is set) → **Run agent**.
 10. Execution page opens; status moves `queued → dispatched/running → succeeded`.
 11. Timeline streams events (dispatch, harness session, logs, output).
-12. Output JSON is visible; usage shows tokens/time; agent link works.
-13. Open **Executions** → the run appears; filter by `Succeeded` and `Running`.
+12. Output is shown first once the run finishes (Text/JSON switch); Details shows tokens and
+    duration; the agent link works; **Run again** queues the same task.
+13. Open **Executions** → the run appears; filter by `Succeeded` and `Running`. The filter is in
+    the URL (`?status=succeeded`) and survives opening a row and going back.
+14. The agent’s **Executions** tab lists only that agent’s runs.
 
 ---
 
 ## Flow 3 — Failure, cancellation, and live streaming (4 min)
 
 1. On the agent, **Run agent** with a task containing `slow` → queue.
-2. Execution page: status `running`; click **Cancel**.
+2. Execution page: status `running`; click **Cancel** and confirm in the dialog (focus starts on
+   **Keep running**).
 3. Expected: `cancelled`, timeline shows the cancellation, no orphaned running state.
 4. Run with a task containing `fail` → expected `failed` with an error block and error event.
 5. While a run is active, refresh the execution page:
@@ -160,20 +167,21 @@ approvals UI is still being finished.
 
 ---
 
-## Flow 10 — Work wizard (4 min)
+## Flow 10 — Start work (4 min)
 
 | Step | Expected |
 |---|---|
-| Open `/work` | Six steps: When, Where, Who, What, Then, Summary |
-| When → Schedule | Cron field appears; a valid expression is accepted |
-| When → Connector | Implemented connectors are listed as selectable cards |
-| Where | Placement cards (auto/local/docker/kubernetes) and harness cards |
+| Open `/work` (sidebar **Start work**) | One page with five numbered sections (When, Where, Who, What, Then) and a Summary that stays in view on desktop |
+| When → Now | Default; **Start work** queues one execution |
+| When → On a schedule | Cron field and a notice naming the agent; the button reads **Create schedule**; saving adds a schedule trigger with this task to the agent (new version) and opens the agent, where the trigger and its task are listed. Disabled for an agent team |
+| When → event / connector | Disabled, marked “Not available yet” |
+| Where | Placement cards (anywhere/local/docker/kubernetes) and harness cards, including **Agent default** |
 | Where → pick a harness | Matching worker profiles are shown, or a create link |
 | Who → Agent or Agent Team | Agents are filtered by the chosen harness; teams are listed |
 | What | Optional name, task, repository |
-| Then | Auto-approve and 24/7 toggles |
-| Summary | Read-back of all five answers; **Create work** enabled only when Who + What are set |
-| Create work | Execution starts, a matching worker profile is created/launched, redirect to the execution |
+| Then | “Auto-approve writes” and “Keep the agent running” are shown disabled (not wired yet); outputs for the chosen agent/team |
+| Summary | Live read-back of all five answers; **Start work** enabled only when Who + What are set, and the line under it says what is missing |
+| Start work | Execution starts, a matching worker profile is created/launched, redirect to the execution |
 
 **Watch for:** agents from another harness appearing, and the Summary button staying disabled.
 
@@ -204,17 +212,20 @@ approvals UI is still being finished.
 | `/workers` → New profile | Harness, target, driver, image/tag (defaults to `latest`), provider/model |
 | Agents / Shared skills | **Select all** and **Clear** work |
 | Env variable mappings | Add row, choose connection, set the env var name; saved and reloaded |
+| `/environment-mappings` | New mapping, Edit (rename a variable, switch Connection / Secret), Duplicate, Delete; invalid or duplicate names block saving with a reason; cards show "Used by" worker profiles |
 | Enable + Launch | Launch appears in Launches; Pod/Job created when a launcher is configured |
 | Without a launcher | Clear error: no worker launcher configured |
-| Launches filter | Active/Archived/All |
+| Launches filter | Active / History |
+| Live workers | Workers that report a heartbeat are listed first, with Live or Stale state |
 
 ## Flow 14 — OIDC, theme, and execution detail (4 min)
 
 | Step | Expected |
 |---|---|
 | `/settings` → OIDC / SSO | Save issuer/client/scopes; reload shows stored values; restart applies them |
-| Theme toggle (sidebar) | Switches dark/light instantly; persists across reloads; no flash on load |
-| Execution detail | Harness timeline with event-kind badges; Input shows the task; Output renders text; **Show raw JSON** toggles both; boxes are equal height |
+| Theme (account menu at the bottom of the sidebar, or `⌘K` → “theme”) | Light / Dark / System; switches instantly; persists across reloads; no flash on load |
+| `/settings` tabs | Account, API tokens, Single sign-on, Members and roles, Platform, Audit log; the open tab is in the URL hash |
+| Execution detail | Timeline with **Key events / Everything** and **Follow**; Details rail with trigger, harness, duration, tokens and IDs; Input and Output each switch between Text and JSON and can be copied |
 
 ## Negative and security checks
 
@@ -222,7 +233,9 @@ approvals UI is still being finished.
 - Viewer-style access cannot mutate (when RBAC UI lands); dev mode is owner.
 - Validation errors return field paths; the form highlights the section.
 - Invalid cron, empty instructions, unknown harness/provider are rejected.
-- Idempotency: double-click **Queue execution** with the same key creates one execution.
+- Idempotency: double-click **Run agent** in the run dialog with the same key creates one execution.
+- Destructive actions (archive, delete, revoke, cancel) ask in an in-app dialog that names the
+  object; none use the browser’s native confirm.
 - Deleting/archiving an agent preserves execution history by default.
 
 ## What to record

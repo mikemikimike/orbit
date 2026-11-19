@@ -13,7 +13,6 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use chrono::Utc;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -53,6 +52,11 @@ struct BrokerState {
     token: String,
     http: reqwest::Client,
     repo_specs: Vec<crate::git::RepoSpec>,
+    /// The run's clock; paused while a person decides on an approval.
+    pause: orbit_contracts::PauseClock,
+    /// Actions a person rejected in this run (capability + arguments). The same
+    /// action is refused without asking again.
+    rejected: std::sync::Mutex<std::collections::HashSet<String>>,
 }
 
 enum ConnectorClient {
@@ -541,6 +545,7 @@ pub async fn start(
     execution: &ExecutionRecord,
     workspace: &std::path::Path,
     tool_policies: &[ToolPolicyRule],
+    pause: orbit_contracts::PauseClock,
 ) -> anyhow::Result<Option<BrokerHandle>> {
     let binding = spec.connectors.iter().find(|b| {
         matches!(b.connector.as_str(), "github" | "gitlab" | "kubernetes")
@@ -635,6 +640,8 @@ pub async fn start(
         token: format!("{}{}", Uuid::now_v7().simple(), Uuid::now_v7().simple()),
         http: orbit_security::client_with_custom_ca(Duration::from_secs(30)),
         repo_specs: crate::git::repo_specs(&execution.input),
+        pause,
+        rejected: Default::default(),
     });
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
@@ -1016,7 +1023,34 @@ async fn request_approval_action(
     action: Value,
     arguments: &Value,
 ) -> anyhow::Result<Approval> {
-    let wait_seconds = approval_wait_seconds(&state.execution);
+    // A person already said no to exactly this in this run. Asking again would only
+    // put the same question back in the queue, so refuse it here.
+    let fingerprint = action_fingerprint(capability, arguments);
+    if state
+        .rejected
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .contains(&fingerprint)
+    {
+        record_event(
+            state,
+            "tool_call",
+            LogLevel::Warn,
+            &format!("denied tool call {capability}: already rejected in this run"),
+            json!({
+                "capability": capability,
+                "reason": "a person already rejected this exact action in this run",
+                "decision": "deny",
+                "arguments": truncate_json(arguments, 4000),
+            }),
+        )
+        .await;
+        anyhow::bail!(
+            "capability '{capability}' requires approval; request rejected (a person already rejected this exact action in this run; do not retry it)"
+        );
+    }
+
+    let wait_seconds = APPROVAL_WAIT_SECONDS;
     let approval = state
         .client
         .create_approval(state.execution.id, action, wait_seconds)
@@ -1044,10 +1078,22 @@ async fn request_approval_action(
     )
     .await;
 
-    let decided = state
-        .client
-        .await_approval(state.execution.id, approval.id, wait_seconds)
-        .await?;
+    // The run's clock stops while a person decides: their response time must not
+    // turn into an execution timeout.
+    let decided = {
+        let _paused = state.pause.pause();
+        state
+            .client
+            .await_approval(state.execution.id, approval.id, wait_seconds)
+            .await?
+    };
+    if decided.status == "rejected" {
+        state
+            .rejected
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(fingerprint);
+    }
     record_event(
         state,
         "tool_call",
@@ -1075,11 +1121,30 @@ async fn request_approval_action(
     Ok(decided)
 }
 
-fn approval_wait_seconds(execution: &ExecutionRecord) -> u64 {
-    let started = execution.started_at.unwrap_or(execution.created_at);
-    let deadline = started + chrono::Duration::seconds(execution.timeout_seconds as i64);
-    let remaining = (deadline - Utc::now()).num_seconds().max(5) as u64;
-    remaining.saturating_sub(3).clamp(2, 900)
+/// How long an approval request stays open. It no longer has to fit inside the
+/// execution timeout, because the run's clock is paused while it waits.
+const APPROVAL_WAIT_SECONDS: u64 = 900;
+
+/// Identity of an action for "already rejected" checks: the capability plus its
+/// arguments, with object keys in a stable order.
+fn action_fingerprint(capability: &str, arguments: &Value) -> String {
+    fn canonical(value: &Value) -> Value {
+        match value {
+            Value::Object(map) => {
+                let mut sorted: Vec<_> = map.iter().collect();
+                sorted.sort_by(|a, b| a.0.cmp(b.0));
+                Value::Object(
+                    sorted
+                        .into_iter()
+                        .map(|(k, v)| (k.clone(), canonical(v)))
+                        .collect(),
+                )
+            }
+            Value::Array(items) => Value::Array(items.iter().map(canonical).collect()),
+            other => other.clone(),
+        }
+    }
+    format!("{capability}\u{1f}{}", canonical(arguments))
 }
 
 async fn record_denied(state: &BrokerState, capability: &str, reason: &str) {
@@ -1214,38 +1279,30 @@ mod tests {
     }
 
     #[test]
-    fn approval_wait_is_bounded_by_execution_timeout() {
-        let mut execution = ExecutionRecord {
-            id: Uuid::nil(),
-            org_id: Uuid::nil(),
-            agent_id: Uuid::nil(),
-            agent_version_id: Uuid::nil(),
-            agent_name: "test".into(),
-            harness_kind: "opencode".into(),
-            trigger_id: None,
-            trigger_source: "manual".into(),
-            placement: "auto".into(),
-            status: "running".into(),
-            session_ref: None,
-            input: Value::Null,
-            skills: vec![],
-            output: None,
-            error: None,
-            usage: json!({}),
-            timeout_seconds: 60,
-            idempotency_key: None,
-            requested_by: None,
-            worker_id: None,
-            team_run_id: None,
-            team_step_index: None,
-            created_at: Utc::now(),
-            started_at: Some(Utc::now()),
-            finished_at: None,
-            updated_at: Utc::now(),
-            archived_at: None,
-        };
-        assert!(approval_wait_seconds(&execution) <= 60);
-        execution.timeout_seconds = 3600;
-        assert!(approval_wait_seconds(&execution) <= 900);
+    fn rejected_actions_are_recognised_whatever_the_key_order() {
+        let first = action_fingerprint(
+            "issues.comment",
+            &json!({ "owner": "acme", "repo": "site", "number": 58, "body": "hi" }),
+        );
+        let reordered = action_fingerprint(
+            "issues.comment",
+            &json!({ "body": "hi", "number": 58, "repo": "site", "owner": "acme" }),
+        );
+        assert_eq!(first, reordered);
+        // A different issue, text or capability is a different decision.
+        assert_ne!(
+            first,
+            action_fingerprint(
+                "issues.comment",
+                &json!({ "owner": "acme", "repo": "site", "number": 59, "body": "hi" }),
+            )
+        );
+        assert_ne!(
+            first,
+            action_fingerprint(
+                "issues.update",
+                &json!({ "owner": "acme", "repo": "site", "number": 58, "body": "hi" }),
+            )
+        );
     }
 }
