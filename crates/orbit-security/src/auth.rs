@@ -79,6 +79,8 @@ pub struct OidcConfig {
     pub team_groups: Vec<(String, String, String)>,
     /// Create access teams for mapped groups when the team slug does not exist.
     pub auto_create_teams: bool,
+    /// Deny users whose IdP groups do not match any configured role/team mapping.
+    pub require_mapped_group: bool,
     /// Re-evaluate the stored role on every login when a mapping matches. Without this,
     /// the mapped role is only used at auto-provisioning.
     pub sync_roles: bool,
@@ -158,6 +160,7 @@ impl AuthConfig {
                     group_roles: parse_group_roles(&env_or("ORBIT_OIDC_GROUP_ROLES", ""))?,
                     team_groups: parse_team_groups(&env_or("ORBIT_OIDC_TEAM_GROUPS", ""))?,
                     auto_create_teams: env_bool("ORBIT_OIDC_AUTO_CREATE_TEAMS", false),
+                    require_mapped_group: env_bool("ORBIT_OIDC_REQUIRE_MAPPED_GROUP", false),
                     sync_roles: env_bool("ORBIT_OIDC_SYNC_ROLES", false),
                     clock_skew_seconds: env_or("ORBIT_OIDC_CLOCK_SKEW_SECONDS", "60")
                         .parse()

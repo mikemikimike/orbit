@@ -202,6 +202,8 @@ spec:
               value: {{ .Values.auth.oidc.teamGroups | toJson | quote }}
             - name: ORBIT_OIDC_AUTO_CREATE_TEAMS
               value: {{ .Values.auth.oidc.autoCreateTeams | quote }}
+            - name: ORBIT_OIDC_REQUIRE_MAPPED_GROUP
+              value: {{ .Values.auth.oidc.requireMappedGroup | quote }}
             - name: ORBIT_OIDC_SYNC_ROLES
               value: {{ .Values.auth.oidc.syncRoles | quote }}
             {{- end }}

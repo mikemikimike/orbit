@@ -8,6 +8,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Added
+
+- OIDC `requireMappedGroup` / `ORBIT_OIDC_REQUIRE_MAPPED_GROUP`: deny users whose IdP
+  groups match no role or access-team mapping and show a dedicated no-access page.
+
+
 ### Changed
 
 - Web UI redesigned on a documented design system (`docs/development/design-system.md`):

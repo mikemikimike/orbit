@@ -40,3 +40,10 @@ auth:
 ```
 
 The first login creates access team `devs` and adds the user as `member`.
+
+## Deny unmapped users
+
+Set `requireMappedGroup: true` (or `ORBIT_OIDC_REQUIRE_MAPPED_GROUP=true`) to deny users
+whose groups match neither `groupRoles` nor `teamGroups`. They receive a clear
+"No access to ORBIT" page instead of being auto-provisioned as viewers. Existing users
+with no mapped group are denied on their next request while this is enabled.

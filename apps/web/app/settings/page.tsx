@@ -479,6 +479,7 @@ function OidcSettingsForm() {
   const [autoProvision, setAutoProvision] = useState(true);
   const [defaultRole, setDefaultRole] = useState("viewer");
   const [emailClaim, setEmailClaim] = useState("email");
+  const [requireMappedGroup, setRequireMappedGroup] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -495,6 +496,7 @@ function OidcSettingsForm() {
         setAutoProvision(data.autoProvision ?? true);
         setDefaultRole(data.defaultRole || "viewer");
         setEmailClaim(data.emailClaim || "email");
+        setRequireMappedGroup((data as { requireMappedGroup?: boolean }).requireMappedGroup ?? false);
       }
     } catch (error) {
       toast.error(errorMessage(error));
@@ -535,6 +537,7 @@ function OidcSettingsForm() {
             autoProvision,
             defaultRole,
             emailClaim,
+            requireMappedGroup,
           },
         },
       });
