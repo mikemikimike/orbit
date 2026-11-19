@@ -74,6 +74,15 @@ pub struct WorkerExecutionContext {
     pub tool_policies: Vec<orbit_domain::ToolPolicyRule>,
     #[serde(default)]
     pub env: Vec<WorkerEnv>,
+    #[serde(default)]
+    pub subagent_models: Vec<WorkerSubagentModel>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkerSubagentModel {
+    pub agent_id: Uuid,
+    pub model: Option<WorkerModel>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

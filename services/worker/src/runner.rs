@@ -100,6 +100,24 @@ pub async fn run_single(state: WorkerState, execution_id: uuid::Uuid) -> anyhow:
 }
 
 /// Execute one claimed execution and persist its lifecycle.
+fn worker_model_selector(model: &crate::client::WorkerModel) -> Option<String> {
+    use orbit_contracts::ModelSelection;
+    match &model.selection {
+        ModelSelection::Harness { provider, model } => match (provider, model) {
+            (Some(provider), Some(model)) if !model.contains('/') => {
+                Some(format!("{provider}/{model}"))
+            }
+            (_, Some(model)) => Some(model.clone()),
+            _ => None,
+        },
+        ModelSelection::Platform {
+            provider_name,
+            model,
+            ..
+        } => Some(format!("{provider_name}/{model}")),
+    }
+}
+
 pub async fn run_execution(
     state: WorkerState,
     context: crate::client::WorkerExecutionContext,
@@ -244,7 +262,15 @@ pub async fn run_execution(
         }
     }
 
-    match crate::subagents::materialize(&execution.input, &workspace).await {
+    let mut subagent_model_selectors = std::collections::BTreeMap::new();
+    for subagent in &context.subagent_models {
+        if let Some(selector) = subagent.model.as_ref().and_then(worker_model_selector) {
+            subagent_model_selectors.insert(subagent.agent_id, selector);
+        }
+    }
+    match crate::subagents::materialize(&execution.input, &workspace, &subagent_model_selectors)
+        .await
+    {
         Ok(names) if !names.is_empty() => {
             append_event(
                 &state,
@@ -441,6 +467,12 @@ pub async fn run_execution(
         },
         input,
         model,
+        subagent_models: context
+            .subagent_models
+            .iter()
+            .filter_map(|subagent| subagent.model.clone())
+            .map(crate::client::WorkerModel::into_resolved)
+            .collect(),
         grants,
         autonomy,
         resources: ResourceLimits {

@@ -3,9 +3,11 @@
 //! The primary agent runs in one harness process; the remaining team agents become
 //! project-local OpenCode subagents under `.opencode/agents`.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde_json::Value;
+use uuid::Uuid;
 
 fn slug(value: &str) -> String {
     let mut out = String::new();
@@ -51,7 +53,11 @@ pub fn system_instruction(input: &Value) -> Option<String> {
 }
 
 /// Returns the materialized subagent names.
-pub async fn materialize(input: &Value, workspace: &Path) -> anyhow::Result<Vec<String>> {
+pub async fn materialize(
+    input: &Value,
+    workspace: &Path,
+    models: &BTreeMap<Uuid, String>,
+) -> anyhow::Result<Vec<String>> {
     let Some(team) = input.get("team") else {
         return Ok(Vec::new());
     };
@@ -96,6 +102,14 @@ pub async fn materialize(input: &Value, workspace: &Path) -> anyhow::Result<Vec<
             serde_json::to_string(description).unwrap_or_else(|_| "\"subagent\"".into())
         ));
         document.push_str("mode: subagent\n");
+        if let Some(model) = subagent
+            .get("agentId")
+            .and_then(Value::as_str)
+            .and_then(|id| id.parse::<Uuid>().ok())
+            .and_then(|id| models.get(&id))
+        {
+            document.push_str(&format!("model: {model}\n"));
+        }
         document.push_str("---\n\n");
         document.push_str(instructions);
         document.push('\n');
@@ -103,4 +117,35 @@ pub async fn materialize(input: &Value, workspace: &Path) -> anyhow::Result<Vec<
         names.push(file);
     }
     Ok(names)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn writes_subagent_model_by_agent_id() {
+        let agent_id = Uuid::now_v7();
+        let dir = std::env::temp_dir().join(format!("orbit-subagents-{}", Uuid::now_v7()));
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        let input = json!({
+            "team": {
+                "mode": "native",
+                "subagents": [{
+                    "agentId": agent_id,
+                    "name": "Docs agent",
+                    "description": "writes docs",
+                    "instructions": "Be precise."
+                }]
+            }
+        });
+        let models = BTreeMap::from([(agent_id, "corp/docs-model".to_string())]);
+        materialize(&input, &dir, &models).await.unwrap();
+        let body = tokio::fs::read_to_string(dir.join(".opencode/agents/docs-agent.md"))
+            .await
+            .unwrap();
+        assert!(body.contains("model: corp/docs-model"));
+        let _ = tokio::fs::remove_dir_all(dir).await;
+    }
 }

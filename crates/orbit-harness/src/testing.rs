@@ -29,6 +29,7 @@ pub fn execution_request(_adapter: &dyn HarnessAdapter, task: &str) -> Execution
             provenance: InputProvenance::manual("contract-test"),
         },
         model: None,
+        subagent_models: Vec::new(),
         grants: vec![],
         autonomy: AutonomyLevel::RECOMMEND,
         resources: ResourceLimits {

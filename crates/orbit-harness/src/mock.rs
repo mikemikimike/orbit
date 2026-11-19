@@ -270,6 +270,7 @@ impl HarnessAdapter for MockHarnessAdapter {
             },
             input: request.input,
             model: None,
+            subagent_models: Vec::new(),
             grants: vec![],
             autonomy: orbit_domain::AutonomyLevel::default(),
             resources: orbit_domain::ResourceLimits::default(),
