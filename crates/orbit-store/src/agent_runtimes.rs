@@ -1,0 +1,106 @@
+//! Continuous agent runtimes (24/7 loop). The runtime asks the control plane to create
+//! the next execution whenever the previous one reaches a terminal state.
+
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
+
+use crate::{Store, StoreError, StoreResult};
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRuntime {
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub agent_id: Uuid,
+    pub status: String,
+    pub task: String,
+    pub harness_kind: String,
+    pub last_execution_id: Option<Uuid>,
+    pub last_error: Option<String>,
+    pub next_run_at: DateTime<Utc>,
+    pub created_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub stopped_at: Option<DateTime<Utc>>,
+}
+
+impl Store {
+    pub async fn create_agent_runtime(
+        &self,
+        org_id: Uuid,
+        agent_id: Uuid,
+        task: &str,
+        harness_kind: &str,
+        created_by: Option<Uuid>,
+    ) -> StoreResult<AgentRuntime> {
+        sqlx::query_as::<_, AgentRuntime>(
+            r#"
+            INSERT INTO agent_runtimes (id, org_id, agent_id, task, harness_kind, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING *
+            "#,
+        )
+        .bind(Uuid::now_v7())
+        .bind(org_id)
+        .bind(agent_id)
+        .bind(task)
+        .bind(harness_kind)
+        .bind(created_by)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    pub async fn get_agent_runtime(
+        &self,
+        org_id: Uuid,
+        agent_id: Uuid,
+    ) -> StoreResult<Option<AgentRuntime>> {
+        Ok(sqlx::query_as::<_, AgentRuntime>(
+            "SELECT * FROM agent_runtimes WHERE org_id = $1 AND agent_id = $2 AND status IN ('running','stopping') ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(org_id)
+        .bind(agent_id)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn list_running_agent_runtimes(&self) -> StoreResult<Vec<AgentRuntime>> {
+        Ok(sqlx::query_as::<_, AgentRuntime>(
+            "SELECT * FROM agent_runtimes WHERE status IN ('running','stopping') ORDER BY created_at ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn update_agent_runtime(
+        &self,
+        runtime_id: Uuid,
+        status: &str,
+        last_execution_id: Option<Uuid>,
+        last_error: Option<&str>,
+        next_run_at: DateTime<Utc>,
+    ) -> StoreResult<AgentRuntime> {
+        sqlx::query_as::<_, AgentRuntime>(
+            r#"
+            UPDATE agent_runtimes
+            SET status = $2,
+                last_execution_id = COALESCE($3, last_execution_id),
+                last_error = $4,
+                next_run_at = $5,
+                updated_at = now(),
+                stopped_at = CASE WHEN $2 = 'stopped' THEN now() ELSE stopped_at END
+            WHERE id = $1
+            RETURNING *
+            "#,
+        )
+        .bind(runtime_id)
+        .bind(status)
+        .bind(last_execution_id)
+        .bind(last_error)
+        .bind(next_run_at)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| StoreError::NotFound("agent runtime".into()))
+    }
+}

@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
   Copy,
@@ -41,6 +41,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AgentStatusBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, getAccessToken } from "@/lib/api";
+import { request } from "@/lib/http";
 import { copyText } from "@/lib/browser";
 import { agentSpecSchema } from "@orbit/contracts";
 import { queryKeys, unwrap, useAgent, useAgentVersions, useExecutions } from "@/lib/queries";
@@ -71,6 +72,36 @@ export default function AgentDetailPage() {
     setTab(next as AgentTab);
     window.history.replaceState(null, "", next === "overview" ? window.location.pathname : `#${next}`);
   }
+
+  const runtime = useQuery({
+    queryKey: ["agent-runtime", agentId],
+    queryFn: () =>
+      request<{ id: string; status: string } | null>(
+        `/api/v1/agents/${agentId}/runtime`,
+      ).catch(() => null),
+    refetchInterval: 10_000,
+  });
+  const startRuntime = useMutation({
+    mutationFn: () =>
+      request(`/api/v1/agents/${agentId}/runtime`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    onSuccess: () => {
+      toast.success("24/7 runtime started");
+      void queryClient.invalidateQueries({ queryKey: ["agent-runtime", agentId] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+  const stopRuntime = useMutation({
+    mutationFn: () =>
+      request(`/api/v1/agents/${agentId}/runtime/stop`, { method: "POST" }),
+    onSuccess: () => {
+      toast.success("24/7 runtime stopping");
+      void queryClient.invalidateQueries({ queryKey: ["agent-runtime", agentId] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
 
   const lifecycle = useMutation({
     mutationFn: async (action: "activate" | "pause") =>
@@ -224,6 +255,25 @@ export default function AgentDetailPage() {
                 defaultTask={defaultTask}
                 agentHarness={spec.harness?.type}
               />
+            ) : null}
+            {data.status === "active" ? (
+              runtime.data ? (
+                <Button
+                  variant="outline"
+                  loading={stopRuntime.isPending}
+                  onClick={() => stopRuntime.mutate()}
+                >
+                  Stop 24/7
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  loading={startRuntime.isPending}
+                  onClick={() => startRuntime.mutate()}
+                >
+                  Start 24/7
+                </Button>
+              )
             ) : null}
             {!archived ? (
               <Button asChild variant="outline">

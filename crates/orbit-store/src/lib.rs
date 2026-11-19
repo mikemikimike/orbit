@@ -15,6 +15,7 @@ use orbit_security::SecretCipher;
 pub mod access;
 pub mod access_teams;
 pub mod agent_memory;
+pub mod agent_runtimes;
 pub mod agent_teams;
 pub mod agents;
 pub mod approvals;
