@@ -142,13 +142,16 @@ impl Store {
         org_id: Uuid,
         access: Option<&crate::access::ResourceAccess>,
     ) -> StoreResult<Vec<Provider>> {
-        let (privileged, user_id, team_ids) = crate::access::binds(access);
+        let (privileged, user_id, team_ids, isolation) = crate::access::binds(access);
         Ok(sqlx::query_as::<_, Provider>(
             r#"
             SELECT * FROM providers
             WHERE org_id = $1
-              AND ($2::bool OR visibility = 'org' OR owner_user_id = $3
-                   OR (visibility = 'team' AND owner_team_id = ANY($4)))
+              AND ($2::bool OR owner_user_id = $3
+                   OR CASE WHEN $5::bool AND owner_team_id IS NOT NULL
+                        THEN owner_team_id = ANY($4)
+                        ELSE visibility = 'org'
+                             OR (visibility = 'team' AND owner_team_id = ANY($4)) END)
             ORDER BY created_at DESC
             "#,
         )
@@ -156,6 +159,7 @@ impl Store {
         .bind(privileged)
         .bind(user_id)
         .bind(&team_ids)
+        .bind(isolation)
         .fetch_all(&self.pool)
         .await?)
     }
@@ -362,15 +366,18 @@ impl Store {
         org_id: Uuid,
         access: Option<&crate::access::ResourceAccess>,
     ) -> StoreResult<Vec<ConnectionWithConnector>> {
-        let (privileged, user_id, team_ids) = crate::access::binds(access);
+        let (privileged, user_id, team_ids, isolation) = crate::access::binds(access);
         Ok(sqlx::query_as::<_, ConnectionWithConnector>(
             r#"
             SELECT c.*, conn.slug AS connector_slug, conn.name AS connector_name
             FROM connections c
             JOIN connectors conn ON conn.id = c.connector_id
             WHERE c.org_id = $1
-              AND ($2::bool OR c.visibility = 'org' OR c.owner_user_id = $3
-                   OR (c.visibility = 'team' AND c.owner_team_id = ANY($4)))
+              AND ($2::bool OR c.owner_user_id = $3
+                   OR CASE WHEN $5::bool AND c.owner_team_id IS NOT NULL
+                        THEN c.owner_team_id = ANY($4)
+                        ELSE c.visibility = 'org'
+                             OR (c.visibility = 'team' AND c.owner_team_id = ANY($4)) END)
             ORDER BY c.created_at DESC
             "#,
         )
@@ -378,6 +385,7 @@ impl Store {
         .bind(privileged)
         .bind(user_id)
         .bind(&team_ids)
+        .bind(isolation)
         .fetch_all(&self.pool)
         .await?)
     }

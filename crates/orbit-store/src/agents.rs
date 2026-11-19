@@ -134,7 +134,7 @@ impl Store {
         query: Option<&str>,
         access: Option<&crate::access::ResourceAccess>,
     ) -> StoreResult<(Vec<AgentWithSpec>, Option<String>, i64)> {
-        let (privileged, user_id, team_ids) = crate::access::binds(access);
+        let (privileged, user_id, team_ids, isolation) = crate::access::binds(access);
         let (cursor_ts, cursor_id) = match cursor {
             Some(raw) => match decode_cursor(raw)? {
                 Some((ts, id)) => (Some(ts), Some(id)),
@@ -151,8 +151,11 @@ impl Store {
               AND ($2::text IS NULL OR a.status = $2)
               AND ($3::text IS NULL OR a.name ILIKE '%' || $3 || '%' OR a.description ILIKE '%' || $3 || '%')
               AND ($4::timestamptz IS NULL OR (a.created_at, a.id) < ($4::timestamptz, $5::uuid))
-              AND ($7::bool OR a.visibility = 'org' OR a.owner_user_id = $8
-                   OR (a.visibility = 'team' AND a.owner_team_id = ANY($9)))
+              AND ($7::bool OR a.owner_user_id = $8
+                   OR CASE WHEN $10::bool AND a.owner_team_id IS NOT NULL
+                        THEN a.owner_team_id = ANY($9)
+                        ELSE a.visibility = 'org'
+                             OR (a.visibility = 'team' AND a.owner_team_id = ANY($9)) END)
             ORDER BY a.created_at DESC, a.id DESC
             LIMIT $6
             "#,
@@ -166,6 +169,7 @@ impl Store {
         .bind(privileged)
         .bind(user_id)
         .bind(&team_ids)
+        .bind(isolation)
         .fetch_all(&self.pool)
         .await?;
 
@@ -175,8 +179,11 @@ impl Store {
             WHERE a.org_id = $1
               AND ($2::text IS NULL OR a.status = $2)
               AND ($3::text IS NULL OR a.name ILIKE '%' || $3 || '%' OR a.description ILIKE '%' || $3 || '%')
-              AND ($4::bool OR a.visibility = 'org' OR a.owner_user_id = $5
-                   OR (a.visibility = 'team' AND a.owner_team_id = ANY($6)))
+              AND ($4::bool OR a.owner_user_id = $5
+                   OR CASE WHEN $7::bool AND a.owner_team_id IS NOT NULL
+                        THEN a.owner_team_id = ANY($6)
+                        ELSE a.visibility = 'org'
+                             OR (a.visibility = 'team' AND a.owner_team_id = ANY($6)) END)
             "#,
         )
         .bind(org_id)
@@ -185,6 +192,7 @@ impl Store {
         .bind(privileged)
         .bind(user_id)
         .bind(&team_ids)
+        .bind(isolation)
         .fetch_one(&self.pool)
         .await?;
 

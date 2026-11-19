@@ -49,11 +49,13 @@ impl AccessScope {
     }
 
     pub fn store_access(&self) -> orbit_store::access::ResourceAccess {
+        // Lists must hide exactly what `can_view` hides, including team isolation.
         orbit_store::access::ResourceAccess::new(
             self.user_id,
             self.is_privileged(),
             self.teams.keys().copied().collect(),
         )
+        .with_team_isolation(self.team_isolation)
     }
 
     fn leads_team(&self, team_id: Option<Uuid>) -> bool {

@@ -1112,6 +1112,84 @@ async fn access_teams_and_ownership_defaults() {
 }
 
 #[tokio::test]
+async fn lists_honour_strict_team_isolation() {
+    use orbit_store::access::ResourceAccess;
+
+    let Some(store) = test_store().await else {
+        return;
+    };
+    let (org, owner) = seed_org(&store).await;
+    let viewer = store
+        .create_user(org, "operator@test.local", "Operator", UserRole::Operator)
+        .await
+        .expect("user");
+    let ours = store
+        .create_access_team(org, "Ours", "ours", Some(owner))
+        .await
+        .expect("team");
+    let theirs = store
+        .create_access_team(org, "Theirs", "theirs", Some(owner))
+        .await
+        .expect("team");
+    store
+        .upsert_team_member(ours.id, viewer.id, "member")
+        .await
+        .unwrap();
+
+    let agent = |name: &'static str, visibility: &'static str, team: Option<uuid::Uuid>| {
+        let store = &store;
+        async move {
+            let created = store
+                .create_agent(org, Some(owner), &definition(name))
+                .await
+                .expect("agent")
+                .0;
+            store
+                .set_resource_visibility(org, "agents", created.id, visibility, team)
+                .await
+                .expect("visibility");
+        }
+    };
+    agent("Org, other team", "org", Some(theirs.id)).await;
+    agent("Org, our team", "org", Some(ours.id)).await;
+    agent("Org, no team", "org", None).await;
+    agent("Private, other team", "private", Some(theirs.id)).await;
+
+    let names = |access: ResourceAccess| {
+        let store = &store;
+        async move {
+            let (agents, _, total) = store
+                .list_agents(org, 50, None, None, None, Some(&access))
+                .await
+                .expect("list");
+            let mut names: Vec<String> = agents.into_iter().map(|agent| agent.agent.name).collect();
+            names.sort();
+            assert_eq!(total as usize, names.len(), "count matches the page");
+            names
+        }
+    };
+    let member = ResourceAccess::new(viewer.id, false, vec![ours.id]);
+
+    assert_eq!(
+        names(member.clone()).await,
+        ["Org, no team", "Org, other team", "Org, our team"],
+        "without isolation, organization visibility is enough"
+    );
+    assert_eq!(
+        names(member.with_team_isolation(true)).await,
+        ["Org, no team", "Org, our team"],
+        "with isolation, another team's resources stay hidden"
+    );
+    assert_eq!(
+        names(ResourceAccess::new(owner, true, vec![]).with_team_isolation(true))
+            .await
+            .len(),
+        4,
+        "admins see everything"
+    );
+}
+
+#[tokio::test]
 async fn team_worker_cannot_claim_another_teams_execution() {
     let Some(store) = test_store().await else {
         return;

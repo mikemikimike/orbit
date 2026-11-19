@@ -56,6 +56,10 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Fixed
 
+- Access: with strict team isolation on (the default), lists of agents, skills, worker
+  profiles, connections, providers, triggers, tool policies and agent teams showed non-admins
+  other teams' organization-visible resources, which then returned 404 when opened. List
+  queries now apply the same rule as the detail check.
 - Licenses: the `executions_per_day` limit, spelled as documented in ADR 0010, was ignored
   because the parser only read `executionsPerDay`. Both spellings are now accepted.
 - **Workers → Edit** crashed on a fresh install: the seeded platform profile stored its

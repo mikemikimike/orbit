@@ -121,15 +121,18 @@ impl Store {
         agent_id: Option<Uuid>,
         access: Option<&crate::access::ResourceAccess>,
     ) -> StoreResult<Vec<ToolPolicy>> {
-        let (privileged, user_id, team_ids) = crate::access::binds(access);
+        let (privileged, user_id, team_ids, isolation) = crate::access::binds(access);
         let rows = match agent_id {
             Some(agent_id) => {
                 sqlx::query_as::<_, ToolPolicy>(
                     r#"
                     SELECT * FROM tool_policies
                     WHERE org_id = $1 AND (agent_id IS NULL OR agent_id = $2)
-                      AND ($3::bool OR visibility = 'org' OR owner_user_id = $4
-                           OR (visibility = 'team' AND owner_team_id = ANY($5)))
+                      AND ($3::bool OR owner_user_id = $4
+                           OR CASE WHEN $6::bool AND owner_team_id IS NOT NULL
+                                THEN owner_team_id = ANY($5)
+                                ELSE visibility = 'org'
+                                     OR (visibility = 'team' AND owner_team_id = ANY($5)) END)
                     ORDER BY priority ASC, name ASC
                     "#,
                 )
@@ -138,6 +141,7 @@ impl Store {
                 .bind(privileged)
                 .bind(user_id)
                 .bind(&team_ids)
+                .bind(isolation)
                 .fetch_all(&self.pool)
                 .await?
             }
@@ -146,8 +150,11 @@ impl Store {
                     r#"
                     SELECT * FROM tool_policies
                     WHERE org_id = $1 AND agent_id IS NULL
-                      AND ($2::bool OR visibility = 'org' OR owner_user_id = $3
-                           OR (visibility = 'team' AND owner_team_id = ANY($4)))
+                      AND ($2::bool OR owner_user_id = $3
+                           OR CASE WHEN $5::bool AND owner_team_id IS NOT NULL
+                                THEN owner_team_id = ANY($4)
+                                ELSE visibility = 'org'
+                                     OR (visibility = 'team' AND owner_team_id = ANY($4)) END)
                     ORDER BY priority ASC, name ASC
                     "#,
                 )
@@ -155,6 +162,7 @@ impl Store {
                 .bind(privileged)
                 .bind(user_id)
                 .bind(&team_ids)
+                .bind(isolation)
                 .fetch_all(&self.pool)
                 .await?
             }
