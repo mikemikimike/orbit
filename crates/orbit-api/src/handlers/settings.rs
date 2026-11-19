@@ -44,6 +44,9 @@ pub struct OidcSettings {
     /// Create missing access teams for mapped groups.
     #[serde(default)]
     pub auto_create_teams: bool,
+    /// Deny users whose groups match no role/team mapping.
+    #[serde(default)]
+    pub require_mapped_group: bool,
     /// Re-evaluate the stored role on every login when a mapping matches.
     #[serde(default)]
     pub sync_roles: bool,
@@ -80,6 +83,7 @@ pub async fn get_oidc(
         group_roles: Default::default(),
         team_groups: Default::default(),
         auto_create_teams: false,
+        require_mapped_group: false,
         sync_roles: false,
     });
     Ok(Json(settings))
@@ -136,6 +140,7 @@ pub async fn apply_stored_oidc(
         group_roles: Vec::new(),
         team_groups: Vec::new(),
         auto_create_teams: false,
+        require_mapped_group: false,
         sync_roles: false,
         clock_skew_seconds: 60,
     });
@@ -216,6 +221,7 @@ pub async fn apply_stored_oidc(
         oidc.team_groups = mappings;
     }
     oidc.auto_create_teams = stored.auto_create_teams;
+    oidc.require_mapped_group = stored.require_mapped_group;
     if stored.sync_roles {
         oidc.sync_roles = true;
     }

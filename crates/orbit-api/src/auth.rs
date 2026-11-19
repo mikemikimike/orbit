@@ -121,6 +121,16 @@ async fn resolve_oidc(state: &AppState, token: Option<&str>) -> Result<AuthConte
     // Only mappings that are explicitly configured can grant a role. With no match we
     // fall back to the configured default role.
     let mapped_role = highest_mapped_role(&identity.groups, &oidc.group_roles);
+    let mapped_team = identity.groups.iter().any(|group| {
+        oidc.team_groups
+            .iter()
+            .any(|(mapped, _, _)| mapped == group)
+    });
+    if oidc.require_mapped_group && mapped_role.is_none() && !mapped_team {
+        return Err(ApiError::forbidden(
+            "your OIDC account is not authorized for this ORBIT installation",
+        ));
+    }
     let target_role = mapped_role.unwrap_or(oidc.default_role);
 
     let user = match state

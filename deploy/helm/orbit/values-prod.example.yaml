@@ -128,6 +128,7 @@ auth:
     # Optional IdP group -> "access-team-slug:role" mapping (lead/member/viewer).
     teamGroups: {}
     autoCreateTeams: false
+    requireMappedGroup: false
     syncRoles: false
 
 # Manage secrets externally (Vault, External Secrets, sealed-secrets, …).
