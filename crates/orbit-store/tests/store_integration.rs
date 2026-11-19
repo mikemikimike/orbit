@@ -1326,3 +1326,54 @@ async fn team_worker_cannot_claim_another_teams_execution() {
     let still_queued = store.get_execution(org, exec_b.id).await.unwrap();
     assert_eq!(still_queued.status, "queued");
 }
+
+#[tokio::test]
+async fn agent_spec_triggers_are_reconciled() {
+    let Some(store) = test_store().await else {
+        return;
+    };
+    let (org, user) = seed_org(&store).await;
+    let mut first = definition("Trigger Reconciler");
+    first.spec.triggers = vec![TriggerSpec::Schedule {
+        cron: "*/15 * * * *".into(),
+        timezone: None,
+        task: Some("first task".into()),
+    }];
+    let (agent, _) = store.create_agent(org, Some(user), &first).await.unwrap();
+    let triggers = store
+        .list_triggers(org, Some(agent.id), None)
+        .await
+        .unwrap();
+    assert_eq!(triggers.len(), 1);
+    assert_eq!(triggers[0].config["cron"], "*/15 * * * *");
+
+    let mut second = definition("Trigger Reconciler");
+    second.spec.triggers = vec![TriggerSpec::Schedule {
+        cron: "*/5 * * * *".into(),
+        timezone: None,
+        task: Some("five minute task".into()),
+    }];
+    store
+        .add_agent_version(org, agent.id, Some(user), &second)
+        .await
+        .unwrap();
+    let triggers = store
+        .list_triggers(org, Some(agent.id), None)
+        .await
+        .unwrap();
+    assert_eq!(triggers.len(), 1);
+    assert_eq!(triggers[0].config["cron"], "*/5 * * * *");
+    assert_eq!(triggers[0].config["task"], "five minute task");
+
+    let mut third = definition("Trigger Reconciler");
+    third.spec.triggers = vec![];
+    store
+        .add_agent_version(org, agent.id, Some(user), &third)
+        .await
+        .unwrap();
+    assert!(store
+        .list_triggers(org, Some(agent.id), None)
+        .await
+        .unwrap()
+        .is_empty());
+}
