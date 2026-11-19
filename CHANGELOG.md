@@ -6,7 +6,19 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
-## [Unreleased]
+## [0.21.0] - 2026-11-19
+
+### Added
+
+- Native tool policy hooks for Pi and OpenCode: native tools call the broker `/policy`
+  before execution; deny blocks and approvals wait.
+- Import OpenCode agent `.md` and `SKILL.md` definitions with frontmatter parsing,
+  warnings for unsupported fields, and import buttons on Agents/Skills.
+- Native Agent Team subagents can use their own agent model; OpenCode provider configs and
+  subagent files are generated per model.
+- Continuous monitor runtimes: start/get/stop, atomic scheduling ticks, interval,
+  heartbeat, session continuity and agent-detail status. Persistent harness processes and
+  the standalone code runtime remain open in #88.
 
 ### Changed
 
