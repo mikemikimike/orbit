@@ -6,6 +6,23 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
+## [0.19.1] - 2026-11-19
+
+### Fixed
+
+- Pi platform providers use a temporary `models.json` with the configured base URL and
+  `PI_OFFLINE=1`; airgapped workers no longer contact `api.openai.com`.
+- Added a unit test for the generated Pi platform model configuration.
+
+## [0.19.0] - 2026-11-18
+
+### Changed
+
+- Access is one consistent, license-gated Card in edit forms for agents, skills,
+  connections, providers, worker profiles and Agent Teams.
+- Access shows disabled visibility controls for unsaved resources.
+- Frontend polish for worker profiles, Agent Teams and agent lists.
+
 ## [0.18.0] - 2026-11-18
 
 ### Added
