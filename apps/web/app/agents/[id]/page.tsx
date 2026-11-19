@@ -40,7 +40,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AgentStatusBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { API_BASE_URL, api, getAccessToken } from "@/lib/api";
+import { api, getAccessToken } from "@/lib/api";
 import { copyText } from "@/lib/browser";
 import { agentSpecSchema } from "@orbit/contracts";
 import { queryKeys, unwrap, useAgent, useAgentVersions, useExecutions } from "@/lib/queries";
@@ -163,7 +163,9 @@ export default function AgentDetailPage() {
     // through the same origin as every other API call.
     try {
       const token = getAccessToken();
-      const response = await fetch(`${API_BASE_URL}/api/v1/agents/${data.id}/export`, {
+      // Always use the same-origin web proxy. `NEXT_PUBLIC_ORBIT_API_URL` may point at
+      // an internal API host that the browser cannot reach.
+      const response = await fetch(`/api/v1/agents/${data.id}/export`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       if (!response.ok) throw new Error(`Export failed (HTTP ${response.status})`);
