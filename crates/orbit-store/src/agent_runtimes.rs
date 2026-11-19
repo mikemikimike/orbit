@@ -18,6 +18,7 @@ pub struct AgentRuntime {
     pub last_execution_id: Option<Uuid>,
     pub last_error: Option<String>,
     pub next_run_at: DateTime<Utc>,
+    pub last_heartbeat_at: DateTime<Utc>,
     pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -75,6 +76,16 @@ impl Store {
 
     /// Atomically claim the next tick for a runtime. Only one API replica can create the
     /// next execution; the short lease is released when the execution row is written.
+    pub async fn heartbeat_agent_runtime(&self, runtime_id: Uuid) -> StoreResult<()> {
+        sqlx::query(
+            "UPDATE agent_runtimes SET last_heartbeat_at = now(), updated_at = now() WHERE id = $1 AND status IN ('running','stopping')",
+        )
+        .bind(runtime_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn claim_agent_runtime_tick(
         &self,
         runtime_id: Uuid,
