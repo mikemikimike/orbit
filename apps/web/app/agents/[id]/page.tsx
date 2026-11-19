@@ -76,9 +76,13 @@ export default function AgentDetailPage() {
   const runtime = useQuery({
     queryKey: ["agent-runtime", agentId],
     queryFn: () =>
-      request<{ id: string; status: string } | null>(
-        `/api/v1/agents/${agentId}/runtime`,
-      ).catch(() => null),
+      request<{
+        id: string;
+        status: string;
+        lastHeartbeatAt: string;
+        lastExecutionId?: string | null;
+        lastError?: string | null;
+      } | null>(`/api/v1/agents/${agentId}/runtime`).catch(() => null),
     refetchInterval: 10_000,
   });
   const startRuntime = useMutation({
@@ -338,6 +342,24 @@ export default function AgentDetailPage() {
         <Callout tone="neutral" title="This agent is archived">
           It cannot run, be edited or be reactivated. Its execution history is still available, and its
           definition can be exported and used to create a new agent.
+        </Callout>
+      ) : null}
+
+      {runtime.data ? (
+        <Callout
+          tone={runtime.data.status === "running" ? "info" : runtime.data.status === "stopping" ? "warning" : "neutral"}
+          title={`24/7 runtime · ${titleCase(runtime.data.status)}`}
+          action={
+            runtime.data.lastExecutionId ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/executions/${runtime.data.lastExecutionId}`}>Open last run</Link>
+              </Button>
+            ) : undefined
+          }
+        >
+          Heartbeat {relativeTime(runtime.data.lastHeartbeatAt)}
+          {runtime.data.lastError ? ` · ${runtime.data.lastError}` : ""}. This runtime creates
+          the next execution when the previous one finishes and resumes its session.
         </Callout>
       ) : null}
 
