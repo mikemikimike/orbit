@@ -283,6 +283,7 @@ async fn fire_trigger_inner(state: &AppState, trigger: Trigger) -> anyhow::Resul
             placement,
             trigger_id: Some(trigger.id),
             input,
+            session_ref: None,
             skills: &[],
             timeout_seconds: spec.resources.timeout_seconds,
             requested_by: None,
@@ -624,6 +625,9 @@ async fn runtime_tick(state: &AppState) -> anyhow::Result<()> {
                     .unwrap_or("auto"),
                 trigger_id: None,
                 input,
+                session_ref: last
+                    .as_ref()
+                    .and_then(|execution| execution.session_ref.as_deref()),
                 skills: &[],
                 timeout_seconds: spec.resources.timeout_seconds,
                 requested_by: runtime.created_by,
