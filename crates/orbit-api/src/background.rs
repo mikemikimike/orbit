@@ -102,6 +102,18 @@ pub fn spawn(state: AppState) {
         }
     });
 
+    let runtime_state = state.clone();
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(5));
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticker.tick().await;
+            if let Err(error) = runtime_tick(&runtime_state).await {
+                tracing::warn!(%error, "agent runtime tick failed");
+            }
+        }
+    });
+
     let retention_state = state.clone();
     tokio::spawn(async move {
         // Run shortly after start, then daily.
@@ -487,6 +499,149 @@ async fn reconcile_worker_tags(state: &AppState) -> anyhow::Result<()> {
                 }
             }
         }
+    }
+    Ok(())
+}
+
+/// Advance continuous agent runtimes: create the next execution when the previous one
+/// is terminal, and stop runtimes whose agent is no longer active.
+async fn runtime_tick(state: &AppState) -> anyhow::Result<()> {
+    for runtime in state.store.list_running_agent_runtimes().await? {
+        let agent = match state
+            .store
+            .get_agent(runtime.org_id, runtime.agent_id)
+            .await
+        {
+            Ok(agent) => agent,
+            Err(_) => {
+                let _ = state
+                    .store
+                    .update_agent_runtime(
+                        runtime.id,
+                        "stopped",
+                        runtime.last_execution_id,
+                        Some("agent no longer exists"),
+                        chrono::Utc::now(),
+                    )
+                    .await;
+                continue;
+            }
+        };
+        if agent.status != "active" {
+            let _ = state
+                .store
+                .update_agent_runtime(
+                    runtime.id,
+                    "stopped",
+                    runtime.last_execution_id,
+                    Some("agent is not active"),
+                    chrono::Utc::now(),
+                )
+                .await;
+            continue;
+        }
+
+        let last = match runtime.last_execution_id {
+            Some(id) => state.store.get_execution(runtime.org_id, id).await.ok(),
+            None => None,
+        };
+        let last_terminal = last.as_ref().is_none_or(|execution| {
+            matches!(
+                ExecutionStatus::parse(&execution.status),
+                Some(status) if status.is_terminal()
+            )
+        });
+        if runtime.status == "stopping" {
+            if last_terminal {
+                let _ = state
+                    .store
+                    .update_agent_runtime(
+                        runtime.id,
+                        "stopped",
+                        runtime.last_execution_id,
+                        runtime.last_error.as_deref(),
+                        chrono::Utc::now(),
+                    )
+                    .await;
+            }
+            continue;
+        }
+        if !last_terminal || runtime.next_run_at > chrono::Utc::now() {
+            continue;
+        }
+        if last
+            .as_ref()
+            .is_some_and(|execution| execution.status == "failed")
+        {
+            let _ = state
+                .store
+                .update_agent_runtime(
+                    runtime.id,
+                    "running",
+                    runtime.last_execution_id,
+                    last.as_ref()
+                        .and_then(|execution| execution.error.as_ref())
+                        .map(|error| error.to_string())
+                        .as_deref(),
+                    chrono::Utc::now() + chrono::Duration::seconds(30),
+                )
+                .await;
+            continue;
+        }
+
+        let version = state
+            .store
+            .get_current_version(runtime.org_id, &agent)
+            .await?;
+        let spec: orbit_domain::AgentSpec = serde_json::from_value(version.spec.clone())?;
+        let harness_kind = runtime
+            .harness_kind
+            .parse::<orbit_domain::HarnessKind>()
+            .map_err(|_| anyhow::anyhow!("runtime has an unknown harness"))?;
+        let input = serde_json::json!({
+            "task": runtime.task,
+            "payload": { "runtimeId": runtime.id },
+            "provenance": {
+                "source": "runtime",
+                "trusted": true,
+                "subject": runtime.id,
+                "receivedAt": Utc::now(),
+            },
+        });
+        let execution = state
+            .store
+            .create_execution(orbit_store::executions::NewExecution {
+                org_id: runtime.org_id,
+                agent_id: agent.id,
+                agent_version_id: version.id,
+                agent_name: &agent.name,
+                harness_kind,
+                trigger_source: TriggerSource::Manual,
+                placement: spec
+                    .harness
+                    .as_ref()
+                    .map(|harness| harness.placement.as_str())
+                    .unwrap_or("auto"),
+                trigger_id: None,
+                input,
+                skills: &[],
+                timeout_seconds: spec.resources.timeout_seconds,
+                requested_by: runtime.created_by,
+                idempotency_key: Some(&format!("runtime:{}:{}", runtime.id, uuid::Uuid::now_v7())),
+                team_run_id: None,
+                team_step_index: None,
+            })
+            .await?;
+        state
+            .store
+            .update_agent_runtime(
+                runtime.id,
+                "running",
+                Some(execution.id),
+                None,
+                chrono::Utc::now(),
+            )
+            .await?;
     }
     Ok(())
 }

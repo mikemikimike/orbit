@@ -12,6 +12,7 @@ pub mod health;
 pub mod license;
 pub mod outputs;
 pub mod roles;
+pub mod runtime;
 pub mod settings;
 pub mod sharing;
 pub mod skills;

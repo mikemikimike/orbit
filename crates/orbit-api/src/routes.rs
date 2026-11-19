@@ -65,6 +65,14 @@ pub fn build_router(state: AppState) -> Router {
             get(handlers::agents::export_agent),
         )
         .route(
+            "/api/v1/agents/{agent_id}/runtime",
+            get(handlers::runtime::get).post(handlers::runtime::start),
+        )
+        .route(
+            "/api/v1/agents/{agent_id}/runtime/stop",
+            post(handlers::runtime::stop),
+        )
+        .route(
             "/api/v1/agents/{agent_id}/executions",
             get(handlers::executions::list_agent_executions)
                 .post(handlers::executions::execute_agent),
