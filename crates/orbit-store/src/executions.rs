@@ -17,6 +17,8 @@ pub struct NewExecution<'a> {
     pub placement: &'a str,
     pub trigger_id: Option<Uuid>,
     pub input: Value,
+    /// Resume an existing harness session when supplied.
+    pub session_ref: Option<&'a str>,
     pub skills: &'a [String],
     pub timeout_seconds: u64,
     pub requested_by: Option<Uuid>,
@@ -44,8 +46,8 @@ impl Store {
             INSERT INTO executions (id, org_id, agent_id, agent_version_id, agent_name, harness_kind,
                                     trigger_id, trigger_source, placement, status, input, skills,
                                     timeout_seconds, idempotency_key, requested_by,
-                                    team_run_id, team_step_index)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $10, $11, $12, $13, $14, $15, $16)
+                                    team_run_id, team_step_index, session_ref)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $10, $11, $12, $13, $14, $15, $16, $17)
             ON CONFLICT (org_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
             RETURNING *
             "#,
@@ -66,6 +68,7 @@ impl Store {
         .bind(new.requested_by)
         .bind(new.team_run_id)
         .bind(new.team_step_index)
+        .bind(new.session_ref)
         .fetch_optional(&self.pool)
         .await?;
 

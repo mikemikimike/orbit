@@ -857,6 +857,7 @@ pub(crate) async fn start_step(
                 .unwrap_or("auto"),
             trigger_id: None,
             input,
+            session_ref: None,
             skills: &definition.skills,
             timeout_seconds: definition
                 .timeout_seconds
