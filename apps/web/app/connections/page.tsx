@@ -540,10 +540,7 @@ export default function ConnectionsPage() {
               />
             </details>
           </div>
-          <ResourceAccessFields
-            resource="connections"
-            resourceId={editing?.id}
-          />
+          <ResourceAccessFields resource="connections" resourceId={editing?.id} />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>
               Cancel

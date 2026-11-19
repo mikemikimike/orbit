@@ -301,10 +301,7 @@ export default function SkillsPage() {
               .sh, .bash, .py, .js, .ts, .rb, .pl, .go.
             </p>
           </div>
-          <ResourceAccessFields
-            resource="skills"
-            resourceId={editing?.id}
-          />
+          <ResourceAccessFields resource="skills" resourceId={editing?.id} />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>
               Cancel

@@ -656,11 +656,7 @@ export default function ModelsPage() {
               />
             </div>
           </div>
-
-          <ResourceAccessFields
-            resource="providers"
-            resourceId={editing?.id}
-          />
+          <ResourceAccessFields resource="providers" resourceId={editing?.id} />
           <DialogFooter className="gap-2 sm:justify-between">
             <div>
               {form.kind === "openai_compatible" ? (

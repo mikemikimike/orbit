@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { ExportResourceButton } from "@/components/export-resource-button";
+import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -1053,6 +1054,7 @@ export default function AgentTeamsPage() {
               ))}
             </div>
           </div>
+          <ResourceAccessFields resource="agent_teams" resourceId={editing?.id} />
           <DialogFooter className="sticky bottom-0 -mx-6 border-t bg-background/95 px-6 py-3 backdrop-blur">
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
             <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!canCreate}>
