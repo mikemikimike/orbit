@@ -1,0 +1,42 @@
+name: Cleanup packages
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only log what would be deleted"
+        required: false
+        default: "true"
+        type: boolean
+      keep_releases:
+        description: "Number of newest releases to keep fully"
+        required: false
+        default: "10"
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Prune old packages and artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORG: ${{ github.repository_owner }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.dry_run || 'true' }}
+          KEEP_RELEASES: ${{ inputs.keep_releases || '10' }}
+          MIN_AGE_DAYS: "7"
+          SHA_AGE_DAYS: "30"
+          ARTIFACT_AGE_DAYS: "14"
+        run: ./scripts/cleanup-packages.sh
