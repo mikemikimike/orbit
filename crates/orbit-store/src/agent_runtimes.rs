@@ -73,6 +73,27 @@ impl Store {
         .await?)
     }
 
+    /// Atomically claim the next tick for a runtime. Only one API replica can create the
+    /// next execution; the short lease is released when the execution row is written.
+    pub async fn claim_agent_runtime_tick(
+        &self,
+        runtime_id: Uuid,
+        lease_until: DateTime<Utc>,
+    ) -> StoreResult<Option<AgentRuntime>> {
+        Ok(sqlx::query_as::<_, AgentRuntime>(
+            r#"
+            UPDATE agent_runtimes
+            SET updated_at = now(), next_run_at = $2
+            WHERE id = $1 AND status = 'running' AND next_run_at <= now()
+            RETURNING *
+            "#,
+        )
+        .bind(runtime_id)
+        .bind(lease_until)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
     pub async fn update_agent_runtime(
         &self,
         runtime_id: Uuid,

@@ -567,9 +567,19 @@ async fn runtime_tick(state: &AppState) -> anyhow::Result<()> {
             }
             continue;
         }
-        if !last_terminal || runtime.next_run_at > chrono::Utc::now() {
+        if !last_terminal {
             continue;
         }
+        let Some(runtime) = state
+            .store
+            .claim_agent_runtime_tick(
+                runtime.id,
+                chrono::Utc::now() + chrono::Duration::seconds(5),
+            )
+            .await?
+        else {
+            continue;
+        };
         if last
             .as_ref()
             .is_some_and(|execution| execution.status == "failed")
