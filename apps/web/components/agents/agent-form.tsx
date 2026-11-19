@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode, useEffect } from "react";
+import { createContext, useContext, useMemo, useRef, useState, type ReactNode, useEffect } from "react";
 import Link from "next/link";
-import { Check, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Disclosure } from "@/components/ui/disclosure";
 import { ResourceAccessFields } from "@/components/resource-access-fields";
+import { SkillPicker } from "@/components/skill-picker";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -34,7 +35,8 @@ type SectionId =
   | "model"
   | "access"
   | "triggers"
-  | "autonomy";
+  | "autonomy"
+  | "sharing";
 
 const SECTION_TITLES: Record<SectionId, string> = {
   identity: "Identity",
@@ -43,7 +45,28 @@ const SECTION_TITLES: Record<SectionId, string> = {
   access: "Connectors and skills",
   triggers: "Triggers",
   autonomy: "Autonomy and limits",
+  sharing: "Sharing",
 };
+
+const SECTION_ORDER: SectionId[] = [
+  "identity",
+  "instructions",
+  "model",
+  "access",
+  "triggers",
+  "autonomy",
+  "sharing",
+];
+
+function isSectionId(value: string): value is SectionId {
+  return (SECTION_ORDER as string[]).includes(value);
+}
+
+/** The section on screen, and how to move between sections. */
+const SectionContext = createContext<{
+  active: SectionId;
+  go: (id: SectionId) => void;
+}>({ active: "identity", go: () => {} });
 
 /** Which section of the form a schema path belongs to. */
 function sectionForPath(path: string): SectionId {
@@ -88,29 +111,47 @@ function issueText(path: string, rawMessage: string): string {
 
 function FormSection({
   id,
-  step,
   title,
   description,
   children,
 }: {
   id: SectionId;
-  step: number;
+  /** Kept for call sites; the section nav shows the numbers now. */
+  step?: number;
   title: string;
   description: string;
   children: ReactNode;
 }) {
+  const { active, go } = useContext(SectionContext);
+  if (active !== id) return null;
+  const index = SECTION_ORDER.indexOf(id);
+  const previous = SECTION_ORDER[index - 1];
+  const next = SECTION_ORDER[index + 1];
   return (
-    <Card id={`section-${id}`} className="scroll-mt-20">
-      <CardHeader className="flex-row items-start gap-3">
-        <span className="tabular mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-          {step}
-        </span>
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold leading-6">{title}</h2>
-          <p className="text-[13px] text-muted-foreground">{description}</p>
-        </div>
+    <Card id={`section-${id}`} className="scroll-mt-20" aria-labelledby={`section-${id}-title`}>
+      <CardHeader>
+        <h2 id={`section-${id}-title`} className="text-[15px] font-semibold leading-6">
+          {title}
+        </h2>
+        <p className="text-[13px] text-muted-foreground">{description}</p>
       </CardHeader>
-      <CardContent className="space-y-4">{children}</CardContent>
+      <CardContent className="space-y-5">
+        {children}
+        <div className="flex items-center justify-between gap-3 border-t pt-4">
+          {previous ? (
+            <Button type="button" variant="ghost" onClick={() => go(previous)}>
+              <ChevronLeft /> {SECTION_TITLES[previous]}
+            </Button>
+          ) : (
+            <span />
+          )}
+          {next ? (
+            <Button type="button" variant="outline" onClick={() => go(next)}>
+              {SECTION_TITLES[next]} <ChevronRight />
+            </Button>
+          ) : null}
+        </div>
+      </CardContent>
     </Card>
   );
 }
@@ -259,13 +300,52 @@ export function AgentForm({
     ) {
       setLimitsOpen(true);
     }
+    const first = SECTION_ORDER.find((id) => next.some((issue) => sectionForPath(issue.path) === id));
+    if (first) {
+      setActive(first);
+      window.history.replaceState(null, "", `#${first}`);
+    }
     setFailedSubmits((count) => count + 1);
   }
 
+  // One section is on screen at a time. The URL hash remembers which, so a reload or a
+  // shared link opens the same section.
+  const [active, setActive] = useState<SectionId>("identity");
+  const [focusRequest, setFocusRequest] = useState(0);
+  useEffect(() => {
+    const sync = () => {
+      const fromHash = window.location.hash.replace(/^#/, "");
+      if (isSectionId(fromHash)) setActive(fromHash);
+    };
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
+  useEffect(() => {
+    if (!focusRequest) return;
+    const node = document.getElementById(`section-${active}`);
+    node?.scrollIntoView({ block: "start" });
+    node
+      ?.querySelector<HTMLElement>("input:not([type=hidden]), textarea, select")
+      ?.focus({ preventScroll: true });
+  }, [focusRequest, active]);
+
+  // Keep the current step visible in the phone pill row (sideways only, never the page).
+  const pillNavRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const nav = pillNavRef.current;
+    const pill = nav?.querySelector<HTMLElement>(`[data-section="${active}"]`);
+    if (!nav || !pill) return;
+    const left = pill.offsetLeft - nav.offsetLeft;
+    if (left < nav.scrollLeft || left + pill.offsetWidth > nav.scrollLeft + nav.clientWidth) {
+      nav.scrollTo({ left: Math.max(0, left - 16) });
+    }
+  }, [active]);
+
   function goToSection(id: SectionId) {
-    const node = document.getElementById(`section-${id}`);
-    node?.scrollIntoView({ behavior: "smooth", block: "start" });
-    node?.querySelector<HTMLElement>("input, textarea, select, button")?.focus({ preventScroll: true });
+    setActive(id);
+    setFocusRequest((count) => count + 1);
+    window.history.replaceState(null, "", `#${id}`);
   }
 
   function buildCandidate() {
@@ -323,31 +403,52 @@ export function AgentForm({
   const autonomy = AUTONOMY_LEVELS.find((level) => level.level === spec.autonomy.level);
   const modelSummary =
     [spec.model.provider, spec.model.model].filter(Boolean).join(" / ") || "Harness default";
-  const summaryRows: Array<{ id: SectionId; label: string; value: string }> = [
-    { id: "identity", label: "Name", value: definition.metadata.name.trim() || "Not set" },
-    {
-      id: "instructions",
-      label: "Instructions",
-      value: spec.instructions.system.trim() ? "Written" : "Not set",
+  const triggerSummary = (() => {
+    if (spec.triggers.length === 0) return "Manual only";
+    if (spec.triggers.length === 1) {
+      const only = spec.triggers[0];
+      return only.type === "schedule" ? cronDescription(only.cron) : titleCase(only.type);
+    }
+    return `${spec.triggers.length} triggers`;
+  })();
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const toolsSummary =
+    spec.connectors.length || spec.skills.length
+      ? [
+          spec.connectors.length ? plural(spec.connectors.length, "connector") : null,
+          spec.skills.length ? plural(spec.skills.length, "skill") : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : "None";
+  // What each section currently holds: the nav doubles as the summary.
+  const sectionSummary: Record<SectionId, { value: string; missing?: boolean }> = {
+    identity: {
+      value: definition.metadata.name.trim() || "Name not set",
+      missing: !definition.metadata.name.trim(),
     },
-    { id: "model", label: "Model", value: modelSummary },
-    {
-      id: "access",
-      label: "Connectors",
-      value: spec.connectors.length ? String(spec.connectors.length) : "None",
+    instructions: {
+      value: spec.instructions.system.trim() ? "Written" : "Not written yet",
+      missing: !spec.instructions.system.trim(),
     },
-    { id: "access", label: "Skills", value: spec.skills.length ? String(spec.skills.length) : "None" },
-    {
-      id: "triggers",
-      label: "Triggers",
-      value: spec.triggers.length ? String(spec.triggers.length) : "Manual only",
+    model: {
+      value: [
+        harness ? brandName(harness.type) : null,
+        spec.model.model ? spec.model.model : harness ? "default model" : modelSummary,
+      ]
+        .filter(Boolean)
+        .join(" · "),
     },
-    {
-      id: "autonomy",
-      label: "Autonomy",
+    access: { value: toolsSummary },
+    triggers: { value: triggerSummary },
+    autonomy: {
       value: autonomy ? `Level ${autonomy.level}, ${autonomy.name.toLowerCase()}` : "Not set",
+      missing: !autonomy,
     },
-  ];
+    sharing: { value: resourceId ? "Who can see and use it" : "After the first save" },
+  };
+  const issueCount = (id: SectionId) =>
+    issues.filter((issue) => sectionForPath(issue.path) === id).length;
 
   const submitButton = (className?: string) => (
     <Button onClick={handleSubmit} loading={submitting} size="lg" className={className}>
@@ -355,10 +456,115 @@ export function AgentForm({
     </Button>
   );
 
+  const sectionNav = (
+    <nav aria-label="Agent sections">
+      <ol className="space-y-0.5">
+        {SECTION_ORDER.map((id, index) => {
+          const current = id === active;
+          const problems = issueCount(id);
+          const summary = sectionSummary[id];
+          return (
+            <li key={id}>
+              <button
+                type="button"
+                onClick={() => goToSection(id)}
+                aria-current={current ? "step" : undefined}
+                className={cn(
+                  "flex w-full items-start gap-3 rounded-lg px-2.5 py-2 text-left transition-colors",
+                  current ? "bg-accent text-accent-foreground" : "hover:bg-muted/60",
+                )}
+              >
+                <span
+                  className={cn(
+                    "tabular mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-medium",
+                    problems
+                      ? "bg-destructive/15 text-destructive"
+                      : current
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {problems ? "!" : index + 1}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">{SECTION_TITLES[id]}</span>
+                  <span
+                    className={cn(
+                      "block truncate text-xs",
+                      problems
+                        ? "text-destructive"
+                        : summary.missing
+                          ? "text-warning"
+                          : "text-muted-foreground",
+                    )}
+                  >
+                    {problems ? `${problems} to fix` : summary.value}
+                  </span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+
   return (
+    <SectionContext.Provider value={{ active, go: goToSection }}>
     <div className="pb-24 lg:pb-0">
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-        <div className="min-w-0 space-y-5">
+      {/* Phone and tablet: the sections as a scrollable row of steps. */}
+      <nav ref={pillNavRef} aria-label="Agent sections" className="-mx-4 mb-4 overflow-x-auto px-4 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
+        <ol className="flex w-max gap-1.5">
+          {SECTION_ORDER.map((id, index) => {
+            const current = id === active;
+            const problems = issueCount(id);
+            return (
+              <li key={id}>
+                <button
+                  type="button"
+                  onClick={() => goToSection(id)}
+                  aria-current={current ? "step" : undefined}
+                  data-section={id}
+                  className={cn(
+                    "inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-[13px] font-medium transition-colors",
+                    current
+                      ? "border-primary/40 bg-accent text-accent-foreground"
+                      : "bg-card text-muted-foreground hover:text-foreground",
+                    problems && "border-destructive/40 text-destructive",
+                  )}
+                >
+                  <span className="tabular text-xs opacity-70">{problems ? "!" : index + 1}</span>
+                  {SECTION_TITLES[id]}
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
+
+      <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
+        {/* Desktop: section nav with the live summary, and the save button in view. */}
+        <aside className="hidden lg:sticky lg:top-6 lg:block">
+          {sectionNav}
+          <div className="mt-4 space-y-2 border-t pt-4">
+            {issues.length > 0 ? (
+              <p className="text-[13px] text-destructive" role="status">
+                {issues.length} {issues.length === 1 ? "issue needs" : "issues need"} fixing.
+              </p>
+            ) : null}
+            {submitButton("w-full")}
+            <Button asChild variant="ghost" className="w-full">
+              <Link href={cancelHref}>Cancel</Link>
+            </Button>
+            <p className="px-1 text-xs text-muted-foreground">
+              {editing
+                ? "Saving creates a new version. Past executions keep the old one."
+                : "Saving creates version 1 of this agent."}
+            </p>
+          </div>
+        </aside>
+
+        <div className="min-w-0 max-w-3xl space-y-5">
           {issues.length > 0 ? (
             <div ref={issuesRef} tabIndex={-1} className="rounded-lg scroll-mt-20 focus-visible:outline-offset-4">
               <Callout tone="danger" title="Fix these before saving">
@@ -801,6 +1007,7 @@ export function AgentForm({
               {(connectors.data ?? []).length === 0 ? (
                 <p className="text-[13px] text-muted-foreground">No connectors are available yet.</p>
               ) : null}
+              <ul className="divide-y overflow-hidden rounded-lg border bg-card">
               {(connectors.data ?? []).map((connector) => {
                 const binding = spec.connectors.find((c) => c.connector === connector.slug);
                 const capabilities = (connector.capabilities ?? []) as Array<{
@@ -812,25 +1019,29 @@ export function AgentForm({
                   (connection) => connection.connectorSlug === connector.slug,
                 );
                 return (
-                  <div
-                    key={connector.slug}
-                    className={cn("rounded-lg border bg-card", binding && "border-primary/40")}
-                  >
-                    <label className="flex cursor-pointer items-start gap-3 p-3">
+                  <li key={connector.slug} className={cn(binding && "bg-accent/30")}>
+                    <label className="flex cursor-pointer items-start gap-3 px-3 py-2.5 transition-colors hover:bg-muted/50">
                       <Checkbox
                         className="mt-0.5"
                         checked={Boolean(binding)}
                         onChange={() => toggleConnector(connector.slug)}
                       />
-                      <span className="min-w-0">
-                        <span className="block text-sm font-medium">{connector.name}</span>
-                        <span className="block text-[13px] text-muted-foreground">
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-baseline gap-x-2">
+                          <span className="text-sm font-medium">{connector.name}</span>
+                          {binding ? (
+                            <span className="text-xs text-muted-foreground">
+                              {binding.capabilities.length} of {capabilities.length} capabilities
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="mt-0.5 line-clamp-1 text-[13px] text-muted-foreground" title={connector.description}>
                           {connector.description}
                         </span>
                       </span>
                     </label>
                     {binding ? (
-                      <div className="space-y-4 border-t p-3">
+                      <div className="space-y-4 border-t border-dashed px-3 pb-3 pt-3 sm:pl-10">
                         <Field
                           label="Connection"
                           htmlFor={`conn-${connector.slug}`}
@@ -869,38 +1080,62 @@ export function AgentForm({
                           <div
                             role="group"
                             aria-labelledby={`caps-${connector.slug}`}
-                            className="flex flex-wrap gap-1.5"
+                            className="space-y-2.5"
                           >
-                            {capabilities.map((capability) => {
-                              const selected = binding.capabilities.includes(capability.id);
+                            {/* Grouped by what a capability can do, so the risky ones read as a
+                                group instead of a warning badge on every second pill. */}
+                            {(["read", "write", "external_side_effect", "none"] as const).map((effect) => {
+                              const group = capabilities.filter((capability) =>
+                                effect === "none"
+                                  ? !["read", "write", "external_side_effect"].includes(capability.effect)
+                                  : capability.effect === effect,
+                              );
+                              if (group.length === 0) return null;
                               return (
-                                <button
-                                  type="button"
-                                  key={capability.id}
-                                  aria-pressed={selected}
-                                  onClick={() => toggleCapability(connector.slug, capability.id)}
-                                  className={cn(
-                                    "inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] transition-colors",
-                                    selected
-                                      ? "border-primary/50 bg-accent text-accent-foreground"
-                                      : "bg-card text-muted-foreground hover:border-border-strong hover:text-foreground",
-                                  )}
-                                >
-                                  {selected ? <Check className="h-3.5 w-3.5" /> : null}
-                                  {capability.name}
-                                  {capability.effect !== "read" ? (
-                                    <Badge variant="warning">{effectLabel(capability.effect)}</Badge>
-                                  ) : null}
-                                </button>
+                                <div key={effect} className="space-y-1.5">
+                                  <p
+                                    className={cn(
+                                      "text-xs font-medium",
+                                      effect === "read" || effect === "none"
+                                        ? "text-muted-foreground"
+                                        : "text-warning",
+                                    )}
+                                  >
+                                    {effectLabel(effect)}
+                                  </p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {group.map((capability) => {
+                                      const selected = binding.capabilities.includes(capability.id);
+                                      return (
+                                        <button
+                                          type="button"
+                                          key={capability.id}
+                                          aria-pressed={selected}
+                                          onClick={() => toggleCapability(connector.slug, capability.id)}
+                                          className={cn(
+                                            "inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] transition-colors",
+                                            selected
+                                              ? "border-primary/50 bg-accent text-accent-foreground"
+                                              : "bg-card text-muted-foreground hover:border-border-strong hover:text-foreground",
+                                          )}
+                                        >
+                                          {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                                          {capability.name}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
                               );
                             })}
                           </div>
                         </div>
                       </div>
                     ) : null}
-                  </div>
+                  </li>
                 );
               })}
+              </ul>
             </div>
 
             <div className="space-y-3">
@@ -910,29 +1145,20 @@ export function AgentForm({
                   Copied into the workspace before each run, so the harness can use them.
                 </p>
               </div>
-              {(skills.data ?? []).length === 0 ? (
-                <p className="text-[13px] text-muted-foreground">
-                  No skills yet. Create one under Skills.
-                </p>
-              ) : (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {(skills.data ?? []).map((skill) => (
-                    <CheckboxField
-                      key={skill.id}
-                      title={skill.name}
-                      description={skill.description || skill.slug}
-                      checked={spec.skills.includes(skill.slug)}
-                      onChange={(event) =>
-                        updateSpec({
-                          skills: event.target.checked
-                            ? [...spec.skills, skill.slug]
-                            : spec.skills.filter((slug) => slug !== skill.slug),
-                        })
-                      }
-                    />
-                  ))}
-                </div>
-              )}
+              <SkillPicker
+                skills={skills.data ?? []}
+                value={spec.skills}
+                onChange={(next) => updateSpec({ skills: next })}
+                empty={
+                  <>
+                    No skills yet.{" "}
+                    <Link href="/skills" className="text-primary hover:underline">
+                      Create one under Skills
+                    </Link>
+                    .
+                  </>
+                }
+              />
             </div>
           </FormSection>
 
@@ -1183,56 +1409,14 @@ export function AgentForm({
             </Disclosure>
           </FormSection>
 
-          <ResourceAccessFields resource="agents" resourceId={resourceId} />
+          <FormSection
+            id="sharing"
+            title="Sharing"
+            description="Who can see and use this agent. Saved on its own, separately from the version."
+          >
+            <ResourceAccessFields resource="agents" resourceId={resourceId} />
+          </FormSection>
         </div>
-
-        {/* Desktop rail: live summary, jump links and the submit button stay in view. */}
-        <aside className="hidden lg:sticky lg:top-6 lg:block">
-          <Card>
-            <CardHeader className="pb-3">
-              <h2 className="text-[15px] font-semibold">Summary</h2>
-              <p className="text-[13px] text-muted-foreground">
-                {editing
-                  ? "Saving creates a new version. Past executions keep the old one."
-                  : "Saving creates version 1 of this agent."}
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <ul className="-mx-2 divide-y">
-                {summaryRows.map((row) => (
-                  <li key={row.label}>
-                    <button
-                      type="button"
-                      onClick={() => goToSection(row.id)}
-                      className="flex w-full items-baseline justify-between gap-3 rounded-md px-2 py-2 text-left text-sm hover:bg-muted/60"
-                    >
-                      <span className="text-muted-foreground">{row.label}</span>
-                      <span
-                        className={cn(
-                          "min-w-0 truncate font-medium",
-                          row.value === "Not set" && "text-warning",
-                        )}
-                      >
-                        {row.value}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              {issues.length > 0 ? (
-                <p className="text-[13px] text-destructive" role="status">
-                  {issues.length} {issues.length === 1 ? "issue needs" : "issues need"} fixing.
-                </p>
-              ) : null}
-              <div className="space-y-2">
-                {submitButton("w-full")}
-                <Button asChild variant="ghost" className="w-full">
-                  <Link href={cancelHref}>Cancel</Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </aside>
       </div>
 
       {/* Phone and tablet: submit bar pinned above the 56px tab bar. */}
@@ -1245,5 +1429,6 @@ export function AgentForm({
         </div>
       </div>
     </div>
+    </SectionContext.Provider>
   );
 }

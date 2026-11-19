@@ -219,3 +219,19 @@ function formatHour(value: string): string {
   const hour12 = number % 12 === 0 ? 12 : number % 12;
   return `${hour12}${suffix}`;
 }
+
+/**
+ * A description as a person should read it. Skills imported from SKILL.md files often
+ * carry raw YAML: a block-scalar marker (`>-`, `|`) and wrapping quotes. Those are
+ * formatting, not content, so they are dropped and the whitespace is collapsed.
+ */
+export function cleanDescription(value: string | null | undefined): string {
+  let text = (value ?? "").trim();
+  text = text.replace(/^[>|][+-]?\s*/, "").trim();
+  for (let i = 0; i < 2; i += 1) {
+    const quoted = text.match(/^(["'])([\s\S]*)\1$/);
+    if (!quoted) break;
+    text = quoted[2].trim();
+  }
+  return text.replace(/\s+/g, " ");
+}

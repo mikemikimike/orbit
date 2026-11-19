@@ -630,6 +630,54 @@ const LABEL_TEXT: Record<string, string> = {
   success: "text-success",
 };
 
+/**
+ * What the agent said along the way, rendered as Markdown like its final answer.
+ * Long messages fold to a few lines so one report cannot push the rest of the timeline
+ * out of view; the full text is one click away.
+ */
+function AgentProse({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const measure = () => setOverflows(node.scrollHeight > node.clientHeight + 4);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [text]);
+
+  return (
+    <div>
+      <div
+        ref={ref}
+        className={cn(
+          "relative",
+          !expanded && "max-h-56 overflow-hidden",
+          !expanded &&
+            overflows &&
+            "after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-12 after:bg-gradient-to-t after:from-card after:to-transparent",
+        )}
+      >
+        <Markdown className="text-[13px]">{text}</Markdown>
+      </div>
+      {overflows || expanded ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+          className="mt-1 rounded text-xs font-medium text-primary hover:underline"
+        >
+          {expanded ? "Show less" : "Show all"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function EventLine({ event }: { event: ExecutionEventRecord }) {
   const view = describeEvent(event);
   const hasData = Boolean(event.data && typeof event.data === "object" && Object.keys(event.data).length);
@@ -646,16 +694,17 @@ function EventLine({ event }: { event: ExecutionEventRecord }) {
       <span className={cn("hidden pt-px text-xs font-medium sm:block", LABEL_TEXT[view.tone])}>{view.label}</span>
       <div className="min-w-0">
         <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
-          <p
-            className={cn(
-              "min-w-0 flex-1 break-words",
-              view.prose ? "whitespace-pre-wrap leading-relaxed" : "font-medium",
-              TONE_TEXT[view.tone],
-            )}
-          >
-            <span className={cn("font-medium sm:hidden", LABEL_TEXT[view.tone])}>{view.label}: </span>
-            {view.prose && view.title.length > 600 ? `${view.title.slice(0, 600).trimEnd()}…` : view.title}
-          </p>
+          {view.prose ? (
+            <div className="min-w-0 flex-1">
+              <span className={cn("text-xs font-medium sm:hidden", LABEL_TEXT[view.tone])}>{view.label}</span>
+              <AgentProse text={view.title} />
+            </div>
+          ) : (
+            <p className={cn("min-w-0 flex-1 break-words font-medium", TONE_TEXT[view.tone])}>
+              <span className={cn("font-medium sm:hidden", LABEL_TEXT[view.tone])}>{view.label}: </span>
+              {view.title}
+            </p>
+          )}
           {view.badge ? (
             <Badge
               variant={

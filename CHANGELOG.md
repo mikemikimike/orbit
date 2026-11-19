@@ -6,6 +6,29 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
+## [Unreleased]
+
+### Changed
+
+- **Agent Studio** shows one section at a time instead of one long page. A section nav
+  shows each section's current value (it replaces the separate summary), marks sections
+  with errors and keeps Save in view; each section ends with Back / Next, phones get a row
+  of step pills, and the URL hash opens a section directly (`#model`). A failed save opens
+  the first section with a problem.
+- Connectors in Agent Studio are compact rows; allowed capabilities are grouped by what
+  they can do (read only, change data, act outside ORBIT) instead of a warning badge on
+  each.
+- Skills are chosen with a searchable, fixed-height picker (Agent Studio and Agent teams)
+  with an All / Selected filter. Agent team cards show skills as tags with "+N more"
+  instead of a comma-joined list.
+
+### Fixed
+
+- Agent messages in the execution timeline render as Markdown (tables, lists, code)
+  and fold long messages behind "Show all", instead of raw text cut off at 600 characters.
+- Skill descriptions imported from SKILL.md no longer show YAML formatting (`>-`, `|`) or
+  wrapping quotes, and are clamped to two lines in lists.
+
 ## [0.20.0] - 2026-11-19
 
 ### Fixed
