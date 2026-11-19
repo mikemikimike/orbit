@@ -30,6 +30,9 @@ import { Checkbox, CheckboxField } from "@/components/ui/checkbox";
 import { ChoiceCard } from "@/components/ui/choice-card";
 import { useConfirm } from "@/components/ui/confirm";
 import { DescriptionList } from "@/components/ui/description-list";
+import { TagList } from "@/components/ui/tag-list";
+import { cleanDescription } from "@/lib/presentation";
+import { SkillPicker } from "@/components/skill-picker";
 import {
   Dialog,
   DialogContent,
@@ -607,13 +610,28 @@ export default function AgentTeamsPage() {
                             value: `${team.definition.model?.provider ? `${team.definition.model.provider}/` : ""}${model}`,
                             mono: true,
                           },
-                          teamSkillList.length
-                            ? { label: "Skills", value: teamSkillList.join(", ") }
-                            : null,
                           { label: "Updated", value: relativeTime(team.updatedAt) },
                         ]}
                       />
                     </div>
+                    {teamSkillList.length ? (
+                      <div className="flex flex-col gap-2 border-t px-4 py-3 sm:flex-row sm:items-baseline sm:gap-4 sm:px-5">
+                        <h3 className="shrink-0 text-[13px] text-muted-foreground">
+                          Skills <span className="tabular">{teamSkillList.length}</span>
+                        </h3>
+                        <TagList
+                          max={8}
+                          items={teamSkillList.map((slug) => {
+                            const skill = skillOptions.find((item) => item.slug === slug);
+                            return {
+                              key: slug,
+                              label: skill?.name ?? slug,
+                              title: cleanDescription(skill?.description) || slug,
+                            };
+                          })}
+                        />
+                      </div>
+                    ) : null}
                   </Card>
                 );
               })}
@@ -861,50 +879,21 @@ export default function AgentTeamsPage() {
             <FormSection
               title="Skills"
               description="Shared by every agent in the team."
-              actions={
-                skillOptions.length ? (
-                  <>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setTeamSkills(skillOptions.map((skill) => skill.slug))}
-                    >
-                      Select all
-                    </Button>
-                    <Button type="button" size="sm" variant="ghost" onClick={() => setTeamSkills([])}>
-                      Clear
-                    </Button>
-                  </>
-                ) : null
-              }
             >
-              {skillOptions.length ? (
-                <div className="grid max-h-52 gap-2 overflow-y-auto sm:grid-cols-2">
-                  {skillOptions.map((skill) => (
-                    <CheckboxField
-                      key={skill.slug}
-                      title={skill.name}
-                      checked={teamSkills.includes(skill.slug)}
-                      onChange={(event) =>
-                        setTeamSkills((current) =>
-                          event.target.checked
-                            ? [...current, skill.slug]
-                            : current.filter((slug) => slug !== skill.slug),
-                        )
-                      }
-                    />
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[13px] text-muted-foreground">
-                  No skills yet.{" "}
-                  <Link href="/skills" className="text-primary hover:underline">
-                    Create one
-                  </Link>{" "}
-                  to share it here.
-                </p>
-              )}
+              <SkillPicker
+                skills={skillOptions}
+                value={teamSkills}
+                onChange={setTeamSkills}
+                empty={
+                  <>
+                    No skills yet.{" "}
+                    <Link href="/skills" className="text-primary hover:underline">
+                      Create one
+                    </Link>{" "}
+                    to share it here.
+                  </>
+                }
+              />
             </FormSection>
 
             <FormSection title="Advanced" description="Optional. Each group stays closed until you need it.">

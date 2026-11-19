@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 
 import { ResourceAccessFields } from "@/components/resource-access-fields";
+import { cleanDescription } from "@/lib/presentation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -294,7 +295,7 @@ export default function SkillsPage() {
                         <Badge variant="outline">Version {skill.version}</Badge>
                       </div>
                       <p className="line-clamp-2 text-[13px] text-muted-foreground">
-                        {skill.description || "No description. Agents cannot tell when to load this skill."}
+                        {cleanDescription(skill.description) || "No description. Agents cannot tell when to load this skill."}
                       </p>
                       <p className="text-[13px] text-muted-foreground">
                         {users.length
@@ -340,7 +341,7 @@ export default function SkillsPage() {
           <DialogHeader>
             <DialogTitle>{viewing?.name}</DialogTitle>
             <DialogDescription>
-              {viewing?.description || "No description."}
+              {cleanDescription(viewing?.description) || "No description."}
             </DialogDescription>
           </DialogHeader>
           {viewing ? (

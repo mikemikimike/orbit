@@ -91,7 +91,9 @@ numbers that sit in columns or update in place.
 | `Dialog` | `ui/dialog.tsx` | Tasks that need focus. `DialogFooter` sticks to the bottom of a long dialog: cancel (`outline`) left, action right, and say beside it what is missing when the action is disabled |
 | `useConfirm` | `ui/confirm.tsx` | Replaces `window.confirm`. Title asks the question, button names the action, focus starts on Cancel |
 | `DropdownMenu` | `ui/dropdown-menu.tsx` | Overflow actions. Destructive items last, after a separator |
-| `Markdown` | `ui/markdown.tsx` | Agent answers and other model-written text. Raw HTML is never interpreted |
+| `Markdown` | `ui/markdown.tsx` | Agent answers and other model-written text, including messages in the execution timeline (folded past ~14 lines). Raw HTML is never interpreted |
+| `TagList` | `ui/tag-list.tsx` | A short row of tags; the rest fold behind "+N more". Use instead of a comma-joined value |
+| `SkillPicker` | `skill-picker.tsx` | Choosing skills: fixed-height scrolling list, search past six items, an "All / Selected" filter, descriptions cleaned and clamped to two lines |
 | `Skeleton` | `ui/skeleton.tsx` | Loading placeholder shaped like what will appear |
 
 ## Patterns
@@ -114,6 +116,16 @@ secondary buttons, then a `DropdownMenu` for rare and destructive actions. Body 
 what the value does, not what the control is. Validate on submit and show errors next
 to the field; disable the submit button only while required input is missing, and say
 what is missing beside it.
+
+**Long editors.** An object with many groups of settings (Agent Studio) shows one
+section at a time. A section nav lists every section with its current value, so it doubles
+as the summary, and marks sections with errors; Save stays in view under it. Each section
+ends with Back / Next. On phones the nav is a row of step pills. The URL hash names the
+section (`#model`). A failed save opens the first section with a problem.
+
+**Imported text.** Descriptions written for machines (SKILL.md frontmatter) go through
+`cleanDescription()` before display: YAML block markers and wrapping quotes are formatting,
+not content. Clamp them (`line-clamp-2`) and put the full text in `title`.
 
 **Unfinished features.** A control that is not wired to anything is disabled and says why
 (planned harnesses, licensed features, options the API does not accept yet). Never collect
