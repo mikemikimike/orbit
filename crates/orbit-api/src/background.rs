@@ -508,6 +508,7 @@ async fn reconcile_worker_tags(state: &AppState) -> anyhow::Result<()> {
 /// is terminal, and stop runtimes whose agent is no longer active.
 async fn runtime_tick(state: &AppState) -> anyhow::Result<()> {
     for runtime in state.store.list_running_agent_runtimes().await? {
+        let _ = state.store.heartbeat_agent_runtime(runtime.id).await;
         let agent = match state
             .store
             .get_agent(runtime.org_id, runtime.agent_id)
