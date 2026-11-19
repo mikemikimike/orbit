@@ -19,6 +19,9 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
   that includes `teams` and `resource_permissions`, edit forms show a one-line note instead of
   the controls and make no sharing requests. Agent access now sits at the end of the agent form,
   and agent teams gained access settings.
+- The access field always shows the owning team (optional unless visibility is Team) and,
+  when strict team isolation is on, explains that only that team's members can see the
+  resource and how to share it with everyone.
 - Navigation labels: Dashboard is now **Overview**, Work is the standing **Start work**
   action, Providers is **Model providers**, Teams is **Access teams**. Routes are unchanged.
 - Overview, Agents, Executions, execution detail, agent detail, Approvals, Start work,
@@ -53,6 +56,8 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ### Fixed
 
+- Licenses: the `executions_per_day` limit, spelled as documented in ADR 0010, was ignored
+  because the parser only read `executionsPerDay`. Both spellings are now accepted.
 - **Workers → Edit** crashed on a fresh install: the seeded platform profile stored its
   inline environment mappings as `{}` instead of a list. The seed now writes `[]` and the
   editor treats anything but a list as empty.

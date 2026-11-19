@@ -74,6 +74,33 @@ Add the printed public key to `crates/orbit-security/license-public-keys.json` a
 release images. Release builds ignore `ORBIT_LICENSE_PUBLIC_KEYS`; the env var is only read
 by debug builds for local testing. Never commit `key.json`.
 
+## Local test license (debug builds only)
+
+To exercise licensed features locally (access teams, sharing, custom roles) without the
+vendor key, sign a throwaway license with your own key. This only works against a **debug**
+API build, because release builds ignore `ORBIT_LICENSE_PUBLIC_KEYS`.
+
+```bash
+cargo build -p orbit-license-cli -p orbit-api-server --bin orbit-api --bin orbit-license-cli
+mkdir -p /tmp/orbit-license && cd /tmp/orbit-license   # outside the repo
+../path/to/target/debug/orbit-license-cli keygen --out key.json --kid orbit-local-test
+cat > claims.json <<'JSON'
+{ "v": 1, "id": "local-test", "customer": "Local test", "plan": "enterprise", "trial": true,
+  "features": ["custom_roles", "teams", "resource_permissions"],
+  "limits": { "seats": 50, "agents": 500, "workers": 25, "executions_per_day": 10000 },
+  "issued_at": "2026-11-19T00:00:00Z", "expires_at": "2027-11-19T00:00:00Z" }
+JSON
+orbit-license-cli sign --key key.json --claims claims.json --out license.jwt
+
+# Run the debug API with it (plus your usual ORBIT_* settings):
+ORBIT_LICENSE_FILE=$PWD/license.jwt \
+ORBIT_LICENSE_PUBLIC_KEYS="$(orbit-license-cli public-key --key key.json)" \
+  target/debug/orbit-api
+```
+
+`GET /api/v1/license` should report `"tier": "enterprise"`. Delete `key.json` when done and
+never commit it or add its public key to `license-public-keys.json`.
+
 ## Verification keys
 
 ```json

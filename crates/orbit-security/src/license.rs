@@ -42,6 +42,8 @@ pub struct LicenseLimits {
     pub seats: Option<u64>,
     pub agents: Option<u64>,
     pub workers: Option<u64>,
+    /// Signed claims spell it `executions_per_day` (ADR 0010); the API returns camelCase.
+    #[serde(alias = "executions_per_day")]
     pub executions_per_day: Option<u64>,
 }
 
@@ -466,6 +468,17 @@ mod tests {
         assert_eq!(status.tier, "enterprise");
         assert!(status.has_feature(FEATURE_CUSTOM_ROLES));
         assert_eq!(status.limit("seats"), Some(10));
+    }
+
+    #[test]
+    fn reads_the_documented_snake_case_limits() {
+        let signing = SigningKey::from_bytes(&[7u8; 32]);
+        let mut claims = claims(30, 30);
+        claims["limits"] = serde_json::json!({ "workers": 25, "executions_per_day": 10000 });
+        let status = verifier_for(&signing, "test").verify(&token_for(&signing, "test", claims));
+        assert!(status.valid);
+        assert_eq!(status.limit("executions_per_day"), Some(10000));
+        assert_eq!(status.limit("workers"), Some(25));
     }
 
     #[test]

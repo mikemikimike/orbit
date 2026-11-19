@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { ChoiceCard } from "@/components/ui/choice-card";
 import { Field } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
@@ -46,6 +47,13 @@ export function ResourceAccessFields({
   const teams = useQuery({
     queryKey: ["access-teams"],
     queryFn: listAccessTeams,
+    enabled: enabled && Boolean(resourceId),
+  });
+  // Strict team isolation (Settings → Access policy) makes the owning team decide who can
+  // see a resource, whatever its visibility. Same query key as the settings page.
+  const policy = useQuery({
+    queryKey: ["access-settings"],
+    queryFn: () => request<{ teamIsolation: boolean }>("/api/v1/settings/access"),
     enabled: enabled && Boolean(resourceId),
   });
   const sharing = useQuery({
@@ -98,6 +106,9 @@ export function ResourceAccessFields({
     );
   }
 
+  const ownerTeam = (teams.data ?? []).find((team) => team.id === teamId);
+  const isolated = Boolean(policy.data?.teamIsolation && ownerTeam);
+
   const changed =
     sharing.data !== undefined &&
     (sharing.data.visibility !== visibility || (sharing.data.ownerTeamId ?? "") !== teamId);
@@ -127,17 +138,30 @@ export function ResourceAccessFields({
               />
             ))}
           </div>
-          {visibility === "team" ? (
-            <Field label="Owning team" htmlFor={teamFieldId} hint="Members of this team get access.">
-              <Select id={teamFieldId} value={teamId} onChange={(event) => setTeamId(event.target.value)}>
-                <option value="">Select a team</option>
-                {(teams.data ?? []).map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+          <Field
+            label="Owning team"
+            htmlFor={teamFieldId}
+            hint={
+              visibility === "team"
+                ? "Members of this team get access."
+                : "Optional. Leads of the owning team can manage it."
+            }
+          >
+            <Select id={teamFieldId} value={teamId} onChange={(event) => setTeamId(event.target.value)}>
+              <option value="">{visibility === "team" ? "Select a team" : "No owning team"}</option>
+              {(teams.data ?? []).map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {isolated && visibility !== "team" ? (
+            <Callout tone="neutral">
+              Strict team isolation is on, so only members of {ownerTeam?.name} and admins can see
+              this. Choose No owning team to share it with everyone, or turn isolation off in
+              Settings → Access policy.
+            </Callout>
           ) : null}
           <div className="flex flex-wrap items-center gap-3">
             <Button
