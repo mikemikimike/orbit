@@ -330,6 +330,66 @@ fn write_open_code_tool_permissions(
     )
 }
 
+/// Write a local OpenCode plugin that checks the ORBIT broker before native tools.
+fn write_open_code_policy_plugin(workspace: &Path) -> std::io::Result<()> {
+    let dir = workspace.join(".opencode/plugins");
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(
+        dir.join("orbit-policy.ts"),
+        r#"import { Plugin } from "@opencode/plugin"
+
+const POLICY_TOOLS = new Set([
+  "read", "grep", "glob", "list",
+  "bash", "shell", "edit", "write", "patch",
+  "webfetch", "websearch", "subagent", "task", "question",
+])
+
+const READ_ONLY = new Set(["read", "grep", "glob", "list"])
+
+async function checkPolicy(tool: string, input: unknown) {
+  const base = process.env.ORBIT_BROKER_URL
+  const token = process.env.ORBIT_BROKER_TOKEN
+  if (!base || !token) throw new Error("ORBIT policy broker is unavailable")
+
+  const response = await fetch(`${base.replace(/\/$/, "")}/policy`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      tool,
+      effect: READ_ONLY.has(tool) ? "read" : "write",
+      arguments: input ?? {},
+    }),
+  })
+  if (response.ok) return
+  const body = await response.json().catch(() => ({}))
+  throw new Error(body.reason ?? body.error ?? `ORBIT policy denied ${tool}`)
+}
+
+export default Plugin.define({
+  id: "orbit.policy",
+  async setup(ctx) {
+    const tools = await ctx.tool.list()
+    await ctx.tool.transform((editor) => {
+      for (const tool of tools) {
+        if (!POLICY_TOOLS.has(tool.id)) continue
+        editor.update(tool.id, (draft: any) => {
+          const original = draft.execute
+          draft.execute = async (input: any, context: any) => {
+            await checkPolicy(tool.id, input)
+            return original(input, context)
+          }
+        })
+      }
+    })
+  },
+})
+"#,
+    )
+}
+
 fn write_open_code_mcp_config(workspace: &Path, bridge: &OrbitMcpBridge) -> std::io::Result<()> {
     if bridge.command.is_empty() {
         return Ok(());
@@ -682,6 +742,12 @@ impl OpenCodeHarnessAdapter {
                     format!("could not write opencode.json: {error}"),
                 )
             })?;
+            write_open_code_policy_plugin(&workspace).map_err(|error| {
+                HarnessError::new(
+                    HarnessErrorKind::Internal,
+                    format!("could not write OpenCode policy plugin: {error}"),
+                )
+            })?;
         }
         if let Some(model) = &request.model {
             write_open_code_provider_config(&workspace, model).map_err(|error| {
@@ -708,6 +774,9 @@ impl OpenCodeHarnessAdapter {
         command.current_dir(&workspace);
         // Worker-profile connection mappings, resolved by the control plane.
         command.envs(&request.extra_env);
+        if let Some(bridge) = &settings.orbit_mcp {
+            command.envs(&bridge.environment);
+        }
         // OpenCode resolves its project/workspace from PWD in some code paths; the
         // worker's PWD points at the ORBIT repository, so explicitly set it to the
         // per-execution workspace. This also keeps shell tools inside the sandbox.
