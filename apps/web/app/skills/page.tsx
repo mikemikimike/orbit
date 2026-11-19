@@ -40,6 +40,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
+import { ImportOpenCodeButton } from "@/components/import-opencode-button";
 import { exportResource } from "@/components/export-resource-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -217,9 +218,12 @@ export default function SkillsPage() {
         title="Skills"
         description="Reusable SKILL.md packages that are copied into an agent's workspace when it runs. Attach them to an agent in its settings, or to a team."
         actions={
-          <Button onClick={openCreate}>
-            <Plus /> New skill
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <ImportOpenCodeButton kind="skill" />
+            <Button onClick={openCreate}>
+              <Plus /> New skill
+            </Button>
+          </div>
         }
       />
 

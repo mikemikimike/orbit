@@ -281,6 +281,10 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/v1/license", get(handlers::license::overview))
         .route(
+            "/api/v1/import/opencode",
+            post(handlers::import::import_markdown),
+        )
+        .route(
             "/api/v1/export/{resource}/{resource_id}",
             get(handlers::export::export_resource),
         )
