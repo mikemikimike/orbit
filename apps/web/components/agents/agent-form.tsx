@@ -31,6 +31,7 @@ import {
   emptyAgentDefinition,
 } from "@orbit/contracts";
 import { cn, titleCase } from "@/lib/utils";
+import { ResourceAccessFields } from "@/components/resource-access-fields";
 import { cronDescription, effectLabel } from "@/lib/presentation";
 
 type Trigger = AgentDefinition["spec"]["triggers"][number];
@@ -43,11 +44,13 @@ export function AgentForm({
   submitLabel,
   submitting,
   onSubmit,
+  resourceId,
 }: {
   initial?: AgentDefinition;
   submitLabel: string;
   submitting?: boolean;
   onSubmit: (definition: AgentDefinition) => Promise<void> | void;
+  resourceId?: string;
 }) {
   const harnesses = useHarnesses();
   const providers = useProviders();
@@ -802,6 +805,7 @@ export function AgentForm({
         </div>
 
         <div className="space-y-5">
+          <ResourceAccessFields resource="agents" resourceId={resourceId} />
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
