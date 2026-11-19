@@ -183,6 +183,38 @@ fn write_platform_models(
     Ok(dir)
 }
 
+/// Write a Pi extension that asks the ORBIT broker before every native tool call.
+fn write_policy_extension(workspace: &Path) -> std::io::Result<PathBuf> {
+    let dir = workspace.join(".pi/extensions");
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join("orbit-policy.ts");
+    std::fs::write(
+        &path,
+        r#"export default function (pi: any) {
+  pi.on("tool_call", async (event: any) => {
+    const base = process.env.ORBIT_BROKER_URL;
+    const token = process.env.ORBIT_BROKER_TOKEN;
+    if (!base || !token) return { block: true, reason: "ORBIT policy broker is unavailable" };
+    const readOnly = ["read", "grep", "find", "ls", "codemode"].includes(event.toolName);
+    try {
+      const response = await fetch(`${base.replace(/\/$/, "")}/policy`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ tool: event.toolName, effect: readOnly ? "read" : "write", arguments: event.input }),
+      });
+      if (response.ok) return;
+      const body = await response.json().catch(() => ({}));
+      return { block: true, reason: body.reason ?? body.error ?? `ORBIT policy denied ${event.toolName}` };
+    } catch (error) {
+      return { block: true, reason: `ORBIT policy check failed: ${error}` };
+    }
+  });
+}
+"#,
+    )?;
+    Ok(path)
+}
+
 impl PiHarnessAdapter {
     pub fn descriptor() -> HarnessDescriptor {
         HarnessDescriptor {
@@ -500,6 +532,16 @@ impl PiHarnessAdapter {
             &system_append,
             &session_dir,
         );
+        if settings.orbit_mcp.is_some() {
+            let extension = write_policy_extension(&workspace).map_err(|error| {
+                HarnessError::new(
+                    HarnessErrorKind::Internal,
+                    format!("could not write Pi policy extension: {error}"),
+                )
+            })?;
+            args.push("--extension".into());
+            args.push(extension.to_string_lossy().to_string());
+        }
         let platform_agent_dir = if is_platform {
             let dir = request
                 .model
@@ -536,6 +578,9 @@ impl PiHarnessAdapter {
         command.current_dir(&workspace);
         // Worker-profile connection mappings, resolved by the control plane.
         command.envs(&request.extra_env);
+        if let Some(bridge) = &settings.orbit_mcp {
+            command.envs(&bridge.environment);
+        }
         command.env("PWD", &workspace);
         // Pi must not perform model-catalog/version network calls in headless or
         // airgapped execution. Provider requests still go to the configured endpoint.
