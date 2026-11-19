@@ -595,7 +595,8 @@ async fn runtime_tick(state: &AppState) -> anyhow::Result<()> {
                         .and_then(|execution| execution.error.as_ref())
                         .map(|error| error.to_string())
                         .as_deref(),
-                    chrono::Utc::now() + chrono::Duration::seconds(30),
+                    chrono::Utc::now()
+                        + chrono::Duration::seconds(runtime.interval_seconds.max(30) as i64),
                 )
                 .await;
             continue;
@@ -654,7 +655,7 @@ async fn runtime_tick(state: &AppState) -> anyhow::Result<()> {
                 "running",
                 Some(execution.id),
                 None,
-                chrono::Utc::now(),
+                chrono::Utc::now() + chrono::Duration::seconds(runtime.interval_seconds as i64),
             )
             .await?;
     }
