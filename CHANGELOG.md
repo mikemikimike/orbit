@@ -8,6 +8,12 @@ Release process: [docs/development/releasing.md](docs/development/releasing.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- Agent YAML download uses the same-origin API proxy instead of opening/fetching the
+  internal `NEXT_PUBLIC_ORBIT_API_URL` host, which browsers cannot reach.
+
+
 ### Added
 
 - OIDC `requireMappedGroup` / `ORBIT_OIDC_REQUIRE_MAPPED_GROUP`: deny users whose IdP
