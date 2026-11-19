@@ -899,3 +899,39 @@ mod tests {
         assert_eq!(usage.output_tokens, Some(4));
     }
 }
+
+#[cfg(test)]
+mod platform_model_tests {
+    use super::*;
+
+    #[test]
+    fn platform_models_use_configured_endpoint() {
+        let model = orbit_contracts::ResolvedModel {
+            selection: orbit_contracts::ModelSelection::Platform {
+                provider_id: uuid::Uuid::now_v7(),
+                provider_name: "corp".into(),
+                model: "internal-model".into(),
+            },
+            endpoint: Some(orbit_contracts::ModelEndpoint {
+                base_url: "http://llm.internal/v1".into(),
+                model: "internal-model".into(),
+                headers: Default::default(),
+                request_params: serde_json::json!({}),
+                compat: Default::default(),
+                context_window: None,
+                max_output_tokens: None,
+            }),
+            credential: None,
+        };
+        let dir = write_platform_models(&model).unwrap();
+        let config: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("models.json")).unwrap())
+                .unwrap();
+        let provider = &config["providers"]["orbit-platform"];
+        assert_eq!(provider["baseUrl"], "http://llm.internal/v1");
+        assert_eq!(provider["api"], "openai-completions");
+        assert_eq!(provider["models"][0]["id"], "internal-model");
+        assert_eq!(provider["apiKey"], "$OPENAI_API_KEY");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
